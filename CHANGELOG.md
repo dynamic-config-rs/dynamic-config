@@ -33,6 +33,9 @@ misbehaviour: every one replaces a quiet wrong with a loud right.
 
 ### Breaking
 
+- `Recovery::Drift` carries `Option<Vec<String>>`: `Some` is the fingerprint
+  (key paths, or one explanatory sentence when only values moved), `None`
+  means the comparison itself was impossible.
 - `start_watch()` on a type that is already being watched returns
   `Err(AlreadyExists)` instead of a success handle that owned nothing.
 - Watchers are keyed by `TypeId`: generic configurations get one watcher per

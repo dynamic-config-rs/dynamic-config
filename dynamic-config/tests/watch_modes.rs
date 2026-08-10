@@ -13,9 +13,6 @@
 #![cfg(all(feature = "watch", feature = "json"))]
 
 use std::fs;
-// Only the unix-gated ConfigMap tests touch `Path`; Windows builds with
-// `-D warnings`, where an unused import is an error.
-#[cfg(unix)]
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};

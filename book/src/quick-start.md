@@ -18,7 +18,7 @@ pub struct DatabaseConfig {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     DatabaseConfig::init()?;        // load once, fail fast on a bad config
-    DatabaseConfig::start_watch()?; // reload in the background from now on
+    DatabaseConfig::start_watch()?.detach(); // reload in the background from now on
 
     let config = DatabaseConfig::current();
     println!("{}:{}", config.host, config.port);
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.0.1", features = ["toml", "watch"] }
+dynamic-config = { version = "0.1.0", features = ["toml", "watch"] }
 ```
 
 ## Features

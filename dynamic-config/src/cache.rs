@@ -146,9 +146,12 @@ impl CacheMode {
 pub enum Recovery {
     /// A configuration to start from.
     Usable(Snapshot),
-    /// Only a fingerprint: the keys that differ from the last good state.
+    /// Only a fingerprint: what differs from the last good state.
     ///
-    /// Empty when the keys match and only a value moved.
+    /// `Some` lists the key paths that differ — or one explanatory sentence
+    /// when the keys match and only values moved. `None` means the comparison
+    /// itself was impossible: the sources do not resolve, so there is nothing
+    /// to compare against.
     Drift(Option<Vec<String>>),
     /// No cache on disk yet.
     Absent,

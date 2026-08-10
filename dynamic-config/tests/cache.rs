@@ -362,3 +362,44 @@ fn a_rename_all_secret_stays_out_of_the_redacted_cache() {
         "the redacted cache must not contain the camelCased secret: {written}"
     );
 }
+
+/// `UPPERCASE` keeps its underscores: serde renames `api_token` to
+/// `API_TOKEN`, not `APITOKEN` — redaction has to follow serde, not a guess.
+#[test]
+fn an_uppercase_secret_stays_out_of_the_redacted_cache() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/scratch/cache-uppercase.json"],
+        key = "db",
+        cache = "tests/scratch/cache-uppercase-cache.json",
+        cache_mode = "redacted",
+    )]
+    #[derive(Deserialize)]
+    #[serde(rename_all = "UPPERCASE")]
+    struct UpperCased {
+        #[allow(dead_code)]
+        host_name: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        api_token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-uppercase.json",
+        r#"{"db": {"HOST_NAME": "localhost", "API_TOKEN": "hunter2-upper"}}"#,
+    )
+    .unwrap();
+
+    UpperCased::init().expect("the load succeeds");
+
+    let written = std::fs::read_to_string("tests/scratch/cache-uppercase-cache.json")
+        .expect("the cache was written");
+
+    assert!(
+        !written.contains("hunter2-upper"),
+        "the redacted cache must not contain the UPPERCASE secret: {written}"
+    );
+    assert!(written.contains("localhost"), "{written}");
+}

@@ -415,7 +415,7 @@ Changing any of these is allowed. Arguing for it is the price.
 ## 9. Sending a change
 
 1. An issue first, for anything larger than a fix.
-   [Not planned](../README.md#not-planned) records what was refused and what
+   [Not planned](../book/src/limitations.md#not-planned) records what was refused and what
    would reopen it — a refusal with a bad reason should be revisited, and that
    is worth saying rather than working around.
 2. `just check` green, and `just containers` if you touched a store.

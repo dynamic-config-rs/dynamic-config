@@ -410,21 +410,24 @@ fn collect_relevant(
 
     // Phase 2: wait out the flurry an editor save produces, but not forever.
     let deadline = std::time::Instant::now() + debounce.saturating_mul(4);
+    let mut quiet_until = std::time::Instant::now() + debounce;
 
     loop {
         let now = std::time::Instant::now();
+        // The nearer of "one debounce of quiet elapsed" and the hard ceiling.
+        let target = quiet_until.min(deadline);
 
-        if now >= deadline {
+        if now >= target {
             return Collected::Dirty;
         }
 
-        let window = debounce.min(deadline - now);
-
-        match receiver.recv_timeout(window) {
-            // A relevant event extends the quiet period (up to the deadline);
-            // an irrelevant one does not — a neighbour's churn must not delay
-            // our reload.
-            Ok(Ok(event)) if is_relevant(&event, spec) => {}
+        match receiver.recv_timeout(target - now) {
+            // A relevant event restarts the quiet period (up to the deadline);
+            // an irrelevant one merely waits out the remainder — a neighbour's
+            // churn must not delay our reload.
+            Ok(Ok(event)) if is_relevant(&event, spec) => {
+                quiet_until = std::time::Instant::now() + debounce;
+            }
             Ok(Ok(_)) => {}
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
             Err(mpsc::RecvTimeoutError::Timeout) => return Collected::Dirty,

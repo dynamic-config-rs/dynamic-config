@@ -29,6 +29,9 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ### Breaking
 
+- `Recovery::Drift` carries `Option<Vec<String>>`: `Some` is the fingerprint
+  (key paths, or one explanatory sentence when only values moved), `None`
+  means the comparison itself was impossible.
 - `start_watch()` while already watching → `Err(AlreadyExists)`; watchers
   keyed by `TypeId` (per generic instantiation); `watch::spawn`/`spawn_with`
   take a `TypeId`.

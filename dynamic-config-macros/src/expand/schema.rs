@@ -225,6 +225,11 @@ fn field_rename(field: &syn::Field) -> Option<String> {
 ///
 /// The full serde set; an unrecognised rule leaves the name alone, which is
 /// also what serde does with a rule it does not know.
+///
+/// serde applies these to *fields* without restructuring: `lowercase` and
+/// `UPPERCASE` keep every underscore (on a snake_case ident, `lowercase` is
+/// the identity and `UPPERCASE` equals `SCREAMING_SNAKE_CASE`). Only the
+/// Pascal/camel/kebab families reshape the name.
 fn apply_rename_all(rule: &str, name: &str) -> String {
     let words: Vec<&str> = name.split('_').filter(|word| !word.is_empty()).collect();
 
@@ -236,8 +241,8 @@ fn apply_rename_all(rule: &str, name: &str) -> String {
     };
 
     match rule {
-        "lowercase" => name.replace('_', "").to_lowercase(),
-        "UPPERCASE" => name.replace('_', "").to_uppercase(),
+        "lowercase" => name.to_lowercase(),
+        "UPPERCASE" => name.to_uppercase(),
         "PascalCase" => words.iter().map(|word| capitalize(word)).collect(),
         "camelCase" => {
             let mut out = String::new();

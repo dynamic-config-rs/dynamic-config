@@ -2,7 +2,7 @@
 
 What is not in the crate yet and might be. Everything that shipped is described
 in [README.md](README.md); what will *not* be built, and why, is under
-[Not planned](README.md#not-planned) there.
+[Not planned](book/src/limitations.md#not-planned) there.
 
 Tags: **[viper]** exists in Go's [Viper](https://github.com/spf13/viper) and does
 not here. **[figment]** is something the underlying loader,
@@ -45,7 +45,7 @@ type does not own.
 
 ### Encrypting the last-known-good cache **[own]**
 `save_encrypted` covers what a program deliberately writes. The
-[cache](README.md#last-known-good) still writes plaintext, and its three modes
+[cache](book/src/persistence.md#last-known-good) still writes plaintext, and its three modes
 exist precisely because that is a trade-off.
 
 A fourth mode — encrypted, full fidelity — would collapse the trade-off: it
