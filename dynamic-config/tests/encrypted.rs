@@ -87,27 +87,44 @@ fn an_encrypted_file_layers_over_a_plain_one() {
     );
 }
 
+// Its own type and its own files, not `Layered`'s: two tests sharing a
+// fixture path race in parallel — one reads the ciphertext mid-rewrite and
+// fails with "failed to fill whole buffer". One type, one fixture, per test.
+#[dynamic_config(
+    files = ["tests/scratch/enc-traced.json", "tests/scratch/enc-traced-secrets.json.age"],
+    key = "db",
+    env = "DCENCTR_",
+)]
+#[derive(Deserialize)]
+struct Traced {
+    #[allow(dead_code)]
+    host: String,
+    #[allow(dead_code)]
+    #[config(secret)]
+    password: String,
+}
+
 #[test]
 fn a_value_from_an_encrypted_file_is_traced_to_that_file() {
     install();
 
     std::fs::create_dir_all("tests/scratch").unwrap();
     std::fs::write(
-        "tests/scratch/enc-config.json",
+        "tests/scratch/enc-traced.json",
         r#"{"db": {"host": "localhost", "password": "placeholder"}}"#,
     )
     .unwrap();
     encrypt_to(
-        Path::new("tests/scratch/enc-secrets.json.age"),
+        Path::new("tests/scratch/enc-traced-secrets.json.age"),
         r#"{"db": {"password": "hunter2"}}"#,
     );
 
-    let origin = Layered::source_of("password")
+    let origin = Traced::source_of("password")
         .expect("resolving works")
         .expect("something supplies it");
 
     assert!(
-        format!("{origin}").contains("enc-secrets.json.age"),
+        format!("{origin}").contains("enc-traced-secrets.json.age"),
         "not `an inline source`: {origin}"
     );
 }
