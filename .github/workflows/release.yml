@@ -73,6 +73,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # `cargo publish` verifies each tarball by *building* it, and
+      # etcd-client compiles its gRPC stubs at build time — the same protoc
+      # the verify job needs, needed here too.
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       # Three waves, in dependency order. Each crate pins the one below it
       # exactly, so a wave cannot succeed until the previous one is on the
       # registry — which is why this is a sequence rather than a matrix.
@@ -80,33 +85,41 @@ jobs:
       # `--no-verify` is deliberately *not* used: the verification build is the
       # last chance to catch a package that resolves locally through a path
       # dependency and nowhere else.
-      # The embedded crate depends on nothing in the workspace, so it rides
-      # in the first wave alongside the macros.
-      - name: macros and embedded
+      #
+      # Idempotent on purpose: a version already on the registry is *skipped*,
+      # not died on. crates.io versions are permanent, so after a partial
+      # failure the only way forward is a rerun that publishes the remainder —
+      # a pipeline that trips over its own earlier success cannot recover.
+      - name: publish, in dependency order
         run: |
-          cargo publish -p dynamic-config-macros
-          cargo publish -p dynamic-config-embedded
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          publish() {
+            local out
+            if out=$(cargo publish -p "$1" 2>&1); then
+              echo "published $1"
+            elif grep -q "already uploaded" <<<"$out"; then
+              echo "$1 v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2) is already on the registry — skipped"
+            else
+              printf '%s\n' "$out"
+              return 1
+            fi
+          }
 
-      - name: wait for the index
-        run: sleep 45
+          # The embedded crate depends on nothing in the workspace, so it
+          # rides in the first wave alongside the macros.
+          publish dynamic-config-macros
+          publish dynamic-config-embedded
 
-      - name: core
-        run: cargo publish -p dynamic-config
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          sleep 45   # the index needs a moment before dependents resolve
 
-      - name: wait for the index
-        run: sleep 45
+          publish dynamic-config
 
-      - name: companions
-        run: |
+          sleep 45
+
           for crate in dynamic-config-etcd dynamic-config-consul \
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
                        dynamic-config-firestore; do
-            cargo publish -p "$crate"
+            publish "$crate"
           done
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
