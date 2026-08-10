@@ -41,8 +41,10 @@ if [ -n "${CLAUDE_MODEL:-}" ]; then
 fi
 
 echo "── reviewing (this takes a few minutes)" >&2
+# `+"..."` rather than a bare expansion: an empty array under `set -u` is an
+# "unbound variable" on the bash 3.2 that macOS still ships.
 review=$(claude -p \
-  "${model_args[@]}" \
+  ${model_args[@]+"${model_args[@]}"} \
   --allowed-tools "Read,Grep,Glob,Bash(git log:*),Bash(git show:*)" \
   <<EOF
 Review this pull request as a maintainer of the repository you are in.

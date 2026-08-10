@@ -108,6 +108,7 @@ stop latency and change-detection rule side by side in
 | | floor |
 |---|---|
 | `dynamic-config` core | **1.71** |
+| `schema` feature | 1.74 (schemars) |
 | `watch` / `age` / `full` features | 1.85 (measured, not declared) |
 | store crates | 1.85 — nats/redis/s3: 1.88 (their clients) |
 | `dynamic-config-embedded` | 1.83 |

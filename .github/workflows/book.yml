@@ -31,10 +31,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: install mdbook
+        # Digest-verified before anything is extracted: the rest of this
+        # repository pins its actions by SHA, and a binary whose output is
+        # published to Pages deserves the same suspicion.
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.52/mdbook-v0.4.52-x86_64-unknown-linux-gnu.tar.gz \
-            | tar -xz -C "$HOME/.local/bin"
+          curl -sSL -o mdbook.tar.gz \
+            https://github.com/rust-lang/mdBook/releases/download/v0.4.52/mdbook-v0.4.52-x86_64-unknown-linux-gnu.tar.gz
+          echo "c0b903f01dd8f4edc644372ad2b80b1fdddd12552d37b6a098657cbd8eddd768  mdbook.tar.gz" | sha256sum -c -
+          tar -xzf mdbook.tar.gz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: mdbook build book
