@@ -78,53 +78,66 @@ and an eighth done casually would be worse than none.
 
 ---
 
-## From the 0.0.1 review
+## After 0.1.0
 
-A full pass over the workspace before the first release fixed what could be
-fixed directly. These are the items that were *deliberately deferred* — each
-has a decision in it, and the wrong week to make it is the one before a
-release.
+The 0.1.0 campaign (a three-way external review, fully implemented) closed
+most of what used to live here: the remote race, watcher identity, panic
+safety, debounce starvation, rename-aware secrets, recovery validation, the
+big-file splits, the defaults struct, alias hardening, fsync, the book.
+What remains below is what was *deliberately* deferred — each has a decision
+in it, and is tracked as a GitHub issue.
 
-### Splitting the three big files **[own]**
-`dynamic-config-macros/src/expand.rs` (~1,300 lines, one function near 900),
-`dynamic-config/src/lib.rs` (a long wall of `#[doc(hidden)]` redirect macros),
-and `dynamic-config/src/loader.rs` (providers, aliasing, sectioning in one
-file). All three are readable top-to-bottom today, and that is worth something;
-mechanical splits would churn every open branch and blur `git blame` right
-before the history becomes public. The stacked-`#[cfg]` bug the size *did*
-hide has been fixed directly. Split when a real change collides with the size,
-not before — and when it happens, split by what a contributor searches for
-(`expand_watch`, the redirect macros, the provider wall), not by line count.
+### A real no-alloc wait queue for the embedded crate **[own]**
+`ConfigCell<T, const WAITERS>` sizes the parking lot, but N > WAITERS still
+degrades to wake-churn (documented). An intrusive list would fix it without
+an allocator; it also drags `unsafe` into a crate that forbids it. That
+trade deserves its own design pass.
+
+### `WriteDurability` as API **[own]**
+0.1.0 fsyncs every atomic write, unconditionally. If someone measures real
+pain from that, a `Normal`/`Fsync` mode is the escape hatch — not before.
+
+### loom / shuttle model checking **[own]**
+The barrier tests pin the known interleavings; loom explores the unknown
+ones. `Remote`'s state machine is the natural first target, but loom wants
+its own sync-type shims — an investment, not an afternoon.
+
+### `proc_macro_crate` rename support **[own]**
+`::dynamic_config` is hardcoded in the expansion, so renaming the dependency
+breaks. `proc-macro-crate` fixes it at the cost of a parsing dependency in
+the macro crate.
+
+### serde_yaml's future **[own]**
+Archived upstream (`0.9.34+deprecated`); figment pulls it regardless, so a
+local switch buys nothing. Track figment; move when it moves.
 
 ### A shared auth core for the HTTP stores **[own]**
-Consul, Vault and Firestore each carry their own `Session`/`Token` pair with
-the same shape: cache a token, renew it near expiry, invalidate on a refused
-request, log in at most once concurrently. Three copies is one too many — but
-extracting a `dynamic-config-auth` crate means an eleventh crate, a public
-contract for something currently private, and Vault's renewal semantics
-(leases, renewable flags) do not quite fit Consul's (nanosecond TTLs) or
-Firestore's (expiry only). Reconcile them on paper first; extract second.
+Consul, Vault and Firestore now share the margin (`REFRESH_WITHIN`) but
+still triplicate the Session/Token machinery. Reconcile the semantics on
+paper first; extract second.
 
-### `with_timeout` for etcd, NATS and S3 **[own]**
-The three ureq-based stores take `with_timeout`. The other three configure
-timeouts through their client's own vocabulary (`ConnectOptions`,
-`SdkConfig`), which is the documented pattern — but the asymmetry is real and
-surprises people. Either add pass-through methods (more API to keep) or
-document the asymmetry as a decision in each README (cheaper, done for etcd).
-Decide once, for all three, when somebody actually trips on it.
+### `with_timeout` symmetry across stores **[own]**
+The three ureq crates take `with_timeout`; etcd/NATS/S3 configure timeouts
+through their clients' own vocabulary. Either add pass-throughs or document
+the asymmetry per README — decide once someone actually trips on it.
 
-### Coverage and semver gates in CI **[own]**
-Two jobs that only earn their keep after the first release:
-`cargo-llvm-cov` (with a threshold low enough not to fight refactoring) and
-`cargo-semver-checks` (which needs a published baseline to compare against —
-before 0.0.1 exists on crates.io there is nothing to check). Add both in the
-first post-release change to CI.
+### Runtime-agnostic S3 watch sleep **[own]**
+Blocked on the AWS SDK itself being tokio-bound; revisit if smithy's
+runtime abstraction ever makes executor-independence real.
 
-### An `ErrorKind::Auth` variant **[own]**
-The store crates now classify auth failures internally (typed 401/403
-matching), but the public error is still `ErrorKind::Remote`. A caller who
-wants "credentials are wrong, do not retry" as a program-visible state has to
-parse the message. `ErrorKind` is `#[non_exhaustive]`, so the variant is
-additive — the open question is the boundary: is a Vault 403 on a *path*
-(policy) the same kind as a 403 on a *token* (expiry)? Decide with a real
-consumer in hand.
+### `ErrorKind::Auth` **[own]**
+The stores classify 401/403 internally now; a public variant would let a
+caller treat "credentials are wrong" as a program-visible state. Decide the
+boundary with a real consumer in hand.
+
+### Coverage threshold + release gates **[own]**
+Coverage reports exist (CI artifact + summary); a threshold waits until the
+number stabilises post-0.1.0.
+
+### Reading several keys as one document **[own]**
+Unchanged from before: easy for etcd/Consul/Redis, awkward for
+Vault/Firestore, needs a defined ordering. Possible, unclaimed.
+
+### A store nobody has asked for yet **[own]**
+Still true: an eighth store is worth adding when somebody wants it, not
+before — and after the shared-auth-core question is settled.

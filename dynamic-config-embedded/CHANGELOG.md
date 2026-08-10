@@ -25,6 +25,22 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-08-10
+
+### Breaking
+
+- `ConfigCell` gains a const-generic waiter budget:
+  `ConfigCell<T, const WAITERS: usize = 4>`. `WAITERS` is renamed
+  `DEFAULT_WAITERS`. Un-annotated `let cell = ConfigCell::new()` now needs
+  a type annotation; statics are unaffected.
+
+### Fixed
+
+- Trailing bytes after a JSON document are rejected — a reused link buffer
+  can no longer smuggle a stale tail into an installed configuration.
+- The waiter evicted by a fifth registration really is woken, and the docs
+  are honest about steady-state churn beyond the budget.
+
 ## [0.0.1] — 2026-08-10
 
 Initial release.
@@ -42,5 +58,6 @@ Initial release.
 - The `Validate` trait, and `Error`/`ErrorKind` small enough for a status
   register.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ctolon/dynamic-config/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/ctolon/dynamic-config/releases/tag/v0.0.1
