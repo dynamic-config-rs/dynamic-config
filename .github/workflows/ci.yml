@@ -362,9 +362,11 @@ jobs:
             --include-fragments
             --exclude '^https://github\.com/ctolon/'
             --exclude '^https://docs\.rs/dynamic-config'
+            --exclude '^https://ctolon\.github\.io/dynamic-config'
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
             AGENTS.md CHANGELOG.md docs/*.md scripts/README.md
             dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
+            book/src/*.md book/src/remote-stores/*.md
             .claude/skills/*/SKILL.md .github/ISSUE_TEMPLATE/*.md
           fail: true
 

@@ -105,6 +105,11 @@ examples:
                 -p dynamic-config-redis -p dynamic-config-s3 \
                 -p dynamic-config-firestore
 
+# The book, the way CI builds it before publishing to Pages. Needs mdbook
+# (`cargo install mdbook`).
+book:
+    mdbook build book
+
 # Regenerate the compile-fail expectations after an intentional change.
 bless:
     TRYBUILD=overwrite cargo test -p dynamic-config --features full --test ui

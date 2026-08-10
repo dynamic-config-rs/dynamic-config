@@ -68,7 +68,7 @@ Everything below is in service of one journey. Follow it once and the module
 list stops being a list.
 
 ```text
-#[dynamic_config(..)]              expand.rs turns the attribute into a `LoadSpec`
+#[dynamic_config(..)]              expand/ turns the attribute into a `LoadSpec`
         ↓
 LoadSpec                           source.rs — which sources, which section, which prefix
         ↓
@@ -87,8 +87,10 @@ Config::current()                  an atomic load. No lock, no parse, no allocat
 
 #### `lib.rs` — the front door
 
-Crate documentation, re-exports, and the hidden `__`-prefixed macros the
-generated code calls. Two kinds live here:
+Crate documentation, re-exports, and `load()`. The hidden `__`-prefixed
+`macro_rules!` the generated code calls live next door in `redirects.rs` —
+`#[macro_export]` roots them at the crate top regardless of module, so they
+could move out of the front page. Two kinds live there:
 
 - **Item-level redirects** (`__async_methods!`, `__clap_methods!`,
   `__schema_methods!`, `__async_remote_methods!`) — for methods whose
@@ -100,8 +102,11 @@ generated code calls. Two kinds live here:
 Both exist so that using a feature you have not enabled is a *compile* error
 naming it, rather than a runtime surprise on the one machine that reads YAML.
 
-Also here: `recover()` (the last-known-good path), `__write_cache`,
-`__summarize_changes`, and the logging helpers `__log_remote_*`.
+Still in `lib.rs` itself: `recover()` (the last-known-good path),
+`__write_cache`, `__summarize_changes`, and the logging helpers
+`__log_remote_*` — those are *functions*, reached by path
+(`::dynamic_config::__write_cache`), so unlike an exported macro they must
+stay somewhere `pub`-reachable from the root.
 
 #### `source.rs` — what to read
 
@@ -115,9 +120,12 @@ chains builders.
 
 `Source::format()` returns `Option<Format>`: a provider parses nothing.
 
-#### `loader.rs` — the heart
+#### `loader/` — the heart
 
-The one module worth reading in full. It:
+The one module worth reading in full. `mod.rs` is the API surface and the
+precedence order; `sections.rs` maps keys to sections and merges files,
+`environment.rs` the env layers, `aliases_pass.rs` the alias gap-fill,
+`recover.rs` the cache path, `origin.rs` the error translation. It:
 
 - Assembles providers in precedence order (`build`).
 - Maps top-level keys to sections (`Sections`) — reimplementing figment's
@@ -134,8 +142,9 @@ The one module worth reading in full. It:
 - Answers "where did this come from" (`origin_of`), by recognising each layer's
   metadata name.
 
-**The precedence order lives here and nowhere else.** If you add a layer, this
-is the file, and the position needs an argument in a comment.
+**The precedence order lives in `loader/mod.rs` and nowhere else.** If you
+add a layer, that is the file, and the position needs an argument in a
+comment.
 
 #### `cell.rs` — where a snapshot lives
 
@@ -250,15 +259,19 @@ real toolchain.
 
 ## 3. `dynamic-config-macros`
 
-Three files. `lib.rs` is the entry point, `args.rs` parses the attribute,
-`expand.rs` generates the `impl`.
+`lib.rs` is the entry point, `args.rs` parses the attribute, and `expand/`
+generates the `impl` — `mod.rs` orchestrates and assembles the final
+`quote!`; `accessors`, `watch`, `persistence`, `remote`, `source`, `schema`,
+`diagnostics` and `async_api` each build their slice of the methods, spliced
+back in a fixed order so the emitted tokens do not depend on the layout.
 
 **The generated code is deliberately thin.** Everything with behaviour lives in
 `dynamic-config` as an ordinary function that can be linted, stepped through and
 unit tested. Generated code can be none of those things.
 
-`slot(..)` in `expand.rs` handles the generic/non-generic split in one place: a
-non-generic type gets a `static`, a generic one gets a registry lookup.
+`slot(..)` in `expand/accessors.rs` handles the generic/non-generic split in
+one place: a non-generic type gets a `static`, a generic one gets a registry
+lookup.
 
 Adding an argument is common enough to have its own guide:
 [`.claude/skills/add-macro-argument/SKILL.md`](../.claude/skills/add-macro-argument/SKILL.md).

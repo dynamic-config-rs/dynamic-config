@@ -1,0 +1,21 @@
+[book]
+title = "dynamic-config"
+authors = ["Cevat Batuhan Tolon"]
+description = "Hot-reloadable, lock-free application configuration for Rust, behind one attribute."
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/ctolon/dynamic-config"
+edit-url-template = "https://github.com/ctolon/dynamic-config/edit/dev/book/src/{path}"
+site-url = "/dynamic-config/"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+limit-results = 20
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 2
