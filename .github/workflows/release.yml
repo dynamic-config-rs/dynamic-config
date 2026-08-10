@@ -14,8 +14,9 @@ jobs:
   verify:
     name: verify before publishing
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -65,9 +66,10 @@ jobs:
     name: publish to crates.io
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: crates-io
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -113,10 +115,11 @@ jobs:
     name: GitHub release
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -130,6 +133,6 @@ jobs:
 
           echo "--- notes ---"
           cat release-notes.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           body_path: release-notes.md

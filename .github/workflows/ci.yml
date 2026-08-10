@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -25,8 +25,10 @@ env:
 jobs:
   fmt:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -34,8 +36,10 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -52,8 +56,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # The watcher is the reason this runs on three operating systems: notify
@@ -106,8 +111,10 @@ jobs:
 
   containers:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Real servers, no mocks. A mock of etcd would only ever confirm what we
@@ -161,8 +168,9 @@ jobs:
   embedded:
     name: it really is no_std
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv7em-none-eabihf
@@ -183,8 +191,10 @@ jobs:
 
   features:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-hack
@@ -203,8 +213,10 @@ jobs:
 
   loader:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # figment's behaviour is this crate's behaviour, so its contract gets its
@@ -214,8 +226,10 @@ jobs:
 
   bench:
     runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Not a regression gate — a shared runner is too noisy for that. It keeps
@@ -268,8 +282,9 @@ jobs:
             package: dynamic-config-embedded
             flags: "--no-default-features --features json,async"
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -293,10 +308,11 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       RUSTDOCFLAGS: -D warnings --cfg docsrs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       # `etcd-client` compiles its gRPC stubs at build time and needs the
@@ -309,8 +325,9 @@ jobs:
   docs-links:
     name: documentation links resolve
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # A README is the first thing anyone reads and the last thing anyone
       # tests. A dead anchor in it is a small bug that is very easy to ship.
       - uses: lycheeverse/lychee-action@v2
@@ -329,8 +346,9 @@ jobs:
   minimal-versions:
     name: the declared minimums resolve
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -348,3 +366,46 @@ jobs:
       # that no longer compile, and this crate makes no promise about the
       # oldest `trybuild` anyone could build its test suite with.
       - run: cargo +stable check -p dynamic-config --locked --all-features
+
+  actionlint:
+    name: workflows lint clean
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # The workflows are code that only runs in production. actionlint
+      # catches the typo'd `if:` expression and the misspelled input before a
+      # release does.
+      - uses: raven-actions/actionlint@v2
+
+  # The one status branch protection requires. Requiring every job by name
+  # breaks the moment a matrix row is renamed; requiring this gate never
+  # does. `if: always()` because a gate that is skipped when a dependency
+  # fails would count as "not failed" and wave the merge through.
+  ci-ok:
+    name: CI is green
+    needs:
+      - fmt
+      - clippy
+      - test
+      - containers
+      - embedded
+      - features
+      - loader
+      - bench
+      - msrv
+      - docs
+      - docs-links
+      - minimal-versions
+      - actionlint
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: every job this gate needs has succeeded
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "$results"
+          case "$results" in
+            *failure*|*cancelled*) exit 1 ;;
+          esac

@@ -16,10 +16,16 @@
 shared-version = true
 consolidate-commits = true
 
-# Prepare only: bump, rewrite changelogs, commit, tag, push. CI publishes.
+# Prepare only: bump, rewrite changelogs, commit. CI publishes.
+#
+# `main` accepts no direct pushes — not even from admins — so the release
+# commit travels like every other change: on a branch, through a pull
+# request, past the gates. The tag is created by hand on `main` *after* the
+# merge, because a tag minted here would point at a commit that is not the
+# one `main` ends up with.
 publish = false
-push = true
-tag = true
+push = false
+tag = false
 
 tag-name = "v{{version}}"
 tag-message = "{{crate_name}} {{version}}"

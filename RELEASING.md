@@ -22,6 +22,17 @@ always go first. The seven store crates depend on `dynamic-config` the same way,
 which is why they come last. `dynamic-config-embedded` depends on neither, so
 CI publishes it in the first wave alongside the macros.
 
+## The branch model
+
+Work lands on `dev`. `main` is production: it accepts no direct pushes — not
+even from admins — only pull requests whose gates ("CI is green", "Security
+is green") have passed, merged with a linear history (squash or rebase).
+Releases are cut from `main`, by tag.
+
+```text
+feature work ──▶ dev ──(pull request, gates green)──▶ main ──(tag vX.Y.Z)──▶ crates.io
+```
+
 ## Releasing
 
 `cargo release` prepares; CI publishes. The split is deliberate: a laptop cannot
@@ -30,15 +41,26 @@ push to crates.io without the checks having run.
 ```sh
 cargo install cargo-release just
 
-cargo release patch --execute     # 0.0.1 -> 0.0.2
-cargo release minor --execute     # 0.0.1 -> 0.1.0
+# On a branch cut from main:
+cargo release patch --execute     # 0.0.1 -> 0.0.2: bump + changelogs + commit
+cargo release minor --execute     # 0.0.1 -> 0.1.0, which pre-1.0 is a break
 ```
 
 That runs `just check`, bumps every crate, moves each `## [Unreleased]` section
-under a dated version heading, commits, tags `vX.Y.Z` and pushes. The tag is
-what starts [`release.yml`](.github/workflows/release.yml), which verifies the
-tag matches the manifest and the changelog names the version, then publishes in
-three waves.
+under a dated version heading, and commits — it does **not** push or tag,
+because `main` only takes pull requests. Open the PR, let the gates pass,
+merge, then tag the merge commit on `main`:
+
+```sh
+git checkout main && git pull
+git tag -a vX.Y.Z -m "dynamic-config X.Y.Z"
+git push origin vX.Y.Z
+```
+
+The tag is what starts [`release.yml`](.github/workflows/release.yml), which
+verifies the tag matches the manifest and the changelog names the version,
+then publishes in three waves. Tag pushes are not branch pushes, so branch
+protection does not stand in their way.
 
 ### Before you run it
 

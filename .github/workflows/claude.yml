@@ -1,0 +1,57 @@
+name: Claude
+
+# Mention-based: write `@claude <ask>` in an issue, a PR comment or a review
+# and it answers in context — explain this failure, fix this, review this
+# diff, open a PR for that. Only mentions from users with write access
+# trigger anything; the action enforces that itself.
+#
+# Auth is a Claude subscription, not API credit: run `claude setup-token`
+# locally and store the result as the `CLAUDE_CODE_OAUTH_TOKEN` repository
+# secret.
+#
+# The model comes from the `CLAUDE_MODEL` repository *variable*
+# (Settings → Secrets and variables → Actions → Variables), so switching to
+# e.g. `claude-opus-5` is a settings change, not a commit. Unset, it falls
+# back to Sonnet.
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+permissions:
+  contents: read
+
+jobs:
+  claude:
+    if: >
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # No prompt: tag mode. The action reads the mention, the thread and
+          # the diff, and answers or acts in place. Repository rules reach it
+          # through AGENTS.md, the same way they reach every other agent.
+          claude_args: |
+            --model ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5' }}
+            --allowedTools "Bash(cargo build:*),Bash(cargo check:*),Bash(cargo test:*),Bash(cargo clippy:*),Bash(cargo fmt:*),Bash(gh pr:*),Bash(gh issue:*)"

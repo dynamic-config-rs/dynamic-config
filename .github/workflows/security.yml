@@ -6,11 +6,16 @@ name: Security
 # change for that to happen.
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
+
+# A push during a run makes the older run's answer obsolete.
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -19,8 +24,9 @@ jobs:
   deny:
     name: advisories, licences, sources
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           # The full `check` — advisories, licences, sources *and* bans — so a
@@ -31,8 +37,9 @@ jobs:
   unsafe:
     name: no unsafe code
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Every crate here declares `#![forbid(unsafe_code)]`, which the compiler
@@ -53,8 +60,9 @@ jobs:
   secrets-in-diagnostics:
     name: secrets stay out of diagnostics
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # The property is enforced by tests rather than by review, so this job
@@ -69,16 +77,36 @@ jobs:
   supply-chain:
     name: dependency review
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Flags a pull request that adds a dependency with a known advisory or a
       # licence outside the allow-list, at the point where changing course is
       # still cheap.
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: low
           comment-summary-in-pr: on-failure
+
+  # The one status branch protection requires from this workflow — same
+  # reasoning as CI's gate. `supply-chain` is deliberately absent from the
+  # needs: it only exists on pull requests, and a gate that needs a job that
+  # never ran would hang a plain push forever.
+  security-ok:
+    name: Security is green
+    needs: [deny, unsafe, secrets-in-diagnostics]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: every job this gate needs has succeeded
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "$results"
+          case "$results" in
+            *failure*|*cancelled*) exit 1 ;;
+          esac

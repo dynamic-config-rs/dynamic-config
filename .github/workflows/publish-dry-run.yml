@@ -6,7 +6,7 @@ name: Publish dry run
 # manifests change, not when the code does.
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "**/Cargo.toml"
       - "**/README.md"
@@ -15,14 +15,19 @@ on:
     - cron: "31 6 * * 1"
   workflow_dispatch:
 
+concurrency:
+  group: dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   package:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -61,7 +66,7 @@ jobs:
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
                        dynamic-config-firestore dynamic-config-embedded; do
-            tarball=$(ls target/package/$crate-*.crate 2>/dev/null | head -1)
+            tarball=$(find target/package -maxdepth 1 -name "$crate-*.crate" 2>/dev/null | head -1)
 
             if [ -z "$tarball" ]; then
               continue

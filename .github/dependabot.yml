@@ -27,3 +27,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # One grouped bump instead of a queue: an action pin is reviewed the same
+    # way whether one moved or five did.
+    groups:
+      actions:
+        patterns: ["*"]
