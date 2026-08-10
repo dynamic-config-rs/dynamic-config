@@ -13,6 +13,9 @@
 #![cfg(all(feature = "watch", feature = "json"))]
 
 use std::fs;
+// Only the unix-gated ConfigMap tests touch `Path`; Windows builds with
+// `-D warnings`, where an unused import is an error.
+#[cfg(unix)]
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -32,6 +35,10 @@ struct Polled {
     value: u32,
 }
 
+// The ConfigMap machinery below is unix-only, like the symlinks it imitates,
+// so everything only *it* uses is gated with it — Windows builds with
+// `-D warnings`, and dead code there is an error, not a footnote.
+#[cfg(unix)]
 #[dynamic_config(files = ["tests/scratch/k8s/config.json"], key = "app", watch, debounce = 50)]
 #[derive(Debug, Deserialize)]
 struct Mounted {
@@ -39,6 +46,7 @@ struct Mounted {
 }
 
 /// Polls until `read` reports `expected`, or gives up well after it should have.
+#[cfg(unix)]
 fn settles_on(read: impl Fn() -> u32, expected: u32) -> bool {
     let deadline = Instant::now() + Duration::from_secs(15);
 

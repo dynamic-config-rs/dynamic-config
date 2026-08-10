@@ -132,6 +132,10 @@ jobs:
           docker pull redis:7-alpine
           docker pull minio/minio:RELEASE.2025-02-28T09-55-16Z
           docker pull gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+      # `--test-threads=2`, unlike the justfile's full-speed local run: each
+      # test boots its own server container, and four Vaults racing to start
+      # on a shared two-core runner is how `WaitContainer(StartupTimeout)`
+      # happens. Two at a time is slower and boring, which is the point.
       - run: >
           cargo test
           -p dynamic-config-etcd
@@ -141,6 +145,7 @@ jobs:
           -p dynamic-config-redis
           -p dynamic-config-s3
           -p dynamic-config-firestore
+          -- --test-threads=2
       # The examples in these crates are documentation people run against a real
       # server; a stale one is worse than a missing one.
       - run: >
