@@ -96,7 +96,7 @@ jobs:
             local out
             if out=$(cargo publish -p "$1" 2>&1); then
               echo "published $1"
-            elif grep -q "already uploaded" <<<"$out"; then
+            elif grep -qE "already (uploaded|exists)" <<<"$out"; then
               echo "$1 v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2) is already on the registry — skipped"
             else
               printf '%s\n' "$out"
