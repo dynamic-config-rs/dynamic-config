@@ -1,0 +1,4 @@
+# Edit this file while `hot_reload` is running to watch it reload.
+[server]
+host = "127.0.0.1"
+port = 8080

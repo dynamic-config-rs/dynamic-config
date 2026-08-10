@@ -1,0 +1,29 @@
+version: 2
+
+updates:
+  # Cargo updates are grouped rather than one pull request per crate: a
+  # configuration library's dependency tree is small, and twelve separate
+  # patch bumps is a review queue nobody reads.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types: [minor, patch]
+    # Majors arrive on their own, because they are the ones with a decision in
+    # them — and for these three, a major bump is a breaking change here.
+    ignore:
+      - dependency-name: figment
+        update-types: [version-update:semver-major]
+      - dependency-name: clap
+        update-types: [version-update:semver-major]
+      - dependency-name: notify
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

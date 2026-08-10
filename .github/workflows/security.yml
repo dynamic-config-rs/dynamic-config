@@ -1,0 +1,84 @@
+name: Security
+
+# Advisories are published on someone else's schedule, so this runs on one of
+# its own as well as on every change. A dependency that was clean on Monday is
+# not necessarily clean on Friday, and nothing about this repository has to
+# change for that to happen.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deny:
+    name: advisories, licences, sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # The full `check` — advisories, licences, sources *and* bans — so a
+          # duplicate-dependency policy in deny.toml is enforced somewhere
+          # rather than assumed to be enforced somewhere else.
+          command: check
+
+  unsafe:
+    name: no unsafe code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Every crate here declares `#![forbid(unsafe_code)]`, which the compiler
+      # enforces. This proves the declaration is still there rather than
+      # trusting that nobody removed it in a hurry.
+      - run: |
+          for crate in dynamic-config dynamic-config-macros \
+                       dynamic-config-etcd dynamic-config-consul \
+                       dynamic-config-nats dynamic-config-vault \
+                       dynamic-config-redis dynamic-config-s3 \
+                       dynamic-config-firestore dynamic-config-embedded; do
+            if ! grep -q '#!\[forbid(unsafe_code)\]' "$crate/src/lib.rs"; then
+              echo "::error file=$crate/src/lib.rs::missing #![forbid(unsafe_code)]"
+              exit 1
+            fi
+          done
+
+  secrets-in-diagnostics:
+    name: secrets stay out of diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The property is enforced by tests rather than by review, so this job
+      # exists to make sure those tests are the ones that ran. Named
+      # deliberately: a green tick against this line is the claim being made.
+      - run: cargo test -p dynamic-config --features full --test security
+      - run: cargo test -p dynamic-config --features full --test safety
+      - run: cargo test -p dynamic-config --features full --test observability
+      # The write path: created `0600`, and a planted symlink refused.
+      - run: cargo test -p dynamic-config --features json --lib write::permissions
+
+  supply-chain:
+    name: dependency review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      # Flags a pull request that adds a dependency with a known advisory or a
+      # licence outside the allow-list, at the point where changing course is
+      # still cheap.
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: low
+          comment-summary-in-pr: on-failure

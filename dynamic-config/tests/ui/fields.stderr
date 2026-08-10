@@ -1,0 +1,11 @@
+error: `#[config(secret)]` generates a `Debug` that redacts the marked fields, so this `#[derive(Debug)]` would conflict with it; remove `Debug` from the derive
+ --> tests/ui/fields.rs:9:1
+  |
+9 | #[derive(Debug, Deserialize)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: unknown option; the only one is `secret`
+  --> tests/ui/fields.rs:18:14
+   |
+18 |     #[config(sercet)]
+   |              ^^^^^^

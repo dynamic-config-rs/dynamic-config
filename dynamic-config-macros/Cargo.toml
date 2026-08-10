@@ -1,0 +1,29 @@
+[package]
+name = "dynamic-config-macros"
+description = "Procedural macro implementation for the `dynamic-config` crate. Do not depend on this directly."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/dynamic-config-macros"
+authors.workspace = true
+categories.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.91"
+quote = "1.0.35"
+# `full` is required for `syn::ItemStruct`; the rest are defaults, spelled out so
+# a future `default-features = false` stays correct.
+syn = { version = "3.0", features = ["full", "parsing", "printing", "proc-macro"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

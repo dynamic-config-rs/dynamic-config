@@ -1,0 +1,42 @@
+[workspace]
+members = [
+    "dynamic-config",
+    "dynamic-config-macros",
+    "dynamic-config-vault",
+    "dynamic-config-consul",
+    "dynamic-config-etcd",
+    "dynamic-config-nats",
+    "dynamic-config-embedded",
+    "dynamic-config-redis",
+    "dynamic-config-s3",
+    "dynamic-config-firestore",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.71"
+license = "MIT"
+repository = "https://github.com/ctolon/dynamic-config"
+homepage = "https://github.com/ctolon/dynamic-config"
+documentation = "https://docs.rs/dynamic-config"
+authors = ["Cevat Batuhan Tolon <tallon1997r@gmail.com>"]
+categories = ["config", "development-tools"]
+keywords = ["config", "hot-reload", "settings", "watch", "serde"]
+# Everything a build needs and nothing else. Tests and benches are excluded
+# rather than included by omission: the fixtures they read are not in the
+# package either, so shipping them would only ship something that cannot run.
+exclude = [
+    "tests/**",
+    "benches/**",
+]
+
+[workspace.dependencies]
+dynamic-config-macros = { version = "=0.0.1", path = "dynamic-config-macros" }
+dynamic-config = { version = "=0.0.1", path = "dynamic-config", default-features = false }
+
+# One profile for the benchmark to be worth reading.
+[profile.bench]
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,7 @@
+{
+  "db": {
+    "host": "etc-host",
+    "port": 5432,
+    "tls": true
+  }
+}

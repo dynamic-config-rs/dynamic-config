@@ -1,0 +1,9 @@
+{
+  "db": {
+    "host": "localhost",
+    "pool": {
+      "size": 32,
+      "max_size": 64
+    }
+  }
+}

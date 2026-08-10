@@ -1,0 +1,333 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One job cancels the previous run on the same branch. A pull request pushed
+# three times in a minute should not occupy three runners proving the same
+# thing about two obsolete commits.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  # A failing build should say what failed, not where in a backtrace it gave up.
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo clippy --workspace --all-targets --no-default-features
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The watcher is the reason this runs on three operating systems: notify
+      # uses a different backend on each, and directory watching plus atomic
+      # saves behave differently enough to be worth proving every time.
+      #
+      # The companion crates are excluded here and get their own job: their
+      # tests drive real servers in containers, which only one of these three
+      # runners has.
+      - run: >
+          cargo test --workspace --features full
+          --exclude dynamic-config-etcd
+          --exclude dynamic-config-consul
+          --exclude dynamic-config-nats
+          --exclude dynamic-config-vault
+          --exclude dynamic-config-redis
+          --exclude dynamic-config-s3
+          --exclude dynamic-config-firestore
+          --exclude dynamic-config-embedded
+      # `no_std` and the workspace's `--features full` do not mix: this crate
+      # has its own features and no `full`.
+      - run: cargo test -p dynamic-config-embedded --features std,async
+      # The examples are documentation people run; a stale one is worse than a
+      # missing one.
+      - run: cargo build -p dynamic-config --features full --examples
+      # The compile-fail diagnostics that only exist when a feature is *off*
+      # cannot be seen by a build that has it on.
+      - run: cargo test -p dynamic-config --no-default-features --features json --test ui
+      # Tests that share a static or a fixture path pass alone and race in
+      # parallel. Running the suite a second time single-threaded catches the
+      # opposite mistake: a test that only passes because another one ran first.
+      - run: >
+          cargo test --workspace --features full
+          --exclude dynamic-config-etcd
+          --exclude dynamic-config-consul
+          --exclude dynamic-config-nats
+          --exclude dynamic-config-vault
+          --exclude dynamic-config-redis
+          --exclude dynamic-config-s3
+          --exclude dynamic-config-firestore
+          --exclude dynamic-config-embedded
+          -- --test-threads=1
+        if: matrix.os == 'ubuntu-latest'
+      # Doctests document the default feature set, so they are skipped when it
+      # is switched off; everything else still has to pass.
+      - run: cargo test -p dynamic-config --no-default-features --lib --tests
+      # The async surface with no runtime crate in the graph at all — driven by
+      # a hand-written executor in `tests/runtime_agnostic.rs`.
+      - run: cargo test -p dynamic-config --no-default-features --features async,json
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Real servers, no mocks. A mock of etcd would only ever confirm what we
+      # already believed about etcd — and three of the facts these tests pin (a
+      # lazy gRPC connect, a bucket that must already exist, a first blocking
+      # query that answers immediately) are ones a mock would have got wrong.
+      #
+      # The watch tests wait on real change notifications, so this job is slower
+      # than the rest and deliberately so: a watch that only works on a laptop
+      # is not a watch.
+      #
+      # Pulled ahead of time so a Docker Hub hiccup fails as a pull rather than
+      # as a mysterious test timeout.
+      - run: |
+          docker pull hashicorp/vault:1.17
+          docker pull hashicorp/consul:1.16.1
+          docker pull quay.io/coreos/etcd:v3.5.17
+          docker pull nats:2.10.14
+          docker pull redis:7-alpine
+          docker pull minio/minio:RELEASE.2025-02-28T09-55-16Z
+          docker pull gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+      - run: >
+          cargo test
+          -p dynamic-config-etcd
+          -p dynamic-config-consul
+          -p dynamic-config-nats
+          -p dynamic-config-vault
+          -p dynamic-config-redis
+          -p dynamic-config-s3
+          -p dynamic-config-firestore
+      # The examples in these crates are documentation people run against a real
+      # server; a stale one is worse than a missing one.
+      - run: >
+          cargo build --examples
+          -p dynamic-config-etcd
+          -p dynamic-config-consul
+          -p dynamic-config-nats
+          -p dynamic-config-vault
+          -p dynamic-config-redis
+          -p dynamic-config-s3
+          -p dynamic-config-firestore
+
+  embedded:
+    name: it really is no_std
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      # A host build cannot check `no_std`: `std` is in the sysroot and links
+      # itself in. Building for a target that has no `std` at all is the only
+      # way to know.
+      - run: >
+          cargo check -p dynamic-config-embedded
+          --target thumbv7em-none-eabihf
+          --no-default-features --features json,async
+      # And with every feature that does not need a host.
+      - run: >
+          cargo check -p dynamic-config-embedded
+          --target thumbv7em-none-eabihf
+          --no-default-features
+      - run: cargo test -p dynamic-config-embedded --features std,async
+
+  features:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-hack
+      # Every combination has to compile, not just the ones we happen to test.
+      #
+      # `--depth 2` rather than the full powerset: the full set is thousands
+      # of builds, and the pairs are where feature interactions actually live —
+      # a `cfg` that is wrong is almost always wrong for one feature or for two
+      # together.
+      - run: cargo hack check -p dynamic-config --feature-powerset --depth 2
+      # The two features that gate a *public API* rather than an internal path
+      # get their own check with everything else off, because that is the
+      # combination a user reaching for one of them will have.
+      - run: cargo check -p dynamic-config --no-default-features --features figment
+      - run: cargo check -p dynamic-config --no-default-features --features decrypt
+
+  loader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # figment's behaviour is this crate's behaviour, so its contract gets its
+      # own job: an upgrade that changes merging or environment parsing shows up
+      # here rather than in a user's incident.
+      - run: cargo test -p dynamic-config --test loader --features json,toml,yaml
+
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Not a regression gate — a shared runner is too noisy for that. It keeps
+      # the benchmark compiling and the README's figures reproducible by
+      # anyone who wants to check them.
+      - run: cargo bench -p dynamic-config --features json
+
+  msrv:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The core floor.
+          - rust: "1.71"
+            features: "json,toml,yaml"
+          # `tokio` must not raise it.
+          - rust: "1.71"
+            features: "json,async,tracing,clap"
+          # `schema` raises it to schemars' own floor.
+          - rust: "1.74"
+            features: "json,schema"
+          # `age` raises it further, and not to the floor it declares: its
+          # translation machinery reaches `sha2 0.11`, which is edition 2024.
+          - rust: "1.85"
+            features: "json,age"
+          # The features that add no dependency must not move the floor at all.
+          - rust: "1.71"
+            features: "json,dotenv,figment"
+          # `watch` does more: notify 8 declares 1.85 through notify-types.
+          - rust: "1.85"
+            features: "full"
+          # The companion crates declare their own floors; one representative
+          # `check` per crate keeps each declaration honest. `package` names a
+          # crate instead of a feature set, so these rows reuse the same job.
+          - rust: "1.85"
+            package: dynamic-config-etcd
+          - rust: "1.85"
+            package: dynamic-config-consul
+          - rust: "1.88"
+            package: dynamic-config-nats
+          - rust: "1.85"
+            package: dynamic-config-vault
+          - rust: "1.88"
+            package: dynamic-config-redis
+          - rust: "1.88"
+            package: dynamic-config-s3
+          - rust: "1.85"
+            package: dynamic-config-firestore
+          - rust: "1.83"
+            package: dynamic-config-embedded
+            flags: "--no-default-features --features json,async"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      # The lockfile has to be produced by a cargo new enough to honour
+      # `resolver.incompatible-rust-versions = "fallback"` from .cargo/config.toml.
+      # Left to the old toolchain, resolution takes the newest release of every
+      # transitive dependency and the check fails on a dependency's edition
+      # rather than on anything this crate did.
+      - run: cargo +stable generate-lockfile
+      # `check`, not `test`: dev-dependencies (trybuild, tempfile) track stable
+      # and would drag the floor up for reasons users never pay for.
+      - if: matrix.features
+        run: cargo check -p dynamic-config --locked --no-default-features --features ${{ matrix.features }}
+      - if: matrix.package
+        run: cargo check -p ${{ matrix.package }} --locked ${{ matrix.flags }}
+
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings --cfg docsrs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      # Nightly, because the feature badges use `doc_cfg` — the same way
+      # docs.rs builds it.
+      - run: cargo doc --workspace --all-features --no-deps
+
+  docs-links:
+    name: documentation links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A README is the first thing anyone reads and the last thing anyone
+      # tests. A dead anchor in it is a small bug that is very easy to ship.
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --include-fragments
+            --exclude '^https://github\.com/ctolon/'
+            --exclude '^https://docs\.rs/dynamic-config'
+            README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
+            AGENTS.md CHANGELOG.md docs/*.md
+            dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
+            .claude/skills/*/SKILL.md .github/ISSUE_TEMPLATE/*.md
+          fail: true
+
+  minimal-versions:
+    name: the declared minimums resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # A `serde = "1.0"` that actually needs 1.0.210 compiles against a fresh
+      # lockfile and breaks for the first user with an older one. This resolves
+      # *our* requirements to their oldest allowed version and builds against
+      # that.
+      #
+      # `direct-minimal-versions`, not `minimal-versions`: the latter minimises
+      # transitive dependencies too, and then fails inside crates that
+      # under-declare their own minimums — which is a bug report to send
+      # elsewhere, not a signal about this repository.
+      - run: cargo +nightly generate-lockfile -Z direct-minimal-versions
+      # `check`, not `test`: dev-dependencies minimise to versions from 2015
+      # that no longer compile, and this crate makes no promise about the
+      # oldest `trybuild` anyone could build its test suite with.
+      - run: cargo +stable check -p dynamic-config --locked --all-features

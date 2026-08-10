@@ -1,0 +1,6 @@
+{
+  "db": {
+    "host": "base-host",
+    "port": 5432
+  }
+}

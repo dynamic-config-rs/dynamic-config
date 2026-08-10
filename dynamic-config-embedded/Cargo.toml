@@ -1,0 +1,44 @@
+[package]
+name = "dynamic-config-embedded"
+description = "Hot-reloadable configuration for no_std targets: no filesystem, no allocator, no runtime."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+# Higher than the core crate's 1.71 because of language features, not
+# dependencies: `core::error::Error` in `no_std` needs 1.81 and inline `const`
+# blocks need 1.79. Declared as 1.83 — the floor CI actually verifies — and
+# still far below anything a device toolchain would struggle with.
+rust-version = "1.83"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/dynamic-config-embedded"
+authors.workspace = true
+categories = ["config", "embedded", "no-std"]
+keywords = ["config", "no-std", "embedded", "settings", "serde"]
+exclude.workspace = true
+
+[features]
+default = ["json"]
+# Parsing a document with `serde-json-core`, which allocates nothing.
+json = ["dep:serde-json-core"]
+# A `Changes` future, so a task can await a new configuration.
+async = []
+# For a host build — tests, and a desktop simulator. Supplies the
+# `critical-section` implementation a device gets from its HAL.
+std = ["critical-section/std"]
+
+[dependencies]
+serde = { version = "1.0.210", default-features = false, features = ["derive"] }
+# The one primitive this needs: a way to be uninterrupted for a few
+# instructions. Every embedded HAL provides an implementation of it.
+critical-section = "1.2"
+serde-json-core = { version = "0.6", optional = true }
+
+[dev-dependencies]
+serde = { version = "1.0.210", default-features = false, features = ["derive"] }
+critical-section = { version = "1.2", features = ["std"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

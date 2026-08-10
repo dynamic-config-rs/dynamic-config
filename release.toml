@@ -1,0 +1,43 @@
+# cargo-release configuration.
+#
+#   cargo install cargo-release
+#   cargo release patch --execute        # 0.0.1 -> 0.0.2
+#   cargo release minor --execute        # 0.0.1 -> 0.1.0
+#
+# Pre-1.0, a breaking change bumps the *minor* and everything else the patch —
+# which is what `minor` and `patch` above mean here.
+#
+# Publishing itself happens in CI, triggered by the tag this creates; see
+# .github/workflows/release.yml. Nothing here talks to crates.io, so a release
+# from a laptop cannot bypass the checks.
+
+# One version across the workspace. The crates depend on each other by exact
+# version, so they cannot usefully move apart.
+shared-version = true
+consolidate-commits = true
+
+# Prepare only: bump, rewrite changelogs, commit, tag, push. CI publishes.
+publish = false
+push = true
+tag = true
+
+tag-name = "v{{version}}"
+tag-message = "{{crate_name}} {{version}}"
+pre-release-commit-message = "release {{version}}"
+
+# Everything has to be green first. This runs before a version number moves.
+pre-release-hook = ["just", "check"]
+
+# Applied to every package, so each companion crate's own changelog gets the
+# same treatment as the workspace one.
+[[pre-release-replacements]]
+file = "CHANGELOG.md"
+search = "## \\[Unreleased\\]"
+replace = "## [Unreleased]\n\n## [{{version}}] — {{date}}"
+exactly = 1
+
+[[pre-release-replacements]]
+file = "CHANGELOG.md"
+search = "compare/v[0-9.]+\\.\\.\\.HEAD"
+replace = "compare/v{{version}}...HEAD"
+exactly = 1

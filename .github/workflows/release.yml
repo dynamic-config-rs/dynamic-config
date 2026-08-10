@@ -1,0 +1,133 @@
+name: Release
+
+# Publishing is triggered by a tag, and the tag is the only thing that decides
+# what gets published. Anything else — a branch, a manual click with a version
+# box — makes "what is on crates.io" a question rather than a fact.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # The tag and the manifest have to agree. They diverge exactly once, on
+      # the release where somebody forgot, and then the registry has a version
+      # nothing in the repository names.
+      - name: the tag matches the workspace version
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+
+          if [ "$tagged" != "$declared" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match workspace version $declared"
+            exit 1
+          fi
+
+      - name: the changelog names this version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::no section for $version"
+            exit 1
+          fi
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features
+      # The same excludes as ci.yml's test job: the container suites need
+      # Docker images pulled and a long leash, and they gate merges to main —
+      # a tag build re-proving them adds an hour, not confidence. The embedded
+      # crate has its own features and no `full`.
+      - run: >
+          cargo test --workspace --features full
+          --exclude dynamic-config-etcd
+          --exclude dynamic-config-consul
+          --exclude dynamic-config-nats
+          --exclude dynamic-config-vault
+          --exclude dynamic-config-redis
+          --exclude dynamic-config-s3
+          --exclude dynamic-config-firestore
+          --exclude dynamic-config-embedded
+      - run: cargo test -p dynamic-config-embedded --features std,async
+
+  publish:
+    name: publish to crates.io
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Three waves, in dependency order. Each crate pins the one below it
+      # exactly, so a wave cannot succeed until the previous one is on the
+      # registry — which is why this is a sequence rather than a matrix.
+      #
+      # `--no-verify` is deliberately *not* used: the verification build is the
+      # last chance to catch a package that resolves locally through a path
+      # dependency and nowhere else.
+      # The embedded crate depends on nothing in the workspace, so it rides
+      # in the first wave alongside the macros.
+      - name: macros and embedded
+        run: |
+          cargo publish -p dynamic-config-macros
+          cargo publish -p dynamic-config-embedded
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: wait for the index
+        run: sleep 45
+
+      - name: core
+        run: cargo publish -p dynamic-config
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: wait for the index
+        run: sleep 45
+
+      - name: companions
+        run: |
+          for crate in dynamic-config-etcd dynamic-config-consul \
+                       dynamic-config-nats dynamic-config-vault \
+                       dynamic-config-redis dynamic-config-s3 \
+                       dynamic-config-firestore; do
+            cargo publish -p "$crate"
+          done
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  github-release:
+    name: GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+
+          # The section for this version, up to the next one.
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/      { exit }
+            found                  { print }
+          ' CHANGELOG.md > release-notes.md
+
+          echo "--- notes ---"
+          cat release-notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md

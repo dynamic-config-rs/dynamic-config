@@ -1,0 +1,13 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "db": {
+    "host": "localhost"
+  },
+  "features": {
+    "metrics": true,
+    "tracing": false
+  }
+}

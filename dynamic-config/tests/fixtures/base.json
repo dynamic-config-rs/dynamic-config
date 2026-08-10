@@ -1,0 +1,13 @@
+{
+  "db": {
+    "host": "localhost",
+    "port": 5432,
+    "pool": {
+      "max_size": 10
+    }
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}

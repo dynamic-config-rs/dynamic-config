@@ -1,0 +1,7 @@
+error: dynamic-config: a `.age` config file needs decryption support; add features = ["age"] to your dynamic-config dependency
+ --> tests/ui-no-decrypt/encrypted.rs:6:1
+  |
+6 | #[dynamic_config(files = ["secrets.json.age"], key = "db")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `::dynamic_config::__source_encrypted` which comes from the expansion of the attribute macro `dynamic_config` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -1,0 +1,238 @@
+[package]
+name = "dynamic-config"
+description = "Hot-reloadable, lock-free application configuration with a one-attribute API, built on figment."
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/dynamic-config"
+authors.workspace = true
+categories.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[features]
+default = ["json"]
+json = ["figment/json", "dep:serde_json"]
+toml = ["figment/toml", "dep:toml"]
+yaml = ["figment/yaml", "dep:serde_yaml"]
+watch = ["dep:notify"]
+tracing = ["dep:tracing"]
+# Runtime-agnostic: no dependency at all. `Changes` is a `Future`, and blocking
+# work goes to a thread unless an executor is installed.
+async = []
+# `async`, plus tokio's blocking pool instead of a thread per load.
+tokio = ["async", "dep:tokio"]
+# Copies clap arguments into the flags layer. The only feature that pins another
+# crate's major version, which is why it is opt-in and separate.
+clap = ["dep:clap"]
+# A JSON Schema for the config files, so editors complete and validate them.
+# Raises the MSRV to 1.74, which is schemars' own floor.
+schema = ["dep:schemars", "dep:serde_json"]
+# The `Decryptor` trait and `set_decryptor`, for a scheme of your own. Pulls in
+# `zeroize`, so the decrypted text is wiped whatever the scheme is.
+decrypt = ["dep:zeroize"]
+# `Source::provider`, and figment itself re-exported. The only feature that puts
+# figment in a signature: with it off, a figment major bump is not a breaking
+# change here, and with it on you have opted into that coupling knowingly.
+figment = []
+# `.env` files, read as the environment layer rather than as documents.
+dotenv = []
+# Transparent decryption of `age`-encrypted config files.
+age = ["decrypt", "dep:age"]
+full = [
+    "json",
+    "toml",
+    "yaml",
+    "watch",
+    "async",
+    "tokio",
+    "clap",
+    "schema",
+    "age",
+    "figment",
+    "dotenv",
+    "tracing",
+]
+
+[dependencies]
+dynamic-config-macros = { workspace = true }
+arc-swap = "1.7"
+serde = "1.0.210"
+# The loader. Not optional: it is the only backend.
+figment = { version = "0.10.19", default-features = false, features = ["env"] }
+clap = { version = "4.4", optional = true, default-features = false, features = [
+    "std",
+] }
+
+# Writing configuration back out. figment reads through its own copies of these;
+# depending on them directly costs no extra compilation, only the serializers it
+# does not expose.
+serde_json = { version = "1.0.127", optional = true }
+toml = { version = "0.8", optional = true }
+serde_yaml = { version = "0.9", optional = true }
+
+schemars = { version = "1.2", optional = true, default-features = false, features = [
+    "std",
+] }
+
+age = { version = "0.12", optional = true, default-features = false, features = [
+    "armor",
+] }
+zeroize = { version = "1.8", optional = true }
+
+notify = { version = "8.0", optional = true }
+tracing = { version = "0.1.40", optional = true }
+tokio = { version = "1.47", optional = true, default-features = false, features = [
+    "rt",
+] }
+
+[dev-dependencies]
+serde = { version = "1.0.210", features = ["derive"] }
+schemars = "1.2"
+# The example encrypts a file before reading it back, which is what a
+# deployment does once with the CLI.
+age = "0.12"
+
+clap = { version = "4.4", features = ["derive"] }
+# Only for inspecting what `save` wrote.
+serde_json = "1.0.127"
+
+tempfile = "3"
+# The two web-framework examples. Dev-dependencies, so nothing a user of this
+# crate depends on.
+axum = "0.8"
+actix-web = "4.9"
+# Two runtimes that are not tokio, to keep the runtime-agnostic claim honest.
+smol = "2.0"
+embassy-executor = { version = "0.10", features = [
+    "platform-std",
+    "executor-thread",
+] }
+embassy-futures = "0.1"
+static_cell = "2.1"
+trybuild = "1.0"
+tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+# docs.rs builds for one target by default; the watcher's backend differs per
+# platform, so the others are worth having rendered.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+[[bench]]
+name = "read_path"
+harness = false
+required-features = ["json"]
+
+[[example]]
+name = "basic"
+required-features = ["json"]
+
+[[example]]
+name = "env_only"
+required-features = ["json"]
+
+[[example]]
+name = "hot_reload"
+required-features = ["watch", "toml"]
+
+[[example]]
+name = "group"
+required-features = ["json"]
+
+[[example]]
+name = "testing"
+required-features = ["json"]
+
+[[example]]
+name = "sections"
+required-features = ["json", "watch"]
+
+[[example]]
+name = "no_macro"
+required-features = ["json"]
+
+[[example]]
+name = "persistence"
+required-features = ["json"]
+
+[[example]]
+name = "units"
+required-features = ["json"]
+
+[[example]]
+name = "generic"
+required-features = ["json"]
+
+[[example]]
+name = "errors"
+required-features = ["json"]
+
+[[example]]
+name = "secrets"
+required-features = ["json"]
+
+[[example]]
+name = "validation"
+required-features = ["json"]
+
+[[example]]
+name = "layers"
+required-features = ["json"]
+
+[[example]]
+name = "discovery"
+required-features = ["json"]
+
+[[example]]
+name = "cli"
+required-features = ["clap", "json"]
+
+[[example]]
+name = "async_reload"
+required-features = ["async", "watch", "json"]
+
+[[example]]
+name = "schema"
+required-features = ["schema", "json"]
+
+[[example]]
+name = "encrypted"
+required-features = ["age", "json"]
+
+[[example]]
+name = "axum_hello"
+required-features = ["watch", "json"]
+
+[[example]]
+name = "actix_hello"
+required-features = ["watch", "json"]
+
+[[example]]
+name = "tokio_runtime"
+required-features = ["tokio", "watch", "json"]
+
+[[example]]
+name = "smol_runtime"
+required-features = ["async", "watch", "json"]
+
+[[example]]
+name = "embassy_runtime"
+required-features = ["async", "json"]
+
+[[example]]
+name = "remote"
+required-features = ["json"]
+
+[[example]]
+name = "last_known_good"
+required-features = ["json"]
