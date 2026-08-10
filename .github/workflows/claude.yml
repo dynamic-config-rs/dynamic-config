@@ -47,6 +47,12 @@ jobs:
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@6b082c41935b4c8a3b8b0ef85ba4ba4d9eeb8975 # v1
+        # The token rides in `env` as well as `with`: subscription OAuth
+        # tokens intermittently fail to reach the Claude subprocess through
+        # the input alone (anthropics/claude-code-action#1281, #676) — the
+        # run dies in seconds with `is_error: true` and no message.
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # No prompt: tag mode. The action reads the mention, the thread and
