@@ -28,9 +28,10 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
+          toolchain: stable
           components: rustfmt
       - run: cargo fmt --all -- --check
 
@@ -39,11 +40,12 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # `etcd-client` compiles its gRPC stubs at build time and needs the
       # `protoc` binary, which the runner image does not carry.
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -58,9 +60,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # The watcher is the reason this runs on three operating systems: notify
       # uses a different backend on each, and directory watching plus atomic
       # saves behave differently enough to be worth proving every time.
@@ -114,9 +118,11 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # Real servers, no mocks. A mock of etcd would only ever confirm what we
       # already believed about etcd — and three of the facts these tests pin (a
       # lazy gRPC connect, a bucket that must already exist, a first blocking
@@ -170,11 +176,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
+          toolchain: stable
           targets: thumbv7em-none-eabihf
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # A host build cannot check `no_std`: `std` is in the sysroot and links
       # itself in. Building for a target that has no `std` at all is the only
       # way to know.
@@ -194,10 +201,14 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-hack
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-hack
       # Every combination has to compile, not just the ones we happen to test.
       #
       # `--depth 2` rather than the full powerset: the full set is thousands
@@ -216,9 +227,11 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # figment's behaviour is this crate's behaviour, so its contract gets its
       # own job: an upgrade that changes merging or environment parsing shows up
       # here rather than in a user's incident.
@@ -229,9 +242,11 @@ jobs:
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # Not a regression gate — a shared runner is too noisy for that. It keeps
       # the benchmark compiling and the README's figures reproducible by
       # anyone who wants to check them.
@@ -284,12 +299,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
           toolchain: ${{ matrix.rust }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # The lockfile has to be produced by a cargo new enough to honour
       # `resolver.incompatible-rust-versions = "fallback"` from .cargo/config.toml.
       # Left to the old toolchain, resolution takes the newest release of every
@@ -312,9 +329,11 @@ jobs:
     env:
       RUSTDOCFLAGS: -D warnings --cfg docsrs
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # `etcd-client` compiles its gRPC stubs at build time and needs the
       # `protoc` binary, which the runner image does not carry.
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -327,10 +346,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # A README is the first thing anyone reads and the last thing anyone
       # tests. A dead anchor in it is a small bug that is very easy to ship.
-      - uses: lycheeverse/lychee-action@v2
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: >-
             --no-progress
@@ -348,10 +367,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # A `serde = "1.0"` that actually needs 1.0.210 compiles against a fresh
       # lockfile and breaks for the first user with an older one. This resolves
       # *our* requirements to their oldest allowed version and builds against
@@ -372,12 +395,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
+          toolchain: stable
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-llvm-cov
       # A report, not a gate: a threshold that fights refactoring teaches
       # people to game the number. The trend lives in the job summaries; the
       # lcov artifact feeds anything that wants detail.
@@ -396,7 +422,7 @@ jobs:
             cargo llvm-cov report --summary-only
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-lcov
           path: lcov.info
@@ -407,11 +433,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # The workflows are code that only runs in production. actionlint
       # catches the typo'd `if:` expression and the misspelled input before a
       # release does.
-      - uses: raven-actions/actionlint@v2
+      - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
 
   # The one status branch protection requires. Requiring every job by name
   # breaks the moment a matrix row is renamed; requiring this gate never

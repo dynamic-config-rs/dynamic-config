@@ -34,16 +34,28 @@ if [ -z "$pr" ]; then
 fi
 echo "pull request #$pr"
 
-echo "── waiting for the gates"
-# --fail-fast so a red gate stops the wait instead of running out the clock.
-if ! gh pr checks "$pr" --watch --fail-fast; then
-  echo
-  echo "a gate is red — the merge is off. See: gh pr checks $pr"
+echo "── arming auto-merge and waiting"
+# Auto-merge instead of watching checks ourselves: the same commit can carry
+# check runs from a cancelled twin (the push-run the PR-run deduplicated),
+# and only GitHub's own merge logic knows which one counts. Auto-merge fires
+# exactly when branch protection is satisfied — required gates green,
+# conversations resolved.
+gh pr merge "$pr" --rebase --auto
+
+deadline=$((SECONDS + 3600))
+while [ "$(gh pr view "$pr" --json state -q .state)" = "OPEN" ]; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "not merged within an hour — see what is holding it: gh pr view $pr"
+    echo "(a red gate, or an unresolved conversation; auto-merge stays armed)"
+    exit 1
+  fi
+  sleep 30
+done
+
+if [ "$(gh pr view "$pr" --json state -q .state)" != "MERGED" ]; then
+  echo "the pull request closed without merging — investigate: gh pr view $pr"
   exit 1
 fi
-
-echo "── merging (rebase, linear history)"
-gh pr merge "$pr" --rebase
 
 echo "── re-syncing dev onto the new main"
 # A rebase-merge gives the commits new SHAs on main, so dev is re-pointed at
