@@ -33,6 +33,10 @@ jobs:
       # is where packaging mistakes actually live.
       - run: cargo publish -p dynamic-config-macros --dry-run
 
+      # Packaging strips path dependencies and resolves them from the
+      # registry, so a crate depending on an unpublished `=0.0.1` cannot be
+      # packaged before the first release. That exact failure is recognised
+      # and skipped with a notice; anything else still fails the job.
       - name: package every crate
         run: |
           for crate in dynamic-config dynamic-config-etcd \
@@ -40,7 +44,14 @@ jobs:
                        dynamic-config-vault dynamic-config-redis \
                        dynamic-config-s3 dynamic-config-firestore \
                        dynamic-config-embedded; do
-            cargo package -p "$crate" --no-verify --allow-dirty
+            if ! output=$(cargo package -p "$crate" --no-verify --allow-dirty 2>&1); then
+              if grep -q 'no matching package named `dynamic-config' <<<"$output"; then
+                echo "::notice::$crate: skipped — its workspace dependency is not on crates.io yet (pre-first-release)"
+                continue
+              fi
+              echo "$output"
+              exit 1
+            fi
           done
 
       - name: every crate carries a readme and a licence
