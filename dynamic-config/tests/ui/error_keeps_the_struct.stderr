@@ -1,0 +1,5 @@
+error: unknown argument `wrong_argument`; expected one of: files, name, paths, key, env, watch, debounce, poll, poll_interval, profile_env, validate, diff, nest, env_files, save, schema, cache, cache_mode, async, allow_empty_env
+ --> tests/ui/error_keeps_the_struct.rs:4:71
+  |
+4 | #[dynamic_config::dynamic_config(files = ["config.json"], key = "db", wrong_argument)]
+  |                                                                       ^^^^^^^^^^^^^^

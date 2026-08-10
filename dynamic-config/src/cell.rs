@@ -7,6 +7,23 @@ use arc_swap::ArcSwap;
 /// A callback run after a reload, with the outgoing and incoming snapshots.
 type Hook<T> = Arc<dyn Fn(&Arc<T>, &Arc<T>) + Send + Sync>;
 
+/// One registered hook: the callback plus the token that identifies it for
+/// removal. Permanent hooks get a token too — it is cheaper than two list
+/// types, and nothing ever asks to remove them.
+struct Registered<T> {
+    token: u64,
+    hook: Hook<T>,
+}
+
+impl<T> Clone for Registered<T> {
+    fn clone(&self) -> Self {
+        Self {
+            token: self.token,
+            hook: Arc::clone(&self.hook),
+        }
+    }
+}
+
 /// Holds the current configuration snapshot for one type.
 ///
 /// `ConfigCell::new()` is `const`, so this lives in a `static` — which is how
@@ -35,7 +52,11 @@ pub struct ConfigCell<T> {
 
     /// Held as a snapshot rather than behind a lock, so dispatching a reload
     /// takes no lock a callback could deadlock against by storing again.
-    hooks: OnceLock<ArcSwap<Vec<Hook<T>>>>,
+    hooks: OnceLock<ArcSwap<Vec<Registered<T>>>>,
+
+    /// Hands out hook tokens. Plain counter: 2^64 registrations outlives the
+    /// process by some margin.
+    next_token: std::sync::atomic::AtomicU64,
 
     /// Generation counter and parked wakers, so async tasks can await a reload
     /// instead of polling. No runtime involved: it is an atomic and a list.
@@ -50,6 +71,7 @@ impl<T> ConfigCell<T> {
         Self {
             inner: OnceLock::new(),
             hooks: OnceLock::new(),
+            next_token: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "async")]
             notify: crate::asynchronous::Notify::new(),
         }
@@ -74,12 +96,16 @@ impl<T> ConfigCell<T> {
         // cell can still both dispatch — the loser's swap sees the winner's
         // value as "previous" — which is the same thing a reload arriving
         // moments after init would do, so callbacks must tolerate it anyway.
+        // Waiters are woken *before* the hooks run: a task awaiting
+        // `changes()` wants the new snapshot, which is already installed, and
+        // making it wait out every hook would hand one slow callback the power
+        // to delay every async reader.
+        #[cfg(feature = "async")]
+        self.notify.bump();
+
         if !Arc::ptr_eq(&previous, &value) {
             self.dispatch(&previous, &value);
         }
-
-        #[cfg(feature = "async")]
-        self.notify.bump();
     }
 
     /// Registers a callback for every later reload.
@@ -89,22 +115,70 @@ impl<T> ConfigCell<T> {
     /// thread, usually. Keep it short, and do not store again from inside one:
     /// that recurses rather than deadlocking, which is worse.
     ///
-    /// Callbacks cannot be removed. A reload hook that should stop firing
-    /// should check a flag of its own; the alternative is handing out
-    /// registration tokens nobody would remember to drop.
+    /// Callbacks registered this way cannot be removed — a hook for the life
+    /// of the process, which is what a server wants. Anything with a shorter
+    /// life — a test, a plugin, a subsystem that can be torn down — should
+    /// use [`on_reload_scoped`](Self::on_reload_scoped) and hold the guard.
+    ///
+    /// A hook that panics is caught, reported, and skipped for that reload;
+    /// the remaining hooks still run and the watcher thread survives. It is
+    /// not unregistered — a bug in a hook should be loud on every reload, not
+    /// once.
     pub fn on_reload(&self, hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static) {
-        let hook: Hook<T> = Arc::new(hook);
+        let _ = self.register(Arc::new(hook));
+    }
+
+    /// [`on_reload`](Self::on_reload), scoped: dropping the returned guard
+    /// unregisters the hook.
+    ///
+    /// For anything whose life is shorter than the process — the permanent
+    /// variant would keep a torn-down subsystem's callback firing forever.
+    #[must_use = "dropping the guard unregisters the hook; bind it for as long \
+                  as the hook should fire, or use `on_reload` for a permanent one"]
+    pub fn on_reload_scoped(
+        &'static self,
+        hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static,
+    ) -> HookGuard<T> {
+        HookGuard {
+            cell: self,
+            token: self.register(Arc::new(hook)),
+        }
+    }
+
+    fn register(&self, hook: Hook<T>) -> u64 {
+        let token = self
+            .next_token
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         self.hooks
             .get_or_init(|| ArcSwap::from_pointee(Vec::new()))
             .rcu(|current| {
                 let mut next = Vec::with_capacity(current.len() + 1);
 
-                next.extend(current.iter().map(Arc::clone));
-                next.push(Arc::clone(&hook));
+                next.extend(current.iter().cloned());
+                next.push(Registered {
+                    token,
+                    hook: Arc::clone(&hook),
+                });
 
                 next
             });
+
+        token
+    }
+
+    fn unregister(&self, token: u64) {
+        let Some(hooks) = self.hooks.get() else {
+            return;
+        };
+
+        hooks.rcu(|current| {
+            current
+                .iter()
+                .filter(|registered| registered.token != token)
+                .cloned()
+                .collect::<Vec<_>>()
+        });
     }
 
     fn dispatch(&self, previous: &Arc<T>, current: &Arc<T>) {
@@ -114,8 +188,22 @@ impl<T> ConfigCell<T> {
 
         // A snapshot of the list, so a callback that registers another one does
         // not invalidate the iteration.
-        for hook in hooks.load().iter() {
-            hook(previous, current);
+        for registered in hooks.load().iter() {
+            // Caught per hook: a panic in one must neither silence the rest
+            // nor unwind into the watcher thread and kill it — a watcher that
+            // died with a live-looking handle is the failure mode this exists
+            // to prevent. `AssertUnwindSafe` is honest here: the hook gets
+            // shared references it cannot leave half-mutated.
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                (registered.hook)(previous, current);
+            }));
+
+            if outcome.is_err() {
+                crate::log::warning!(
+                    "a reload hook panicked; it stays registered and the \
+                     remaining hooks still run"
+                );
+            }
         }
     }
 
@@ -157,6 +245,27 @@ impl<T> ConfigCell<T> {
     #[cfg(feature = "async")]
     pub(crate) fn notify(&self) -> &crate::asynchronous::Notify {
         &self.notify
+    }
+}
+
+/// Unregisters its hook when dropped. From
+/// [`on_reload_scoped`](ConfigCell::on_reload_scoped).
+pub struct HookGuard<T: 'static> {
+    cell: &'static ConfigCell<T>,
+    token: u64,
+}
+
+impl<T> Drop for HookGuard<T> {
+    fn drop(&mut self) {
+        self.cell.unregister(self.token);
+    }
+}
+
+impl<T> std::fmt::Debug for HookGuard<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HookGuard")
+            .field("token", &self.token)
+            .finish_non_exhaustive()
     }
 }
 
@@ -252,6 +361,52 @@ mod tests {
         cell.store(2u16);
 
         assert_eq!(*count.lock().unwrap(), 3);
+    }
+
+    #[test]
+    fn a_panicking_hook_silences_neither_the_rest_nor_the_next_reload() {
+        let count = Arc::new(Mutex::new(0usize));
+        let cell = ConfigCell::new();
+
+        cell.on_reload(|_, _| panic!("a bug in somebody's hook"));
+        {
+            let counter = Arc::clone(&count);
+            cell.on_reload(move |_, _| *counter.lock().unwrap() += 1);
+        }
+
+        cell.store(1u16);
+        cell.store(2u16);
+        cell.store(3u16);
+
+        assert_eq!(
+            *count.lock().unwrap(),
+            2,
+            "the hook after the panicking one must run on every reload"
+        );
+    }
+
+    #[test]
+    fn dropping_the_guard_unregisters_the_hook() {
+        let count = Arc::new(Mutex::new(0usize));
+        let cell: &'static ConfigCell<u16> = Box::leak(Box::new(ConfigCell::new()));
+
+        cell.store(1);
+
+        let guard = {
+            let counter = Arc::clone(&count);
+            cell.on_reload_scoped(move |_, _| *counter.lock().unwrap() += 1)
+        };
+
+        cell.store(2);
+        assert_eq!(*count.lock().unwrap(), 1);
+
+        drop(guard);
+        cell.store(3);
+        assert_eq!(
+            *count.lock().unwrap(),
+            1,
+            "an unregistered hook must not fire"
+        );
     }
 
     #[test]

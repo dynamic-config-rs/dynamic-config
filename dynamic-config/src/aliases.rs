@@ -82,7 +82,34 @@ impl Aliases {
             ));
         }
 
-        self.lock().insert(from.to_owned(), to.to_owned());
+        {
+            let mut entries = self.lock();
+
+            // Chains resolve — `a → b` plus `b → c` carries a value from `a`
+            // to `c`, in one deterministic pass — but a *cycle* would resolve
+            // to whichever alias happened to fire first, silently. Walk the
+            // chain the new edge would create; if it comes back around, the
+            // rename is contradictory and the caller should hear so now.
+            let mut cursor = to.to_owned();
+            let mut hops = 0usize;
+
+            while let Some(next) = entries.get(&cursor) {
+                if next == from || hops > entries.len() {
+                    return Err(Error::new(
+                        crate::ErrorKind::Type,
+                        format!(
+                            "`{from}` -> `{to}` closes an alias cycle; renames \
+                             must form a chain, not a loop"
+                        ),
+                    ));
+                }
+
+                cursor = next.clone();
+                hops += 1;
+            }
+
+            entries.insert(from.to_owned(), to.to_owned());
+        }
 
         Ok(())
     }

@@ -72,7 +72,7 @@ clap = { version = "4.4", optional = true, default-features = false, features = 
 # depending on them directly costs no extra compilation, only the serializers it
 # does not expose.
 serde_json = { version = "1.0.127", optional = true }
-toml = { version = "0.8", optional = true }
+toml = { version = "0.9", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 
 schemars = { version = "1.2", optional = true, default-features = false, features = [
@@ -102,6 +102,10 @@ clap = { version = "4.4", features = ["derive"] }
 serde_json = "1.0.127"
 
 tempfile = "3"
+# Property tests: stable-toolchain fuzzing for the parsing surfaces. A
+# dev-dependency, so it never touches the MSRV story — the floor jobs are
+# `cargo check` without tests.
+proptest = "1"
 # The two web-framework examples. Dev-dependencies, so nothing a user of this
 # crate depends on.
 axum = "0.8"

@@ -113,9 +113,20 @@ impl Age {
             }
         }
 
-        if let Ok(key) = std::env::var(AGE_KEY) {
+        if let Ok(mut key) = std::env::var(AGE_KEY) {
             if !key.is_empty() {
-                return Self::from_key(&key);
+                let parsed = Self::from_key(&key);
+
+                // The copy of the secret key this function made is wiped
+                // before it is dropped; the identity `from_key` built keeps
+                // its own protected copy.
+                {
+                    use zeroize::Zeroize;
+
+                    key.zeroize();
+                }
+
+                return parsed;
             }
         }
 
@@ -187,9 +198,17 @@ impl Decryptor for Age {
 
         let mut bytes = Vec::new();
 
-        plaintext
-            .read_to_end(&mut bytes)
-            .map_err(|error| Error::decrypt(format!("the payload is damaged: {error}")))?;
+        if let Err(error) = plaintext.read_to_end(&mut bytes) {
+            // A failure halfway leaves however much *did* decrypt sitting in
+            // the buffer — plaintext secrets, wiped before the buffer drops.
+            {
+                use zeroize::Zeroize;
+
+                bytes.zeroize();
+            }
+
+            return Err(Error::decrypt(format!("the payload is damaged: {error}")));
+        }
 
         Ok(bytes)
     }

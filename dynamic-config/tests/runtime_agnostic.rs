@@ -111,3 +111,54 @@ fn a_panic_in_the_work_wakes_the_waiter_instead_of_hanging_it() {
 
     assert!(error.to_string().contains("did not finish"), "{error}");
 }
+
+#[test]
+fn a_blocking_remote_source_does_not_run_on_the_executor_thread() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // A blocking source that records which thread ran its fetch.
+    struct Recorder(std::sync::Arc<AtomicU64>);
+
+    impl dynamic_config::RemoteSource for Recorder {
+        fn fetch(&self) -> Result<dynamic_config::Fetched, dynamic_config::Error> {
+            // Thread ids have no stable integer form; hash the Debug render.
+            let id = format!("{:?}", std::thread::current().id());
+            self.0.store(fingerprint(&id), Ordering::SeqCst);
+
+            Ok(dynamic_config::Fetched::new(
+                r#"{"db": {}}"#,
+                dynamic_config::Format::Json,
+            ))
+        }
+
+        fn describe(&self) -> String {
+            "a thread recorder".to_owned()
+        }
+    }
+
+    fn fingerprint(text: &str) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    let ran_on = std::sync::Arc::new(AtomicU64::new(0));
+
+    let remote = dynamic_config::Remote::new();
+    remote.set(Recorder(std::sync::Arc::clone(&ran_on)));
+
+    // `block_on` drives the future on THIS thread — the stand-in for an
+    // executor worker. The blocking fetch must have run somewhere else.
+    block_on(remote.refresh_async()).expect("the fetch succeeds");
+
+    let executor = fingerprint(&format!("{:?}", std::thread::current().id()));
+
+    assert_ne!(
+        ran_on.load(Ordering::SeqCst),
+        executor,
+        "a blocking source inside refresh_async must go through off_thread, \
+         not stall the executor's worker"
+    );
+    assert!(remote.document().is_some());
+}

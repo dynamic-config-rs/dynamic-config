@@ -125,6 +125,15 @@ impl Snapshot {
         })
     }
 
+    /// This snapshot minus one top-level key — how the cache strips its own
+    /// marker before the values are handed back as configuration.
+    pub(crate) fn without_top_level(&self, key: &str) -> Self {
+        let mut values = self.values().clone();
+        values.remove(key);
+
+        Self::new(values)
+    }
+
     /// Whether anything supplies `path`.
     #[must_use]
     pub fn contains(&self, path: &str) -> bool {
@@ -417,5 +426,41 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.path(), "port");
+    }
+
+    mod properties {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// A diff never panics and never reports a value, whatever the
+            /// two trees hold — the security property, fuzzed.
+            #[test]
+            fn diff_reports_paths_never_values(
+                a in prop::collection::btree_map("[a-z]{1,8}", "[a-zA-Z0-9]{4,16}", 0..8),
+                b in prop::collection::btree_map("[a-z]{1,8}", "[a-zA-Z0-9]{4,16}", 0..8),
+            ) {
+                let left = Snapshot::new(
+                    a.iter().map(|(k, v)| (k.clone(), Value::from(v.clone()))).collect(),
+                );
+                let right = Snapshot::new(
+                    b.iter().map(|(k, v)| (k.clone(), Value::from(v.clone()))).collect(),
+                );
+
+                for change in left.diff(&right) {
+                    let rendered = change.to_string();
+
+                    for value in a.values().chain(b.values()) {
+                        prop_assert!(
+                            !rendered.contains(value.as_str()),
+                            "a diff must name paths, never values: {}",
+                            rendered
+                        );
+                    }
+                }
+            }
+        }
     }
 }

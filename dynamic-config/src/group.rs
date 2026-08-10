@@ -66,6 +66,8 @@ pub trait Reloadable: 'static {
 #[derive(Default)]
 pub struct ReloadGroup {
     members: Vec<Member>,
+    /// Serializes [`reload`](Self::reload); see there.
+    reloading: std::sync::Mutex<()>,
 }
 
 struct Member {
@@ -79,6 +81,7 @@ impl ReloadGroup {
     pub const fn new() -> Self {
         Self {
             members: Vec::new(),
+            reloading: std::sync::Mutex::new(()),
         }
     }
 
@@ -115,6 +118,16 @@ impl ReloadGroup {
     /// been installed when this returns an error — not even the members that
     /// loaded cleanly.
     pub fn reload(&self) -> Result<(), Error> {
+        // Serialized: two concurrent reloads — the admin endpoint and the
+        // file watcher, say — could otherwise interleave their commit loops
+        // and leave member A on one thread's prepare and member B on the
+        // other's, which is the exact mixed state this type exists to
+        // prevent.
+        let _guard = self
+            .reloading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
         let mut commits = Vec::with_capacity(self.members.len());
 
         for member in &self.members {
@@ -126,7 +139,20 @@ impl ReloadGroup {
         }
 
         for commit in commits {
-            commit();
+            // Caught per commit: a commit ends in `store`, which runs reload
+            // hooks, and a panicking hook must not stop the *other members'*
+            // snapshots from installing — a half-committed group is the
+            // failure this type promises against. (The hook itself is also
+            // caught in `dispatch`; this is the second belt for anything
+            // that unwinds out of a commit some other way.)
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(commit));
+
+            if outcome.is_err() {
+                crate::log::warning!(
+                    "a commit's reload hook panicked; the remaining members \
+                     were still committed"
+                );
+            }
         }
 
         Ok(())

@@ -120,3 +120,63 @@ fn a_path_that_names_nothing_is_refused() {
         "an alias to itself resolves to nothing new"
     );
 }
+
+/// The inversion this pins: a runtime default supplying the new path used to
+/// stop the alias from firing, so `set_default` beat a real file's value —
+/// the exact thing the precedence table forbids.
+#[test]
+fn a_runtime_default_does_not_defeat_an_alias() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(files = ["tests/fixtures/alias-defaults.json"], key = "db")]
+    #[derive(Debug, Deserialize)]
+    struct Defaulted {
+        max_size: u16,
+    }
+
+    // The file still spells it `size`; the alias carries it to `max_size`.
+    Defaulted::alias("size", "max_size").unwrap();
+    // A fallback for machines with nothing at all — it must stay a fallback.
+    Defaulted::set_default("max_size", 8u16).unwrap();
+
+    let loaded = Defaulted::load();
+
+    Defaulted::clear_aliases();
+    Defaulted::clear_defaults();
+
+    assert_eq!(
+        loaded.expect("the alias fills the gap").max_size,
+        64,
+        "the file's value through the alias must beat the runtime default"
+    );
+}
+
+/// Chains resolve deterministically; cycles are refused at `add` time.
+#[test]
+fn chains_resolve_and_cycles_are_refused() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(files = ["tests/fixtures/alias-chain.json"], key = "db")]
+    #[derive(Debug, Deserialize)]
+    struct Chained {
+        renamed_twice: u16,
+    }
+
+    // size → mid → renamed_twice: two renames, one migration.
+    Chained::alias("size", "mid").unwrap();
+    Chained::alias("mid", "renamed_twice").unwrap();
+
+    let loaded = Chained::load();
+    Chained::clear_aliases();
+
+    assert_eq!(
+        loaded.expect("the chain carries the value").renamed_twice,
+        64
+    );
+
+    // A loop is a contradictory rename, refused loudly.
+    Chained::alias("a", "b").unwrap();
+    let error = Chained::alias("b", "a").expect_err("a cycle must be refused");
+    assert!(error.to_string().contains("cycle"), "{error}");
+    Chained::clear_aliases();
+}

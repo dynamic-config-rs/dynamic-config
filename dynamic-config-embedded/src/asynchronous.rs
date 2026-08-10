@@ -17,22 +17,21 @@ use core::task::{Context, Poll, Waker};
 
 use critical_section::Mutex;
 
-/// How many tasks can await one configuration at a time.
-pub const WAITERS: usize = 4;
+use crate::DEFAULT_WAITERS;
 
 /// A generation counter and the tasks waiting on it.
 #[derive(Debug)]
-pub(crate) struct Notify {
-    inner: Mutex<RefCell<State>>,
+pub(crate) struct Notify<const WAITERS: usize> {
+    inner: Mutex<RefCell<State<WAITERS>>>,
 }
 
 #[derive(Debug)]
-struct State {
+struct State<const WAITERS: usize> {
     generation: u32,
     waiting: [Option<Waker>; WAITERS],
 }
 
-impl Notify {
+impl<const WAITERS: usize> Notify<WAITERS> {
     pub(crate) const fn new() -> Self {
         Self {
             inner: Mutex::new(RefCell::new(State {
@@ -59,7 +58,10 @@ impl Notify {
             // times, against a permanent hang for everyone. Not close.
             state.generation = state.generation.wrapping_add(1);
 
-            core::mem::take(&mut state.waiting)
+            // `mem::replace`, not `mem::take`: `Default` for arrays is only
+            // implemented up to fixed lengths, and a const-generic length is
+            // not among them. The replacement is the same all-`None` array.
+            core::mem::replace(&mut state.waiting, [const { None }; WAITERS])
         });
 
         // Woken outside the section: a waker may poll immediately, on this
@@ -85,10 +87,18 @@ impl Notify {
                 }
             }
 
-            // Full. The oldest is *woken*, not dropped: a dropped waker is a
-            // task nobody will ever poll again, and that is a hang. Woken, it
-            // polls, sees no change, and re-registers — a spurious wake costs
-            // one poll.
+            // Full. The occupant of slot 0 — not necessarily the oldest,
+            // since `bump` empties every slot and refills happen in scan
+            // order — is *woken*, not dropped: a dropped waker is a task
+            // nobody will ever poll again, and that is a hang. Woken, it
+            // polls, sees no change, and re-registers.
+            //
+            // With a *steady state* of more waiters than slots, that
+            // re-registration evicts somebody else and the churn never
+            // settles: the executor stays busy waking and re-parking, and a
+            // battery device never reaches its idle loop. That is why the
+            // slot count is a type parameter — size it to the real number of
+            // waiting tasks. A true no-alloc wait queue is on the roadmap.
             state.waiting[0].replace(waker.clone())
         });
 
@@ -108,13 +118,13 @@ impl Notify {
 ///
 /// The configuration current when this was created counts as already seen, so
 /// the first [`changed`](Self::changed) waits for the *next* one.
-pub struct Changes<T: Clone + 'static> {
-    cell: &'static crate::ConfigCell<T>,
+pub struct Changes<T: Clone + 'static, const WAITERS: usize = DEFAULT_WAITERS> {
+    cell: &'static crate::ConfigCell<T, WAITERS>,
     seen: u32,
 }
 
-impl<T: Clone + 'static> Changes<T> {
-    pub(crate) fn new(cell: &'static crate::ConfigCell<T>) -> Self {
+impl<T: Clone + 'static, const WAITERS: usize> Changes<T, WAITERS> {
+    pub(crate) fn new(cell: &'static crate::ConfigCell<T, WAITERS>) -> Self {
         Self {
             seen: cell.notify().generation(),
             cell,
@@ -138,7 +148,7 @@ impl<T: Clone + 'static> Changes<T> {
     }
 }
 
-impl<T: Clone + 'static> core::fmt::Debug for Changes<T> {
+impl<T: Clone + 'static, const WAITERS: usize> core::fmt::Debug for Changes<T, WAITERS> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Changes")
             .field("seen", &self.seen)
@@ -146,11 +156,11 @@ impl<T: Clone + 'static> core::fmt::Debug for Changes<T> {
     }
 }
 
-struct Changed<'a, T: Clone + 'static> {
-    changes: &'a mut Changes<T>,
+struct Changed<'a, T: Clone + 'static, const WAITERS: usize> {
+    changes: &'a mut Changes<T, WAITERS>,
 }
 
-impl<T: Clone + 'static> Future for Changed<'_, T> {
+impl<T: Clone + 'static, const WAITERS: usize> Future for Changed<'_, T, WAITERS> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<T> {
@@ -171,7 +181,7 @@ impl<T: Clone + 'static> Future for Changed<'_, T> {
     }
 }
 
-fn take<T: Clone + 'static>(changes: &mut Changes<T>) -> Option<T> {
+fn take<T: Clone + 'static, const WAITERS: usize>(changes: &mut Changes<T, WAITERS>) -> Option<T> {
     let current = changes.cell.notify().generation();
 
     if current == changes.seen {

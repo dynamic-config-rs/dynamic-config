@@ -99,12 +99,13 @@ jobs:
           comment-summary-in-pr: on-failure
 
   # The one status branch protection requires from this workflow — same
-  # reasoning as CI's gate. `supply-chain` is deliberately absent from the
-  # needs: it only exists on pull requests, and a gate that needs a job that
-  # never ran would hang a plain push forever.
+  # reasoning as CI's gate. `supply-chain` IS in the needs even though it only
+  # exists on pull requests: the gate's own check tolerates `skipped`, so a
+  # plain push passes, while a PR with a failing dependency review is blocked
+  # — which is the whole point of running it.
   security-ok:
     name: Security is green
-    needs: [deny, unsafe, secrets-in-diagnostics]
+    needs: [deny, unsafe, secrets-in-diagnostics, supply-chain]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

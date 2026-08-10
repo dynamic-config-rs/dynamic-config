@@ -176,3 +176,189 @@ fn a_first_start_with_no_cache_still_fails_on_a_broken_file() {
         "and there is no cache to fall back on"
     );
 }
+
+/// Recovery must keep `build()`'s precedence: the real environment above the
+/// `.env` file. The inversion this pins had the repository's `.env` beating
+/// the variable a human exported to steer the recovery.
+#[cfg(feature = "dotenv")]
+#[test]
+fn recovery_keeps_the_environment_above_env_files() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/scratch/cache-envorder.json"],
+        key = "db",
+        env = "DCCACHEENV_",
+        env_files = ["tests/scratch/cache-envorder.env"],
+        cache = "tests/scratch/cache-envorder-cache.json",
+    )]
+    #[derive(Debug, Deserialize)]
+    struct Ordered {
+        host: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-envorder.json",
+        r#"{"db": {"host": "from-the-file"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        "tests/scratch/cache-envorder.env",
+        "DCCACHEENV_DB_HOST=from-dotenv\n",
+    )
+    .unwrap();
+
+    // A clean start writes the cache.
+    Ordered::init().expect("the first load succeeds");
+
+    // The file breaks; the exported variable is the human's override.
+    std::fs::write("tests/scratch/cache-envorder.json", "{ not json").unwrap();
+    std::env::set_var("DCCACHEENV_DB_HOST", "from-the-real-environment");
+
+    // `init()` walks the recovery path when the sources fail.
+    let initialized = Ordered::init();
+
+    std::env::remove_var("DCCACHEENV_DB_HOST");
+    initialized.expect("the cache recovers");
+
+    // The real environment wins over the .env file during recovery, exactly
+    // as it does during a normal load.
+    assert_eq!(Ordered::current().host, "from-the-real-environment");
+}
+
+/// Recovery goes through `validate` like every other path: a cache holding a
+/// configuration the type would reject must not be installed just because
+/// the sources are broken — stale AND invalid is the worst of both.
+#[test]
+fn recovery_respects_validate() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/scratch/cache-validated.json"],
+        key = "db",
+        cache = "tests/scratch/cache-validated-cache.json",
+        validate,
+    )]
+    #[derive(Debug, Deserialize)]
+    struct Validated {
+        connections: u16,
+    }
+
+    impl Validated {
+        fn validate(&self) -> Result<(), String> {
+            if self.connections == 0 {
+                return Err("connections of zero would serve nobody".to_owned());
+            }
+
+            Ok(())
+        }
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+
+    // A configuration that passes validation, cached on a clean start.
+    std::fs::write(
+        "tests/scratch/cache-validated.json",
+        r#"{"db": {"connections": 4}}"#,
+    )
+    .unwrap();
+    Validated::init().expect("the clean start succeeds");
+
+    // The cache is then tampered into something the type rejects, and the
+    // source breaks — the recovery must NOT install the invalid cache.
+    std::fs::write(
+        "tests/scratch/cache-validated-cache.json",
+        r#"{"cached": {"connections": 0}}"#,
+    )
+    .unwrap();
+    std::fs::write("tests/scratch/cache-validated.json", "{ not json").unwrap();
+
+    let error = Validated::init().expect_err("an invalid cache must not be installed");
+
+    assert!(
+        error.to_string().contains("serve nobody"),
+        "the validation error names the rule: {error}"
+    );
+}
+
+/// A renamed secret is redacted under its *serde* name — redacting by the
+/// Rust ident used to write a "redacted" cache containing the secret in the
+/// clear under its renamed key.
+#[test]
+fn a_renamed_secret_stays_out_of_the_redacted_cache() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/scratch/cache-renamed.json"],
+        key = "db",
+        cache = "tests/scratch/cache-renamed-cache.json",
+        cache_mode = "redacted",
+    )]
+    #[derive(Deserialize)]
+    struct Renamed {
+        #[allow(dead_code)]
+        host: String,
+        #[serde(rename = "pass")]
+        #[config(secret)]
+        #[allow(dead_code)]
+        password: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-renamed.json",
+        r#"{"db": {"host": "localhost", "pass": "hunter2-renamed"}}"#,
+    )
+    .unwrap();
+
+    Renamed::init().expect("the load succeeds");
+
+    let written = std::fs::read_to_string("tests/scratch/cache-renamed-cache.json")
+        .expect("the cache was written");
+
+    assert!(
+        !written.contains("hunter2-renamed"),
+        "the redacted cache must not contain the renamed secret: {written}"
+    );
+    assert!(written.contains("localhost"), "{written}");
+}
+
+/// `rename_all` on the container is honoured too.
+#[test]
+fn a_rename_all_secret_stays_out_of_the_redacted_cache() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/scratch/cache-renameall.json"],
+        key = "db",
+        cache = "tests/scratch/cache-renameall-cache.json",
+        cache_mode = "redacted",
+    )]
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CamelCased {
+        #[allow(dead_code)]
+        host_name: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        api_token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-renameall.json",
+        r#"{"db": {"hostName": "localhost", "apiToken": "hunter2-camel"}}"#,
+    )
+    .unwrap();
+
+    CamelCased::init().expect("the load succeeds");
+
+    let written = std::fs::read_to_string("tests/scratch/cache-renameall-cache.json")
+        .expect("the cache was written");
+
+    assert!(
+        !written.contains("hunter2-camel"),
+        "the redacted cache must not contain the camelCased secret: {written}"
+    );
+}

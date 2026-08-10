@@ -171,3 +171,59 @@ fn a_pushed_document_lands_in_one_instantiation_only() {
         "one instantiation's remote store must not reach another's"
     );
 }
+
+// Its own type and its own scratch files: watch tests share nothing.
+#[cfg(feature = "watch")]
+#[dynamic_config(
+    files = ["tests/scratch/generic-watch.json"],
+    key = "db",
+    watch,
+    debounce = 50,
+    poll_interval = 100
+)]
+#[derive(Debug, serde::Deserialize)]
+struct PerInstance<T> {
+    #[allow(dead_code)]
+    value: u32,
+    #[serde(skip)]
+    #[allow(dead_code)]
+    marker: std::marker::PhantomData<T>,
+}
+
+#[cfg(feature = "watch")]
+struct Alpha;
+#[cfg(feature = "watch")]
+struct Beta;
+
+/// The bug this pins: watchers used to be keyed by the bare type *name*, so
+/// `PerInstance<Alpha>` and `PerInstance<Beta>` collided on "PerInstance" —
+/// the second `start_watch()` silently watched nothing. Keyed by `TypeId`,
+/// each instantiation gets its own watcher, and a true duplicate is a loud
+/// error instead of an inert handle.
+#[cfg(feature = "watch")]
+#[test]
+fn each_instantiation_gets_its_own_watcher() {
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/generic-watch.json",
+        r#"{"db": {"value": 1}}"#,
+    )
+    .unwrap();
+
+    let alpha = PerInstance::<Alpha>::start_watch().expect("the first instantiation watches");
+    let beta = PerInstance::<Beta>::start_watch()
+        .expect("a different instantiation is a different watcher, not a duplicate");
+
+    // A genuine duplicate is refused loudly.
+    let error =
+        PerInstance::<Alpha>::start_watch().expect_err("the same instantiation twice is an error");
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+
+    drop(alpha);
+    drop(beta);
+
+    // And once dropped, both restart cleanly.
+    PerInstance::<Alpha>::start_watch()
+        .expect("after the drop, watching can restart")
+        .stop();
+}

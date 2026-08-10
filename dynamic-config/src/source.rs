@@ -504,6 +504,11 @@ impl<'a> LoadSpec<'a> {
         self
     }
 
+    /// The environment variable that names the profile, if configured.
+    pub(crate) fn profile_variable(&self) -> Option<&'a str> {
+        self.profile_env
+    }
+
     /// The active profile, if one is named and set to something.
     pub(crate) fn profile(&self) -> Option<String> {
         self.profile_env

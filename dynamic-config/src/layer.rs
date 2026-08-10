@@ -90,6 +90,41 @@ impl Layer {
         Ok(())
     }
 
+    /// Sets every top-level field of a serializable value at once.
+    ///
+    /// The typed way to seed the defaults layer: instead of one
+    /// `set_default(path, value)` per field, hand over a whole struct —
+    /// usually `&Config::default()` — and every field lands in the layer in
+    /// one step, in the same shape the configuration itself has.
+    ///
+    /// # Errors
+    ///
+    /// If `value` does not serialize, or serializes to something other than
+    /// a map — defaults have named fields by definition.
+    pub fn set_struct<T: serde::Serialize>(&self, value: &T) -> Result<(), Error> {
+        let serialized = Value::serialize(value).map_err(|error| {
+            Error::new(
+                crate::ErrorKind::Type,
+                format!("the defaults struct did not serialize: {error}"),
+            )
+        })?;
+
+        let Value::Dict(_, entries) = serialized else {
+            return Err(Error::new(
+                crate::ErrorKind::Type,
+                "defaults must be a struct or a map; a bare value has no field name to live under",
+            ));
+        };
+
+        let mut layer = self.lock();
+
+        for (path, value) in entries {
+            layer.insert(path, value);
+        }
+
+        Ok(())
+    }
+
     /// Sets `path` from text, read the way an environment variable is.
     ///
     /// `"8080"` becomes a number, `"true"` a boolean, `"[a, b]"` a list — the
@@ -215,7 +250,8 @@ impl Layer {
     }
 
     /// Removes `path`, reporting whether anything was there.
-    ///
+    #[must_use = "the return says whether anything was removed; ignore it \
+                  deliberately with `let _ =` if you do not care"]
     pub fn unset(&self, path: &str) -> bool {
         self.lock().remove(path).is_some()
     }
@@ -228,6 +264,7 @@ impl Layer {
 
     /// Whether the layer would contribute anything.
     ///
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.lock().is_empty()
     }
@@ -327,6 +364,20 @@ pub(crate) struct LayerProvider<'a> {
     layer: &'a Layer,
     profile: Profile,
     name: &'static str,
+}
+
+// Key names and a count, never the values: an override layer is exactly
+// where a secret set at runtime lives, and `{:?}` reaching a log is an
+// ordinary accident.
+impl std::fmt::Debug for Layer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let entries = self.lock();
+
+        f.debug_struct("Layer")
+            .field("keys", &entries.keys().collect::<Vec<_>>())
+            .field("len", &entries.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Provider for LayerProvider<'_> {

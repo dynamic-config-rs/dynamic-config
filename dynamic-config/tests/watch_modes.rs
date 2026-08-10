@@ -144,3 +144,78 @@ fn a_configmap_symlink_swap_is_seen_as_a_change() {
         "watching the directory should surface a ConfigMap update"
     );
 }
+
+/// A chatty neighbour in the config directory must not starve the reload:
+/// irrelevant events used to extend the debounce window indefinitely.
+#[dynamic_config(
+    files = ["tests/scratch/storm/config.json"],
+    key = "app",
+    watch,
+    debounce = 200,
+    poll_interval = 100
+)]
+#[derive(Debug, Deserialize)]
+struct Stormed {
+    value: u32,
+}
+
+#[test]
+fn a_storm_of_unrelated_events_does_not_starve_the_reload() {
+    let root = Path::new("tests/scratch/storm");
+    fs::create_dir_all(root).unwrap();
+    fs::write(root.join("config.json"), r#"{"app": {"value": 1}}"#).unwrap();
+
+    Stormed::init().expect("the initial load succeeds");
+    let _watch = Stormed::start_watch().expect("the watcher starts");
+
+    // A neighbour that never shuts up: an unrelated file rewritten every
+    // 50ms — well inside the 200ms debounce window, forever.
+    let storming = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let storm = {
+        let storming = std::sync::Arc::clone(&storming);
+        let noise = root.join("neighbour.log");
+        std::thread::spawn(move || {
+            let mut i = 0u64;
+            while storming.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = fs::write(&noise, i.to_le_bytes());
+                i += 1;
+                thread::sleep(Duration::from_millis(50));
+            }
+        })
+    };
+
+    // Edit the config repeatedly rather than once: under a loaded test host
+    // the poll backend's first baseline scan can land *after* a single early
+    // edit, absorbing it. Repeated edits also make the property stronger —
+    // the old code starved even a stream of real edits, because the
+    // unfiltered storm kept the quiet-period from ever elapsing.
+    //
+    // Old behaviour: timeout. New behaviour: irrelevant events do not extend
+    // the window at all, and even relevant churn is bounded by max_wait
+    // (4 × debounce). The deadline is deliberately generous — this is a
+    // correctness test, not a latency benchmark.
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    let mut reloaded = false;
+    let mut edit = 2u32;
+
+    while std::time::Instant::now() < deadline {
+        fs::write(
+            root.join("config.json"),
+            format!(r#"{{"app": {{"value": {edit}}}}}"#),
+        )
+        .unwrap();
+        edit += 1;
+
+        thread::sleep(Duration::from_millis(500));
+
+        if Stormed::current().value >= 2 {
+            reloaded = true;
+            break;
+        }
+    }
+
+    storming.store(false, std::sync::atomic::Ordering::Relaxed);
+    let _ = storm.join();
+
+    assert!(reloaded, "the reload starved behind unrelated events");
+}

@@ -173,3 +173,83 @@ fn a_written_file_is_private_from_the_moment_it_exists() {
 
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[test]
+fn a_fetched_remote_document_never_prints_its_contents() {
+    // A remote store's flagship use case is serving secrets; `Fetched` is
+    // what every watch callback receives, one `debug!(?document)` from a log.
+    let document = dynamic_config::Fetched::new(
+        r#"{"db": {"password": "hunter2"}}"#,
+        dynamic_config::Format::Json,
+    );
+
+    let printed = format!("{document:?}");
+
+    assert!(!printed.contains("hunter2"), "{printed}");
+    assert!(printed.contains("bytes"), "{printed}");
+}
+
+/// `APP_ENV=../../evil` must be refused, not interpolated into a file name:
+/// a profile is a word, and anything with a path separator or a parent
+/// reference walks the loader to a file somebody else chose.
+#[test]
+fn a_profile_that_looks_like_a_path_is_refused() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/fixtures/base.json"],
+        key = "db",
+        profile_env = "DCSEC_PROFILE_TRAVERSAL",
+    )]
+    #[derive(Debug, Deserialize)]
+    struct Profiled {
+        #[allow(dead_code)]
+        host: String,
+    }
+
+    for hostile in ["../secrets", "a/b", "a\\b", ".."] {
+        std::env::set_var("DCSEC_PROFILE_TRAVERSAL", hostile);
+
+        let error = Profiled::load().expect_err("a path-shaped profile must be refused");
+
+        assert_eq!(error.kind(), dynamic_config::ErrorKind::Env, "{hostile}");
+        assert!(
+            error.to_string().contains("DCSEC_PROFILE_TRAVERSAL"),
+            "{error}"
+        );
+    }
+
+    std::env::remove_var("DCSEC_PROFILE_TRAVERSAL");
+}
+
+/// A non-UTF-8 environment variable anywhere in the process must not panic
+/// `load()` — it runs on every reload, including the watcher thread.
+#[cfg(unix)]
+#[test]
+fn a_foreign_non_utf8_variable_does_not_panic_the_load() {
+    use serde::Deserialize;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/fixtures/base.json"],
+        key = "db",
+        env = "DCSECUTF_",
+    )]
+    #[derive(Debug, Deserialize)]
+    struct EnvironmentUser {
+        #[allow(dead_code)]
+        host: String,
+    }
+
+    // A variable this config never asked about, with bytes that are not
+    // UTF-8 — the shape a hostile or merely odd parent process leaves behind.
+    std::env::set_var(
+        "DCSEC_UNRELATED_GARBAGE",
+        std::ffi::OsStr::from_bytes(&[0x66, 0xff, 0x66]),
+    );
+
+    let loaded = EnvironmentUser::load();
+
+    std::env::remove_var("DCSEC_UNRELATED_GARBAGE");
+    loaded.expect("a foreign variable must not break the load");
+}

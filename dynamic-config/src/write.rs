@@ -179,13 +179,22 @@ pub fn save_encrypted<T: Serialize>(
     encryptor: &dyn crate::Encryptor,
 ) -> Result<(), Error> {
     let path = path.as_ref();
-    let rendered = render(&document_of(value, key)?, format)?;
+    let mut rendered = render(&document_of(value, key)?, format)?;
 
-    let ciphertext = encryptor
+    let encrypted = encryptor
         .encrypt(rendered.as_bytes())
-        .map_err(|error| error.prepend_key(encryptor.describe()))?;
+        .map_err(|error| error.prepend_key(encryptor.describe()));
 
-    write_bytes_atomically(path, &ciphertext)
+    // The rendered plaintext is the whole point of encrypting: it does not
+    // get to linger in freed memory on either the success or the failure
+    // path. The same courtesy the read side's `Plaintext` extends.
+    {
+        use zeroize::Zeroize;
+
+        rendered.zeroize();
+    }
+
+    write_bytes_atomically(path, &encrypted?)
 }
 
 /// The serialized value, nested under its section key.
@@ -235,7 +244,21 @@ fn write_bytes_atomically(path: &Path, contents: &[u8]) -> Result<(), Error> {
         let _ = fs::remove_file(&temporary);
 
         io(error)
-    })
+    })?;
+
+    // The rename itself lives in the directory, and a crash can lose an
+    // un-synced directory entry even though the file's bytes are safe.
+    // Best-effort: a filesystem that refuses (or a platform without the
+    // notion) still got the atomic rename, which is the part correctness
+    // rests on — durability of the *entry* is defence in depth.
+    #[cfg(unix)]
+    if let Some(directory) = directory {
+        if let Ok(handle) = fs::File::open(directory) {
+            let _ = handle.sync_all();
+        }
+    }
+
+    Ok(())
 }
 
 /// Creates the temporary file and writes `contents` into it.
@@ -280,9 +303,18 @@ fn create_and_fill_bytes(path: &Path, contents: &[u8]) -> std::io::Result<()> {
 
     let written = file
         .write_all(contents)
-        // Flushed explicitly rather than at drop, where the error would be
-        // discarded and a truncated file renamed into place as though whole.
-        .and_then(|()| file.flush());
+        // `sync_all`, not `flush`: on `std::fs::File`, `flush` is a no-op —
+        // there is no userspace buffer — and the old comment here claimed
+        // durability it never had. `sync_all` is the actual promise: the
+        // bytes reach the disk before the rename makes them the
+        // configuration, so a power loss after the rename cannot leave a
+        // zero-length or half-written file wearing the real file's name.
+        // Config-sized writes make the cost a rounding error, and the
+        // last-known-good cache exists precisely for the machine that just
+        // lost power. Applied to every atomic write — user `save()`
+        // included — deliberately: a split durable/non-durable path is more
+        // API than the difference is worth.
+        .and_then(|()| file.sync_all());
 
     if written.is_err() {
         drop(file);

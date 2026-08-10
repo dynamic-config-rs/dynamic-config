@@ -53,9 +53,10 @@ fn the_watcher_reloads_on_edit_and_survives_a_broken_file() {
 
     let watch = AppConfig::start_watch().expect("the watcher thread should spawn");
 
-    // A duplicate hands back a handle that owns nothing; dropping it must not
-    // take down the watcher that is actually running.
-    drop(AppConfig::start_watch().expect("a second call must be a no-op, not an error"));
+    // A duplicate is refused loudly — and the refusal must not take down
+    // the watcher that is actually running.
+    let error = AppConfig::start_watch().expect_err("a second watcher is an error");
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
 
     write(r#"{"app": {"value": 2}}"#);
     assert!(settles_on(2), "an edit should reach the snapshot");

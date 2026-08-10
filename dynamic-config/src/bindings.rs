@@ -93,6 +93,7 @@ impl EnvBindings {
     }
 
     /// Whether anything is bound.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.lock().is_empty()
     }
@@ -109,13 +110,14 @@ impl EnvBindings {
     /// figment attaches metadata per provider, not per key, so naming the
     /// variable means one provider each. There are as many as the program made
     /// bindings — a handful — and they are built once per load.
-    pub(crate) fn providers(&self, key: &str) -> Vec<BindingProvider> {
+    pub(crate) fn providers(&self, key: &str, allow_empty: bool) -> Vec<BindingProvider> {
         self.lock()
             .iter()
             .map(|(path, variable)| BindingProvider {
                 path: path.clone(),
                 variable: variable.clone(),
                 key: key.to_owned(),
+                allow_empty,
             })
             .collect()
     }
@@ -138,6 +140,7 @@ pub(crate) struct BindingProvider {
     path: String,
     variable: String,
     key: String,
+    allow_empty: bool,
 }
 
 impl Provider for BindingProvider {
@@ -148,7 +151,7 @@ impl Provider for BindingProvider {
     fn data(&self) -> figment::Result<figment::value::Map<Profile, Dict>> {
         let mut values = Dict::new();
 
-        if let Some(value) = resolve(&self.variable) {
+        if let Some(value) = resolve(&self.variable, self.allow_empty) {
             crate::layer::insert_path(&mut values, &self.path, value);
         }
 
@@ -160,15 +163,15 @@ impl Provider for BindingProvider {
 }
 
 /// Reads one variable, or `None` if it does not usefully exist.
-fn resolve(variable: &str) -> Option<Value> {
+fn resolve(variable: &str, allow_empty: bool) -> Option<Value> {
     let text = std::env::var_os(variable)?;
     let text = text.to_str()?;
 
-    // Empty is treated as unset, for the same reason the prefixed layer treats
-    // it that way: an unset value rendered into a deployment template leaves
-    // exactly `PORT=`, and letting that blank out a good value is a bad
-    // afternoon.
-    if text.is_empty() {
+    // The same rule as the prefixed layer and `.env` files, `allow_empty_env`
+    // included: an unset value rendered into a deployment template leaves
+    // exactly `PORT=` (or a run of spaces), and letting that blank out a good
+    // value is a bad afternoon — unless the program asked for exactly that.
+    if text.trim().is_empty() && !allow_empty {
         return None;
     }
 

@@ -28,7 +28,13 @@
 //! # }
 //! ```
 //!
+//! This page is the API reference. The guide — profiles, discovery, hot
+//! reload, remote stores, encryption, testing — is
+//! [**the book**](https://ctolon.github.io/dynamic-config/).
+//!
 //! # What the attribute generates
+//!
+//! The everyday core:
 //!
 //! | Method | Description |
 //! |---|---|
@@ -37,18 +43,26 @@
 //! | `replace(Self)` | Atomically swap in a new snapshot. |
 //! | `current() -> Arc<Self>` | The current snapshot. Panics before `init()`. |
 //! | `try_current() -> Option<Arc<Self>>` | The current snapshot, or `None` before `init()`. |
-//! | `start_watch() -> io::Result<()>` | With `watch`: reload on file changes. Idempotent. |
-//! | `load_async()` / `init_async()` | With `async`: the same, off the async executor. |
-//! | `changes()` | With `async`: a handle woken by every later reload. |
+//! | `start_watch() -> io::Result<WatchHandle>` | With `watch`: reload on file changes until the handle is dropped. A second watch while one runs is `AlreadyExists`. |
+//! | `on_reload(f)` | Run a callback on every later reload, for the life of the process. |
+//! | `on_reload_scoped(f) -> HookGuard` | The same, until the guard is dropped. |
 //! | `set_default(path, value)` | A fallback used only when nothing else supplies the key. |
 //! | `set_override(path, value)` | A value that wins over every file and variable. |
 //! | `clear_defaults()` / `clear_overrides()` | Drop them again. |
+//! | `load_async()` / `init_async()` | With `async`: the same, off the async executor. |
+//! | `changes()` | With `async`: a handle woken by every later reload. |
+//!
+//! The rest of the surface — introspection (`snapshot`, `source_of`, `is_set`,
+//! `check`), persistence (`save`, `save_new`, `save_encrypted`), remote stores
+//! (`set_remote`, `refresh_remote`, `apply_remote`), aliases, environment
+//! bindings, flags, `bind_clap`, `schema` — is in [the book's attribute
+//! reference](https://ctolon.github.io/dynamic-config/attribute-reference.html).
 //!
 //! # Precedence
 //!
 //! ```text
-//! set_default  <  config.toml  <  secrets.json  <  APP_DB_*  <  set_override
-//!  (runtime)        (first)        (last file)    (environment)   (runtime)
+//! set_default < discovered < config.toml < secrets.json < remote < APP_DB_* < bind_env < set_flag < set_override
+//!  (runtime)   (search path)   (first)      (last file)   (etcd…) (environment) (by name)  (CLI)     (runtime)
 //! ```
 //!
 //! Files merge left to right and tables merge key by key, so a small
@@ -119,7 +133,8 @@
 //! struct DbConfig { pool_size: u32 }
 //!
 //! DbConfig::init_async().await?;
-//! DbConfig::start_watch()?;
+//! // Keep the handle: dropping it stops the watch.
+//! let _watch = DbConfig::start_watch()?;
 //!
 //! let mut reloads = DbConfig::changes();
 //!
@@ -145,7 +160,7 @@
 //! | `watch` | no | `start_watch()` and the file watcher |
 //! | `async` | no | `load_async`, `init_async`, `changes` — no runtime dependency |
 //! | `tokio` | no | `async`, plus tokio's blocking pool instead of a thread per load |
-//! | `clap` | no | `augment_command` / `from_matches`: flags as the top layer |
+//! | `clap` | no | `bind_clap`: named `clap` arguments as the flags layer |
 //! | `schema` | no | `schema()`: a JSON Schema for the resolved configuration |
 //! | `decrypt` | no | the [`Decryptor`]/[`Encryptor`] traits and `.age`-suffix handling |
 //! | `age` | no | `decrypt`, plus the `age` module's implementation of it |
@@ -206,6 +221,7 @@ mod group;
 mod layer;
 mod loader;
 mod log;
+mod redirects;
 mod registry;
 mod remote;
 #[cfg(feature = "schema")]
@@ -221,6 +237,7 @@ mod write;
 pub mod watch;
 
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use asynchronous::{set_blocking_executor, BlockingExecutor, Changes};
 /// figment itself, re-exported.
 ///
@@ -234,7 +251,7 @@ pub use figment;
 pub use aliases::Aliases;
 pub use bindings::EnvBindings;
 pub use cache::{CacheMode, Recovery};
-pub use cell::ConfigCell;
+pub use cell::{ConfigCell, HookGuard};
 pub use check::{check, Report, Resolved, UnknownKey};
 #[cfg(feature = "decrypt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
@@ -245,6 +262,7 @@ pub use group::{Commit, ReloadGroup, Reloadable};
 pub use layer::Layer;
 pub use registry::Registry;
 #[cfg(feature = "async")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
 pub use remote::{Fetched, Remote, RemoteSource, RemoteWatch, Watching};
 pub use snapshot::{Change, ChangeKind, Snapshot};
@@ -274,16 +292,21 @@ pub use write::{save, save_new};
 /// | `watch` | flag | `watch` feature | off |
 /// | `debounce` | `debounce = 250` | `watch` | 250 ms |
 /// | `poll` / `poll_interval` | flag / `= 2000` | `watch` | native backend |
-/// | `diff` | flag | `watch` | off |
+/// | `diff` | flag | | off |
 /// | `validate` | flag | a `validate()` on the type | off |
 /// | `save` | flag | `Self: Serialize` | off |
+/// | `cache` | `cache = "last.json"` | | no cache — a bad start fails |
+/// | `cache_mode` | `cache_mode = "redacted"` | `cache` | `"full"` |
+/// | `env_files` | `env_files = [".env"]` | `dotenv` feature + `env` | none |
+/// | `schema` | flag | `schema` feature + `Self: JsonSchema` | off |
 /// | `async` | flag | `async` feature | off |
 ///
 /// One field attribute: `#[config(secret)]` generates a `Debug` that prints
 /// `***` for the marked fields, and forbids `#[derive(Debug)]` alongside it.
 ///
-/// The README carries a section per argument, with an example and the reasoning
-/// behind each default.
+/// [The book's attribute reference](https://ctolon.github.io/dynamic-config/attribute-reference.html)
+/// carries a section per argument, with an example and the reasoning behind
+/// each default.
 ///
 /// # Requirements
 ///
@@ -425,13 +448,9 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Redirects used by the generated code.
-//
-// A proc-macro cannot see which features this crate was built with, so it emits
-// a call to one of these instead of naming `Format::Toml` directly. When the
-// feature is off the redirect expands to a `compile_error!` that says exactly
-// what to add — rather than "no variant named `Toml`", or worse, a runtime
-// failure on a machine that only runs the code path in production.
+// Support items used by the generated code. The redirect *macros* — the
+// feature-gated `__*!` wall — live in `redirects`; the functions stay here
+// because they are reached by path, and a path names the module it lives in.
 // ---------------------------------------------------------------------------
 
 /// Not public API. Lets the generated code name `serde` without the caller
@@ -445,178 +464,6 @@ pub mod __private {
     pub use serde;
     #[cfg(feature = "schema")]
     pub use serde_json;
-}
-
-/// Not public API.
-///
-/// Expands to `save_encrypted` when the `decrypt` feature is on, and to
-/// nothing when it is not — nothing rather than a compile error, because
-/// `save` alone is fully legitimate without decryption, and the method's very
-/// signature names [`Encryptor`], which only exists with the feature.
-///
-/// It lives here rather than in the proc-macro because a `#[cfg]` emitted into
-/// generated code is evaluated against the *user's* crate features; this macro
-/// is expanded inside dynamic-config, where `decrypt` actually lives.
-#[cfg(feature = "decrypt")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __save_encrypted_method {
-    ($key:expr) => {
-        /// Writes this configuration to `path`, encrypted.
-        ///
-        /// The counterpart to reading a `secrets.json.age`. The format comes
-        /// from the extension *under* the `.age` suffix, so
-        /// `secrets.json.age` is JSON.
-        ///
-        /// The encryptor is passed here rather than installed process-wide,
-        /// because *who may read this file* is a decision about this write.
-        ///
-        /// # Errors
-        ///
-        /// If the name resolves to no supported format, the value cannot be
-        /// serialized, encryption fails, or the file cannot be written.
-        pub fn save_encrypted(
-            &self,
-            path: impl ::core::convert::AsRef<::std::path::Path>,
-            encryptor: &dyn $crate::Encryptor,
-        ) -> ::core::result::Result<(), $crate::Error> {
-            let path = path.as_ref();
-            let format = $crate::Format::from_path(path)?;
-
-            $crate::save_encrypted(self, path, format, $key, encryptor)
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "decrypt"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __save_encrypted_method {
-    ($key:expr) => {};
-}
-
-/// Not public API.
-///
-/// Nothing when this build can read `.env` files, and a compile error naming
-/// the feature when it cannot.
-#[cfg(feature = "dotenv")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __require_dotenv {
-    () => {};
-}
-
-/// Not public API.
-#[cfg(not(feature = "dotenv"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __require_dotenv {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `env_files` in #[dynamic_config(..)] requires the `dotenv` \
-             feature; add features = [\"dotenv\"] to your dynamic-config dependency"
-        );
-    };
-}
-
-/// Not public API.
-///
-/// An encrypted source when this build can decrypt, and a compile error naming
-/// the feature when it cannot — the same treatment a `.toml` file gets without
-/// the `toml` feature, for the same reason: a silent runtime failure on the one
-/// machine that has an encrypted file is worse than a build that will not start.
-#[cfg(feature = "decrypt")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __source_encrypted {
-    ($path:expr, $format:expr) => {
-        $crate::Source::encrypted($path, $format)
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "decrypt"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __source_encrypted {
-    ($path:expr, $format:expr) => {{
-        ::core::compile_error!(
-            "dynamic-config: a `.age` config file needs decryption support; \
-             add features = [\"age\"] to your dynamic-config dependency"
-        );
-
-        $crate::Source::file($path, $format)
-    }};
-}
-
-/// Not public API.
-#[cfg(feature = "json")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_json {
-    () => {
-        $crate::Format::Json
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "json"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_json {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.json` files require the `json` feature; \
-             add features = [\"json\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-#[cfg(feature = "toml")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_toml {
-    () => {
-        $crate::Format::Toml
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "toml"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_toml {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.toml` files require the `toml` feature; \
-             add features = [\"toml\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-#[cfg(feature = "yaml")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_yaml {
-    () => {
-        $crate::Format::Yaml
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "yaml"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_yaml {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.yaml` and `.yml` files require the `yaml` feature; \
-             add features = [\"yaml\"] to your dynamic-config dependency"
-        )
-    };
 }
 
 /// Not public API.
@@ -654,7 +501,7 @@ pub fn recover<T: DeserializeOwned>(
     spec: &LoadSpec<'_>,
     cache: Option<(&'static str, &'static str, &'static [&'static str])>,
     failure: &Error,
-) -> Result<Option<T>, Error> {
+) -> Result<Option<(T, Snapshot)>, Error> {
     let Some((path, mode, _)) = cache else {
         return Ok(None);
     };
@@ -674,10 +521,12 @@ pub fn recover<T: DeserializeOwned>(
                 name,
                 &format!(
                     "cannot start: {failure}. Since the last good configuration: {}",
-                    if moved.is_empty() {
-                        "the same keys, with different values".to_owned()
-                    } else {
-                        moved.join(", ")
+                    match moved {
+                        // The sources did not resolve, so there was nothing to
+                        // compare against — said plainly, instead of the old
+                        // claim of a value-level diff that never ran.
+                        None => "could not compare — the sources do not resolve".to_owned(),
+                        Some(moved) => moved.join(", "),
                     },
                 ),
             );
@@ -686,7 +535,7 @@ pub fn recover<T: DeserializeOwned>(
         }
 
         Recovery::Usable(cached) if mode.recovers() => {
-            let config = loader::recover::<T>(spec, &cached).map_err(|error| {
+            let recovered = loader::recover::<T>(spec, &cached).map_err(|error| {
                 Error::new(
                     ErrorKind::Backend,
                     format!("the cached configuration did not load either: {error}"),
@@ -698,7 +547,7 @@ pub fn recover<T: DeserializeOwned>(
                 &format!("starting from the last configuration that worked, because: {failure}"),
             );
 
-            Ok(Some(config))
+            Ok(Some(recovered))
         }
 
         Recovery::Usable(_) => Ok(None),
@@ -758,215 +607,4 @@ pub fn __summarize_changes(previous: &Snapshot, current: &Snapshot) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// Not public API.
-#[cfg(feature = "watch")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __spawn_watch {
-    ($($argument:tt)*) => {
-        $crate::watch::spawn_with($($argument)*)
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "watch"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __spawn_watch {
-    ($($argument:tt)*) => {
-        ::core::compile_error!(
-            "dynamic-config: `watch` in #[dynamic_config(..)] requires the `watch` feature; \
-             add features = [\"watch\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-///
-/// Expands to `bind_clap` when the `clap` feature is on, and to nothing when it
-/// is not. An item-level macro rather than an expression-level redirect,
-/// because the signature names a clap type.
-#[cfg(feature = "clap")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __clap_methods {
-    () => {
-        /// Copies clap arguments into the flags layer, by
-        /// `(argument id, key path)`.
-        ///
-        /// Only arguments that came from the command line are taken: clap's own
-        /// `default_value` is indistinguishable from a typed flag in
-        /// `ArgMatches`, and letting one outrank a configuration file would
-        /// invert the precedence order.
-        ///
-        /// # Errors
-        ///
-        /// If a key path is unusable, or an argument is not valid UTF-8.
-        pub fn bind_clap(
-            matches: &$crate::__private::clap::ArgMatches,
-            bindings: &[(&str, &str)],
-        ) -> ::core::result::Result<(), $crate::Error> {
-            Self::dynamic_config_flags().bind_clap(matches, bindings)
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "clap"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __clap_methods {
-    () => {};
-}
-
-/// Not public API.
-///
-/// Expands to `schema` when the `schema` feature is on, and to nothing when it
-/// is not. An item-level macro rather than an expression-level redirect,
-/// because the `where` clause names a schemars trait.
-#[cfg(feature = "schema")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __schema_methods {
-    ($key:expr, $secrets:expr) => {
-        /// A JSON Schema for the *file* this section lives in.
-        ///
-        /// Not the struct's schema: the struct is one section, and a config
-        /// file is a map of them, so this is the struct's schema wrapped under
-        /// its key. Fields marked `#[config(secret)]` carry `writeOnly`, which
-        /// is how JSON Schema says *not for reading back*.
-        ///
-        /// Combine several with `dynamic_config::schema::merge` when more than
-        /// one config type shares a file. See that module for what the schema
-        /// deliberately leaves out, and for how each format wires one up.
-        pub fn schema() -> ::dynamic_config::__private::serde_json::Value
-        where
-            Self: ::dynamic_config::__private::schemars::JsonSchema,
-        {
-            let generated = ::dynamic_config::__private::schemars::schema_for!(Self);
-
-            ::dynamic_config::schema::section(
-                $key,
-                ::core::convert::Into::into(generated),
-                $secrets,
-            )
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "schema"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __schema_methods {
-    ($key:expr, $secrets:expr) => {
-        ::core::compile_error!(
-            "dynamic-config: `schema` in #[dynamic_config(..)] requires the `schema` feature; \
-             add features = [\"schema\"] to your dynamic-config dependency"
-        );
-    };
-}
-
-/// Not public API.
-///
-/// Expands to the async half of the generated `impl`. It lives here rather than
-/// in the proc-macro because these method *signatures* mention tokio types, and
-/// a signature cannot be hidden behind an expression-level `compile_error!`.
-#[cfg(feature = "async")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __async_methods {
-    ($name:ident) => {
-        /// Reads the configuration without blocking the async executor.
-        ///
-        /// # Errors
-        ///
-        /// Same as `load`, plus if the blocking task is cancelled.
-        pub async fn load_async() -> ::core::result::Result<Self, $crate::Error> {
-            $crate::load_async(Self::dynamic_config_spec()).await
-        }
-
-        /// Loads the configuration and installs it as the initial snapshot,
-        /// without blocking the async executor.
-        ///
-        /// # Errors
-        ///
-        /// Same as `load_async`.
-        pub async fn init_async() -> ::core::result::Result<(), $crate::Error> {
-            $crate::off_thread(Self::dynamic_config_apply).await?;
-
-            ::core::result::Result::Ok(())
-        }
-
-        /// A handle woken by every later reload.
-        ///
-        /// The snapshot current at this call counts as already seen, so the
-        /// first `changed().await` waits for the *next* reload. Read the value
-        /// you start from with `current()`.
-        ///
-        /// Runtime-agnostic: it is a `Future`, so tokio, async-std, smol and a
-        /// hand-written executor all drive it the same way. Unlike `current()`
-        /// it never panics — a handle taken before `init()` simply waits for
-        /// the first snapshot.
-        pub fn changes() -> $crate::Changes<Self> {
-            Self::dynamic_config_cell().changes()
-        }
-    };
-}
-
-/// Not public API.
-///
-/// The async half of the remote API. Its own redirect rather than part of
-/// `__async_methods!`, because a program can want an async *store* without
-/// wanting the async *loading* surface — they are different axes.
-#[cfg(feature = "async")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __async_remote_methods {
-    () => {
-        /// Installs an async remote store to read configuration from.
-        ///
-        /// Nothing is fetched here; call
-        /// [`refresh_remote_async`](Self::refresh_remote_async) for that.
-        /// Installing a source drops whatever the previous one had fetched.
-        pub fn set_remote_async(source: impl $crate::AsyncRemoteSource) {
-            Self::dynamic_config_remote().set_async(source);
-        }
-
-        /// Reads the remote store, and keeps what came back.
-        ///
-        /// Works with a blocking source too, so swapping one implementation for
-        /// the other is not a breaking change for the caller.
-        ///
-        /// # Errors
-        ///
-        /// If no source is installed, or the fetch fails.
-        pub async fn refresh_remote_async() -> ::core::result::Result<(), $crate::Error> {
-            Self::dynamic_config_remote().refresh_async().await
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "async"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __async_remote_methods {
-    () => {};
-}
-
-/// Not public API.
-#[cfg(not(feature = "async"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __async_methods {
-    ($name:ident) => {
-        ::core::compile_error!(
-            "dynamic-config: `async` in #[dynamic_config(..)] requires the `async` feature \
-             (or `tokio`, which implies it); add features = [\"async\"] to your \
-             dynamic-config dependency"
-        );
-    };
 }

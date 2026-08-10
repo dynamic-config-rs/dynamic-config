@@ -85,7 +85,15 @@ mod error;
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub use asynchronous::{Changes, WAITERS};
+pub use asynchronous::Changes;
+
+/// How many tasks a [`ConfigCell`] can park by default.
+///
+/// Override it per cell with the second type parameter —
+/// `ConfigCell<Settings, 8>` parks eight. Size it to the number of tasks
+/// that genuinely await this configuration: beyond the limit, waiters evict
+/// and wake each other in a churn that keeps the executor from idling.
+pub const DEFAULT_WAITERS: usize = 4;
 pub use cell::ConfigCell;
 pub use error::{Error, ErrorKind};
 

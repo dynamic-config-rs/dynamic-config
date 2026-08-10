@@ -190,3 +190,100 @@ fn a_binding_can_reach_a_nested_field() {
 
     std::env::remove_var("DCBIND_POOL_MAX");
 }
+
+/// One empty-value rule for all three env-shaped layers: whitespace counts
+/// as empty, and `allow_empty_env` is honored by bindings too — it used to
+/// be silently ignored there.
+#[test]
+fn bindings_honor_allow_empty_env_with_the_shared_rule() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/fixtures/base.json"],
+        key = "db",
+        env = "DCBINDEMPTY_",
+        allow_empty_env,
+    )]
+    #[derive(Debug, Deserialize)]
+    struct EmptyAllowed {
+        host: String,
+    }
+
+    EmptyAllowed::bind_env("host", "DCBINDEMPTY_HOST_SOURCE").unwrap();
+    std::env::set_var("DCBINDEMPTY_HOST_SOURCE", "   ");
+
+    let loaded = EmptyAllowed::load();
+
+    std::env::remove_var("DCBINDEMPTY_HOST_SOURCE");
+    EmptyAllowed::clear_env_bindings();
+
+    // With allow_empty_env, a whitespace-only bound variable IS a value —
+    // it overrides the file's "localhost" with emptiness. (figment's value
+    // parsing may normalise the whitespace itself; what matters is that the
+    // binding supplied the value at all.)
+    let host = loaded.expect("empty is allowed").host;
+    assert!(host.trim().is_empty(), "the binding must win: {host:?}");
+}
+
+#[test]
+fn a_whitespace_only_bound_variable_is_unset_by_default() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/fixtures/base.json"],
+        key = "db",
+        env = "DCBINDBLANK_",
+    )]
+    #[derive(Debug, Deserialize)]
+    struct BlankDefault {
+        host: String,
+    }
+
+    BlankDefault::bind_env("host", "DCBINDBLANK_HOST_SOURCE").unwrap();
+    std::env::set_var("DCBINDBLANK_HOST_SOURCE", "   ");
+
+    let loaded = BlankDefault::load();
+
+    std::env::remove_var("DCBINDBLANK_HOST_SOURCE");
+    BlankDefault::clear_env_bindings();
+
+    // Without the flag, whitespace is a template that rendered "nothing" —
+    // the file's value must survive.
+    assert_eq!(loaded.expect("the file supplies host").host, "localhost");
+}
+
+/// `nest` picks the separator that introduces nesting in a variable name —
+/// an API that until now had only compile-fail coverage.
+#[test]
+fn a_custom_nest_separator_reaches_nested_fields() {
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct Pool {
+        max_size: u16,
+    }
+
+    #[dynamic_config::dynamic_config(
+        files = ["tests/fixtures/base.json"],
+        key = "db",
+        env = "DCNEST_",
+        nest = "__",
+    )]
+    #[derive(Debug, Deserialize)]
+    struct Nested {
+        #[allow(dead_code)]
+        host: String,
+        pool: Pool,
+    }
+
+    std::env::set_var("DCNEST_DB_POOL__MAX_SIZE", "32");
+
+    let loaded = Nested::load();
+
+    std::env::remove_var("DCNEST_DB_POOL__MAX_SIZE");
+
+    assert_eq!(
+        loaded.expect("the nested variable resolves").pool.max_size,
+        32
+    );
+}

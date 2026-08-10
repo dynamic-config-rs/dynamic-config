@@ -53,6 +53,16 @@ use crate::source::Format;
 /// The key a cache document is written under, so it reads back like any file.
 const CACHED: &str = "cached";
 
+/// The marker every cache document carries, naming what it is.
+///
+/// The reader used to *sniff*: "has a top-level `fingerprint` key" meant
+/// "is a fingerprint document" — and a real configuration with a
+/// `fingerprint` section (a TLS pin, an image digest) was misread as one,
+/// turning a perfectly good full cache into a refusal to start. A document
+/// that says what it is cannot be misread. `version` is there so a future
+/// format change can tell old files from new ones.
+const MARKER: &str = "__dynamic_config_cache";
+
 /// Where the fingerprint lives inside a `Fingerprint` document.
 const FINGERPRINT: &str = "fingerprint";
 
@@ -139,7 +149,7 @@ pub enum Recovery {
     /// Only a fingerprint: the keys that differ from the last good state.
     ///
     /// Empty when the keys match and only a value moved.
-    Drift(Vec<String>),
+    Drift(Option<Vec<String>>),
     /// No cache on disk yet.
     Absent,
 }
@@ -160,11 +170,23 @@ pub(crate) fn write(
 ) -> Result<(), Error> {
     let format = format_of(path)?;
 
-    let document = match mode {
+    let mut document = match mode {
         CacheMode::Full => snapshot.values().clone(),
         CacheMode::Redacted => without(snapshot.values(), secrets),
         CacheMode::Fingerprint => fingerprint_document(snapshot),
     };
+
+    let mut marker = Dict::new();
+    marker.insert("version".to_owned(), Value::from(1));
+    marker.insert(
+        "mode".to_owned(),
+        Value::from(match mode {
+            CacheMode::Full => "full",
+            CacheMode::Redacted => "redacted",
+            CacheMode::Fingerprint => "fingerprint",
+        }),
+    );
+    document.insert(MARKER.to_owned(), Value::from(marker));
 
     crate::write::save_dict(&document, path, format, CACHED)
 }
@@ -190,18 +212,29 @@ pub(crate) fn read(path: &Path, current: Option<&Snapshot>) -> Result<Recovery, 
     let sources = [crate::Source::inline(&text, format)];
     let cached = crate::loader::snapshot(&crate::LoadSpec::new(CACHED, &sources))?;
 
-    if !cached.contains(FINGERPRINT) {
-        return Ok(Recovery::Usable(cached));
+    // The marker says what the document is. Files written before the marker
+    // existed (0.0.1) fall back to the old heuristic for one release —
+    // documented in the changelog, removed after it.
+    let is_fingerprint = match cached.get::<String>(&format!("{MARKER}.mode")) {
+        Ok(mode) => mode == "fingerprint",
+        Err(_) => cached.contains(FINGERPRINT),
+    };
+
+    if !is_fingerprint {
+        return Ok(Recovery::Usable(cached.without_top_level(MARKER)));
     }
 
     Ok(Recovery::Drift(drift(&cached, current)))
 }
 
 /// Which keys have appeared or vanished since the cache was written.
-fn drift(cached: &Snapshot, current: Option<&Snapshot>) -> Vec<String> {
-    let Some(current) = current else {
-        return Vec::new();
-    };
+///
+/// `None` means "could not compare": the sources did not resolve — which is
+/// the ordinary case during recovery, since a broken source is *why*
+/// recovery is running. The caller must say so rather than claim a
+/// comparison that never happened.
+fn drift(cached: &Snapshot, current: Option<&Snapshot>) -> Option<Vec<String>> {
+    let current = current?;
 
     let before: Vec<String> = cached.get(KEYS).unwrap_or_default();
     let after = current.leaf_paths();
@@ -219,10 +252,41 @@ fn drift(cached: &Snapshot, current: Option<&Snapshot>) -> Vec<String> {
         .collect();
 
     moved.sort();
-    moved
+
+    // The keys all match — that is what the stored hash is FOR: telling
+    // "identical" apart from "same keys, different values". It used to be
+    // written and never read, and the report asserted the comparison anyway.
+    if moved.is_empty() {
+        let stored: Option<String> = cached.get(FINGERPRINT).ok();
+        let current_hash = fingerprint_of(current);
+
+        if stored.as_deref() == Some(current_hash.as_str()) {
+            return Some(vec!["nothing moved — the sources match the last good \
+                              configuration exactly"
+                .to_owned()]);
+        }
+
+        return Some(vec!["the same keys, with different values".to_owned()]);
+    }
+
+    Some(moved)
+}
+
+/// The hash of a snapshot's values, as `fingerprint_document` computes it.
+fn fingerprint_of(snapshot: &Snapshot) -> String {
+    let mut hasher = DefaultHasher::new();
+    format!("{:?}", snapshot.values()).hash(&mut hasher);
+
+    format!("{:016x}", hasher.finish())
 }
 
 /// The whole tree minus the top-level keys named in `secrets`.
+///
+/// Top-level is not a limitation here but a property of the source:
+/// `#[config(secret)]` marks fields of the annotated struct, and those fields
+/// ARE the section's top-level keys. The names arrive serde-resolved — a
+/// `#[serde(rename = "pass")]` secret is redacted under `pass`, the key the
+/// resolved tree actually uses.
 fn without(values: &Dict, secrets: &[&str]) -> Dict {
     values
         .iter()
@@ -235,17 +299,13 @@ fn without(values: &Dict, secrets: &[&str]) -> Dict {
 fn fingerprint_document(snapshot: &Snapshot) -> Dict {
     let keys = snapshot.leaf_paths();
 
-    let mut hasher = DefaultHasher::new();
-
-    // `Debug` rather than `Hash`: figment's values carry a provenance tag that
-    // takes part in equality, and two identical values from different providers
-    // must fingerprint the same.
-    format!("{:?}", snapshot.values()).hash(&mut hasher);
-
+    // `Debug` rather than `Hash` (inside `fingerprint_of`): figment's values
+    // carry a provenance tag that takes part in equality, and two identical
+    // values from different providers must fingerprint the same.
     let mut document = Dict::new();
     document.insert(
         FINGERPRINT.to_owned(),
-        Value::from(format!("{:016x}", hasher.finish())),
+        Value::from(fingerprint_of(snapshot)),
     );
     document.insert(
         KEYS.to_owned(),
@@ -263,7 +323,7 @@ fn format_of(path: &Path) -> Result<Format, Error> {
         return Err(Error::new(
             ErrorKind::Backend,
             format!(
-                "{} ends in `.age`, but the last-known-good cache is written                  in plaintext; give the cache an unencrypted name",
+                "{} ends in `.age`, but the last-known-good cache is written in plaintext; give the cache an unencrypted name",
                 path.display()
             ),
         ));
@@ -365,7 +425,7 @@ mod tests {
             ("hsot", "typo".into()),
         ]));
 
-        let Recovery::Drift(moved) = read(&path, Some(&now)).unwrap() else {
+        let Recovery::Drift(Some(moved)) = read(&path, Some(&now)).unwrap() else {
             panic!("a fingerprint cache cannot be usable");
         };
 

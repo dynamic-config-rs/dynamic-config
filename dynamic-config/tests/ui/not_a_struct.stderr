@@ -1,0 +1,7 @@
+error: #[dynamic_config] goes on a struct with named fields — the fields are what the configuration deserializes into; an enum or function has nowhere to put them
+ --> tests/ui/not_a_struct.rs:5:1
+  |
+5 | / enum NotAStruct {
+6 | |     Variant,
+7 | | }
+  | |_^

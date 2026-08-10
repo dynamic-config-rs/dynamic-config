@@ -196,7 +196,7 @@ mod awaiting {
 
     #[test]
     fn a_fifth_waiter_wakes_the_task_it_evicts() {
-        use dynamic_config_embedded::WAITERS;
+        use dynamic_config_embedded::DEFAULT_WAITERS as WAITERS;
 
         CROWDED.store(defaults());
 
@@ -230,4 +230,37 @@ mod awaiting {
         // still registered, quietly pending.
         assert!(!flags[WAITERS].0.load(Ordering::SeqCst));
     }
+}
+
+/// A custom waiter budget through the const parameter, and rejection of
+/// trailing bytes — a reused link buffer must not smuggle a stale tail in.
+#[test]
+fn a_custom_waiter_budget_and_trailing_bytes() {
+    use dynamic_config_embedded::ErrorKind;
+
+    static ROOMY: ConfigCell<Settings, 8> = ConfigCell::new();
+
+    ROOMY.store(defaults());
+
+    // Two frames concatenated in one buffer: the first parses, but accepting
+    // it would install a configuration nobody sent as "the" document.
+    let error = ROOMY
+        .apply(
+            br#"{"interval_ms": 250, "verbose": true}{"interval_ms": 1}"#,
+            Format::Json,
+        )
+        .expect_err("trailing bytes are a malformed document");
+
+    assert_eq!(error.kind(), ErrorKind::Parse);
+    assert_eq!(
+        ROOMY.get().unwrap().interval_ms,
+        1000,
+        "the previous configuration keeps serving"
+    );
+
+    // A clean document still applies, custom budget and all.
+    ROOMY
+        .apply(br#"{"interval_ms": 250, "verbose": true}"#, Format::Json)
+        .unwrap();
+    assert_eq!(ROOMY.get().unwrap().interval_ms, 250);
 }

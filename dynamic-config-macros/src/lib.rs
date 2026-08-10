@@ -15,7 +15,7 @@ mod args;
 mod expand;
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, ItemStruct};
+use syn::ItemStruct;
 
 /// Turns a struct into a hot-reloadable configuration snapshot.
 ///
@@ -23,11 +23,39 @@ use syn::{parse_macro_input, ItemStruct};
 /// should read it.
 #[proc_macro_attribute]
 pub fn dynamic_config(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(attr as args::Args);
-    let input = parse_macro_input!(item as ItemStruct);
+    // Errors are emitted *alongside* the original item, never instead of it.
+    // Swallowing the struct turns one attribute mistake into a cascade of
+    // "cannot find type" errors at every use site, burying the message that
+    // actually matters.
+    let fallback = item.clone();
+
+    let with_original = |error: syn::Error| -> TokenStream {
+        let mut output: TokenStream = error.into_compile_error().into();
+        output.extend(fallback.clone());
+        output
+    };
+
+    // A named, spanned message for a non-struct: syn's raw "expected `struct`"
+    // does not say which attribute wanted one, or why.
+    let input: ItemStruct = match syn::parse(item.clone()) {
+        Ok(input) => input,
+        Err(_) => {
+            return with_original(syn::Error::new_spanned(
+                proc_macro2::TokenStream::from(item),
+                "#[dynamic_config] goes on a struct with named fields — the \
+                 fields are what the configuration deserializes into; an enum \
+                 or function has nowhere to put them",
+            ))
+        }
+    };
+
+    let args = match syn::parse(attr) {
+        Ok(args) => args,
+        Err(error) => return with_original(error),
+    };
 
     match expand::expand(args, input) {
         Ok(tokens) => tokens.into(),
-        Err(error) => error.into_compile_error().into(),
+        Err(error) => with_original(error),
     }
 }

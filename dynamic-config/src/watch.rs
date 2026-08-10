@@ -1,6 +1,7 @@
 //! The filesystem watcher behind hot reload.
 
-use std::collections::BTreeSet;
+use std::any::TypeId;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::Mutex;
@@ -43,8 +44,11 @@ pub enum WatchMode {
     },
 }
 
-/// Names that already have a watcher, so a second `spawn` is a no-op.
-static STARTED: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
+/// Types that already have a watcher, keyed by [`TypeId`] — the one identity
+/// that survives generics. The display name is kept only for messages: keyed
+/// by name, `Db<Postgres>` and `Db<Mysql>` both stringify to `"Db"`, and the
+/// second `start_watch()` silently watched nothing.
+static STARTED: Mutex<BTreeMap<TypeId, &'static str>> = Mutex::new(BTreeMap::new());
 
 /// Keeps a watcher alive. Dropping it stops watching.
 ///
@@ -59,6 +63,7 @@ static STARTED: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
 #[must_use = "dropping the handle stops the watcher; bind it, or call `.detach()` \
               to watch for the rest of the process"]
 pub struct WatchHandle {
+    key: TypeId,
     name: &'static str,
     /// `None` only while `detach` is dismantling the handle.
     watcher: Option<Backend>,
@@ -81,7 +86,8 @@ impl WatchHandle {
             std::mem::forget(watcher);
         }
 
-        // The name stays registered, so a later `spawn` is still a no-op.
+        // The registration stays, so a later `spawn` still reports
+        // `AlreadyExists` rather than starting a second watcher.
         std::mem::forget(self);
     }
 
@@ -97,25 +103,24 @@ impl WatchHandle {
 
 impl Drop for WatchHandle {
     fn drop(&mut self) {
-        // A handle from a duplicate `spawn` owns nothing; freeing the name here
-        // would let a third call start a *second* watcher alongside the one
-        // still running.
+        // `None` only mid-`detach`, which forgets the handle before this
+        // could run — but belt and braces costs one branch.
         let Some(watcher) = self.watcher.take() else {
             return;
         };
 
         // Dropping the backend closes the channel and ends the thread. Freeing
-        // the name lets a later `spawn` start a fresh one — which is what makes
-        // this usable from tests.
+        // the registration lets a later `spawn` start a fresh one — which is
+        // what makes this usable from tests.
         drop(watcher);
 
         // Recovered from poisoning rather than skipped: skipping would leak
-        // the name forever, and the set has no invariant a panic could break —
-        // the same policy every other lock in the crate follows.
+        // the registration forever, and the map has no invariant a panic
+        // could break — the same policy every other lock in the crate follows.
         STARTED
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(self.name);
+            .remove(&self.key);
     }
 }
 
@@ -131,8 +136,8 @@ impl std::fmt::Debug for WatchHandle {
 
 /// Starts a background thread that runs `reload` whenever one of `files` changes.
 ///
-/// Calling this twice with the same `name` is a no-op: the second call returns
-/// a handle that owns nothing, so dropping it does not stop the first watcher.
+/// Calling this twice for the same type is an error (`AlreadyExists`): a
+/// second handle could only mislead, and the first watcher keeps running.
 ///
 /// `reload` is expected to swap in a new snapshot. Returning `Some(summary)`
 /// replaces the generic "reloaded" line with something more specific — which is
@@ -154,12 +159,13 @@ impl std::fmt::Debug for WatchHandle {
 /// directory that fails while others succeed is reported and skipped.
 ///
 pub fn spawn(
+    key: TypeId,
     name: &'static str,
     spec: LoadSpec<'static>,
     debounce: Duration,
     reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
-    spawn_with(name, spec, debounce, WatchMode::default(), reload)
+    spawn_with(key, name, spec, debounce, WatchMode::default(), reload)
 }
 
 /// [`spawn`], with the detection strategy chosen explicitly.
@@ -169,21 +175,30 @@ pub fn spawn(
 /// As [`spawn`].
 ///
 pub fn spawn_with(
+    key: TypeId,
     name: &'static str,
     spec: LoadSpec<'static>,
     debounce: Duration,
     mode: WatchMode,
     reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
-    if !STARTED
+    // An error, not a quiet no-op handle. The old behaviour returned
+    // `Ok(handle-that-owns-nothing)`, which read as "I started watching" and
+    // was undetectable at runtime — the worst kind of success.
+    if STARTED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .insert(name)
+        .insert(key, name)
+        .is_some()
     {
-        return Ok(WatchHandle {
-            name,
-            watcher: None,
-        });
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "`{name}` is already being watched; hold on to the handle the \
+                 first `start_watch()` returned, or drop it before starting \
+                 another"
+            ),
+        ));
     }
 
     // The insertion above is what makes two concurrent `spawn` calls mutually
@@ -191,7 +206,7 @@ pub fn spawn_with(
     // to undo it. Without the rollback, every later `start_watch()` for this
     // type would find the name taken and return a success handle that owns
     // nothing and watches nothing, silently.
-    let registered = Registered { name, armed: true };
+    let registered = Registered { key, armed: true };
 
     let (sender, receiver) = mpsc::channel::<notify::Result<Event>>();
 
@@ -220,6 +235,7 @@ pub fn spawn_with(
     registered.defuse();
 
     Ok(WatchHandle {
+        key,
         name,
         watcher: Some(backend),
     })
@@ -230,7 +246,7 @@ pub fn spawn_with(
 /// Every `?` between the insertion and the end of `spawn_with` — the backend,
 /// the directory watches, the thread — runs through this on the way out.
 struct Registered {
-    name: &'static str,
+    key: TypeId,
     armed: bool,
 }
 
@@ -247,7 +263,7 @@ impl Drop for Registered {
             STARTED
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(self.name);
+                .remove(&self.key);
         }
     }
 }
@@ -264,13 +280,12 @@ fn run(
     receiver: &mpsc::Receiver<notify::Result<Event>>,
 ) {
     loop {
-        let Some(batch) = collect_batch(receiver, name, debounce) else {
-            // The watcher was dropped, so no further events can arrive.
-            return;
-        };
-
-        if !touches_configured_file(&batch, &spec) {
-            continue;
+        match collect_relevant(receiver, name, debounce, &spec) {
+            Collected::Dirty => {}
+            Collected::Disconnected => {
+                // The watcher was dropped, so no further events can arrive.
+                return;
+            }
         }
 
         thread::sleep(ATOMIC_SAVE_GRACE);
@@ -281,6 +296,14 @@ fn run(
             Err(error) => warning!("{name}: reload failed, keeping the previous snapshot: {error}"),
         }
     }
+}
+
+/// What one round of event collection concluded.
+enum Collected {
+    /// A configured file changed; reload.
+    Dirty,
+    /// The channel closed; the watch is over.
+    Disconnected,
 }
 
 /// Watches the *directories* holding the files, not the files themselves.
@@ -353,53 +376,74 @@ fn watch_directories(
     Ok(())
 }
 
-/// Blocks for the first event, then drains until the stream goes quiet.
+/// Blocks until a *relevant* event arrives, then debounces — with a ceiling.
 ///
-/// One editor save typically emits several events; reloading once per event
-/// would re-read a file mid-write.
+/// Three deliberate properties, each the fix for a shipped mistake:
 ///
-/// Returns `None` once the channel is disconnected.
-fn collect_batch(
+/// - **Relevance is decided per event, before anything else.** The old code
+///   batched first and filtered after, so a chatty neighbour in the config
+///   directory — a log file, a state file — both filled a growing `Vec` and
+///   kept pushing the quiet-period out. An irrelevant event now costs a
+///   comparison and is gone.
+/// - **No batch at all.** One dirty flag: whether a configured file changed
+///   is one bit, and a bit cannot grow.
+/// - **`max_wait` bounds the debounce.** The quiet-period restarts on every
+///   relevant event, which is the point of debouncing — but under a
+///   sustained storm of writes it used to restart forever, and the reload
+///   starved. From the first relevant event, at most `4 × debounce` passes
+///   before the reload happens regardless.
+fn collect_relevant(
     receiver: &mpsc::Receiver<notify::Result<Event>>,
     name: &'static str,
     debounce: Duration,
-) -> Option<Vec<Event>> {
-    let mut batch = Vec::new();
-
+    spec: &LoadSpec<'static>,
+) -> Collected {
+    // Phase 1: sleep until something we care about happens.
     loop {
         match receiver.recv() {
-            Ok(Ok(event)) => {
-                batch.push(event);
-                break;
-            }
+            Ok(Ok(event)) if is_relevant(&event, spec) => break,
+            Ok(Ok(_)) => {}
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
-            Err(mpsc::RecvError) => return None,
+            Err(mpsc::RecvError) => return Collected::Disconnected,
         }
     }
 
+    // Phase 2: wait out the flurry an editor save produces, but not forever.
+    let deadline = std::time::Instant::now() + debounce.saturating_mul(4);
+
     loop {
-        match receiver.recv_timeout(debounce) {
-            Ok(Ok(event)) => batch.push(event),
+        let now = std::time::Instant::now();
+
+        if now >= deadline {
+            return Collected::Dirty;
+        }
+
+        let window = debounce.min(deadline - now);
+
+        match receiver.recv_timeout(window) {
+            // A relevant event extends the quiet period (up to the deadline);
+            // an irrelevant one does not — a neighbour's churn must not delay
+            // our reload.
+            Ok(Ok(event)) if is_relevant(&event, spec) => {}
+            Ok(Ok(_)) => {}
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
-            Err(mpsc::RecvTimeoutError::Timeout) => return Some(batch),
-            Err(mpsc::RecvTimeoutError::Disconnected) => return None,
+            Err(mpsc::RecvTimeoutError::Timeout) => return Collected::Dirty,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Collected::Disconnected,
         }
     }
 }
 
-/// Whether a batch is about one of our files.
+/// Whether one event is about one of our files.
 ///
-/// The whole directory is watched, so most batches are about something else.
+/// The whole directory is watched, so most events are about something else.
 /// Paths are compared in both directions because event paths are absolute while
 /// configured paths are usually relative to the working directory; a rare false
 /// positive costs one redundant reload, which is harmless.
-fn touches_configured_file(batch: &[Event], spec: &LoadSpec<'static>) -> bool {
-    batch.iter().any(|event| {
-        matches!(
-            event.kind,
-            EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-        ) && event.paths.iter().any(|changed| is_ours(changed, spec))
-    })
+fn is_relevant(event: &Event, spec: &LoadSpec<'static>) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+    ) && event.paths.iter().any(|changed| is_ours(changed, spec))
 }
 
 fn is_ours(changed: &Path, spec: &LoadSpec<'static>) -> bool {
@@ -494,12 +538,9 @@ mod tests {
 
     #[test]
     fn an_absolute_event_path_matches_a_relative_configured_path() {
-        let batch = [event(
-            EventKind::Modify(ModifyKind::Any),
-            "/srv/app/config.toml",
-        )];
+        let probe = event(EventKind::Modify(ModifyKind::Any), "/srv/app/config.toml");
 
-        assert!(touches_configured_file(&batch, &explicit_spec()));
+        assert!(is_relevant(&probe, &explicit_spec()));
     }
 
     #[test]
@@ -507,65 +548,82 @@ mod tests {
         let paths: &'static [&'static str] = &["/srv/app"];
         let spec = LoadSpec::new("db", &[]).with_search("config", paths);
 
-        let batch = [event(
-            EventKind::Create(CreateKind::File),
-            "/srv/app/config.toml",
-        )];
-        assert!(touches_configured_file(&batch, &spec));
+        let probe = event(EventKind::Create(CreateKind::File), "/srv/app/config.toml");
+        assert!(is_relevant(&probe, &spec));
 
-        let batch = [event(
-            EventKind::Create(CreateKind::File),
-            "/srv/app/other.toml",
-        )];
-        assert!(!touches_configured_file(&batch, &spec));
+        let probe = event(EventKind::Create(CreateKind::File), "/srv/app/other.toml");
+        assert!(!is_relevant(&probe, &spec));
     }
 
     #[test]
     fn an_unrelated_file_in_the_same_directory_is_ignored() {
-        let batch = [event(
-            EventKind::Modify(ModifyKind::Any),
-            "/srv/app/notes.txt",
-        )];
+        let probe = event(EventKind::Modify(ModifyKind::Any), "/srv/app/notes.txt");
 
-        assert!(!touches_configured_file(&batch, &explicit_spec()));
+        assert!(!is_relevant(&probe, &explicit_spec()));
     }
 
     #[test]
     fn access_events_do_not_trigger_a_reload() {
-        let batch = [event(
+        let probe = event(
             EventKind::Access(notify::event::AccessKind::Read),
             "/srv/app/config.toml",
-        )];
+        );
 
-        assert!(!touches_configured_file(&batch, &explicit_spec()));
+        assert!(!is_relevant(&probe, &explicit_spec()));
     }
 
     #[test]
-    fn a_duplicate_handle_owns_nothing_and_frees_nothing() {
+    fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
+        struct DuplicateMarker;
+
         let spec = explicit_spec();
+        let key = TypeId::of::<DuplicateMarker>();
 
-        let first = spawn("DuplicateTest", spec, Duration::from_millis(10), || {
-            Ok(None)
-        })
+        let first = spawn(
+            key,
+            "DuplicateTest",
+            spec,
+            Duration::from_millis(10),
+            || Ok(None),
+        )
         .expect("the first spawn should start a watcher");
-        let second = spawn("DuplicateTest", spec, Duration::from_millis(10), || {
-            Ok(None)
-        })
-        .expect("the second spawn should be a no-op");
 
-        // Dropping the duplicate must not deregister the name out from under
-        // the watcher that is actually running.
-        drop(second);
+        // The second is refused loudly — the old inert-handle return was a
+        // success nobody could distinguish from the real thing.
+        let spec = explicit_spec();
+        let error = spawn(
+            key,
+            "DuplicateTest",
+            spec,
+            Duration::from_millis(10),
+            || Ok(None),
+        )
+        .expect_err("a second watcher for the same type must be refused");
+
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert!(error.to_string().contains("DuplicateTest"), "{error}");
         assert!(
-            STARTED.lock().unwrap().contains("DuplicateTest"),
-            "the running watcher should still hold its name"
+            STARTED.lock().unwrap().contains_key(&key),
+            "the refusal must not free the first watcher's registration"
         );
 
         drop(first);
         assert!(
-            !STARTED.lock().unwrap().contains("DuplicateTest"),
-            "dropping the owning handle should free the name for a restart"
+            !STARTED.lock().unwrap().contains_key(&key),
+            "dropping the real handle frees the registration"
         );
+
+        // And a fresh spawn works again — the refusal did not wedge the slot.
+        let spec = explicit_spec();
+        let again = spawn(
+            key,
+            "DuplicateTest",
+            spec,
+            Duration::from_millis(10),
+            || Ok(None),
+        )
+        .expect("after the drop, watching can restart");
+        drop(again);
     }
 
     /// A failed spawn must free its name, or every retry afterwards returns a
@@ -573,41 +631,45 @@ mod tests {
     /// is the exact path a program hits when its config directory does not
     /// exist yet at startup.
     #[test]
-    fn a_failed_spawn_frees_its_name_for_a_retry() {
-        static BAD: &[crate::Source<'static>] = &[crate::Source::file(
+    fn a_failed_spawn_frees_its_registration_for_a_retry() {
+        struct FailedSpawnMarker;
+
+        let key = TypeId::of::<FailedSpawnMarker>();
+
+        static BAD: [crate::Source<'static>; 1] = [crate::Source::file(
             "/nonexistent-dynamic-config-test-dir/config.toml",
             crate::Format::Toml,
         )];
+        let bad = LoadSpec::new("db", &BAD);
 
-        let bad = LoadSpec::new("app", BAD);
+        let _ = spawn(
+            key,
+            "FailedSpawnTest",
+            bad,
+            Duration::from_millis(10),
+            || Ok(None),
+        )
+        .expect_err("no directory to watch means the spawn fails");
 
         assert!(
-            spawn("FailedSpawnTest", bad, Duration::from_millis(10), || Ok(
-                None
-            ))
-            .is_err(),
-            "watching a directory that does not exist should fail"
-        );
-        assert!(
-            !STARTED.lock().unwrap().contains("FailedSpawnTest"),
-            "a failed spawn must not keep its name registered"
+            !STARTED.lock().unwrap().contains_key(&key),
+            "a failed spawn must not keep its registration"
         );
 
-        // And the retry gets a *real* watcher, proven by its drop freeing the
-        // name — a do-nothing duplicate handle would leave it registered.
+        // The retry gets a real watcher, not an inert one.
         let handle = spawn(
+            key,
             "FailedSpawnTest",
             explicit_spec(),
             Duration::from_millis(10),
             || Ok(None),
         )
-        .expect("the name is free, so the retry starts a watcher");
+        .expect("the retry should start a watcher");
 
         drop(handle);
-
         assert!(
-            !STARTED.lock().unwrap().contains("FailedSpawnTest"),
-            "the retry owned a real watcher, whose drop frees the name"
+            !STARTED.lock().unwrap().contains_key(&key),
+            "and dropping it frees the registration"
         );
     }
 
@@ -617,12 +679,9 @@ mod tests {
             EventKind::Create(CreateKind::File),
             EventKind::Remove(notify::event::RemoveKind::File),
         ] {
-            let batch = [event(kind, "config.toml")];
+            let probe = event(kind, "config.toml");
 
-            assert!(
-                touches_configured_file(&batch, &explicit_spec()),
-                "{kind:?}"
-            );
+            assert!(is_relevant(&probe, &explicit_spec()), "{kind:?}");
         }
     }
 }

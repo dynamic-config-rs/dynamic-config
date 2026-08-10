@@ -59,7 +59,7 @@ use crate::error::{Error, ErrorKind};
 use crate::source::Format;
 
 /// A document a remote store handed back.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Fetched {
     /// The document text, in `format`.
     pub text: String,
@@ -69,11 +69,25 @@ pub struct Fetched {
 
 impl Fetched {
     /// A document and the format it is written in.
+    #[must_use]
     pub fn new(text: impl Into<String>, format: Format) -> Self {
         Self {
             text: text.into(),
             format,
         }
+    }
+}
+
+// The document is the one thing a `Debug` of this type must never print:
+// a remote store's flagship use case is serving secrets, and `Fetched` is
+// what every watch callback receives — one `tracing::debug!(?document)` away
+// from a log. The length is enough to debug with.
+impl std::fmt::Debug for Fetched {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Fetched")
+            .field("format", &self.format)
+            .field("bytes", &self.text.len())
+            .finish()
     }
 }
 
@@ -128,8 +142,22 @@ pub trait AsyncRemoteSource: Send + Sync + 'static {
 /// `#[dynamic_config]` emits it.
 #[derive(Default)]
 pub struct Remote {
-    source: Mutex<Option<Kind>>,
-    fetched: Mutex<Option<Fetched>>,
+    /// One lock for the whole state, deliberately. Two separate locks — one
+    /// for the source, one for the document — allowed an interleaving where
+    /// a slow fetch from the *old* source committed its result after `set`
+    /// had installed a new one: new source, old store's document. The
+    /// generation counter is the fence that makes that impossible.
+    state: Mutex<State>,
+}
+
+#[derive(Default)]
+struct State {
+    source: Option<Kind>,
+    fetched: Option<Fetched>,
+    /// Bumped on every source change. A fetch snapshots it before the network
+    /// round trip and commits only if it has not moved — a result from a
+    /// source that is no longer installed is discarded, never stored.
+    generation: u64,
 }
 
 /// `Arc` rather than `Box`: an async fetch borrows the source across an await
@@ -147,8 +175,11 @@ impl Remote {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            source: Mutex::new(None),
-            fetched: Mutex::new(None),
+            state: Mutex::new(State {
+                source: None,
+                fetched: None,
+                generation: 0,
+            }),
         }
     }
 
@@ -156,31 +187,43 @@ impl Remote {
     ///
     /// The document already fetched, if any, is dropped with it — a new source
     /// answering with an old store's values would be a puzzle nobody needs.
+    /// A fetch from the previous source that is still in flight is discarded
+    /// when it lands, for the same reason.
     pub fn set(&self, source: impl RemoteSource) {
-        *self.source_slot() = Some(Kind::Blocking(Arc::new(source)));
-        *self.fetched_slot() = None;
+        let mut state = self.state();
+        state.source = Some(Kind::Blocking(Arc::new(source)));
+        state.fetched = None;
+        state.generation = state.generation.wrapping_add(1);
     }
 
     /// Installs an async source, replacing any previous one.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub fn set_async(&self, source: impl AsyncRemoteSource) {
-        *self.source_slot() = Some(Kind::Asynchronous(Arc::new(source)));
-        *self.fetched_slot() = None;
+        let mut state = self.state();
+        state.source = Some(Kind::Asynchronous(Arc::new(source)));
+        state.fetched = None;
+        state.generation = state.generation.wrapping_add(1);
     }
 
     /// Fetches, and keeps what came back.
+    ///
+    /// The network round trip happens with no lock held: a slow store cannot
+    /// make `load()` — which reads this state for provenance — wait for it.
+    /// If the source is replaced while the fetch is in flight, the result is
+    /// discarded and `Ok` is returned: the fetch *did* succeed, and the new
+    /// source's own refresh is the one that matters now.
     ///
     /// # Errors
     ///
     /// If no source is installed, if the installed one is async — use
     /// [`refresh_async`](Self::refresh_async) — or if the fetch fails.
     pub fn refresh(&self) -> Result<(), Error> {
-        let fetched = {
-            let source = self.source_slot();
+        let (source, generation) = {
+            let state = self.state();
 
-            match source.as_ref() {
-                Some(Kind::Blocking(source)) => source.fetch()?,
+            match state.source.as_ref() {
+                Some(Kind::Blocking(source)) => (Arc::clone(source), state.generation),
 
                 #[cfg(feature = "async")]
                 Some(Kind::Asynchronous(source)) => {
@@ -197,33 +240,49 @@ impl Remote {
             }
         };
 
-        *self.fetched_slot() = Some(fetched);
+        let fetched = source.fetch()?;
+
+        self.commit(fetched, generation);
 
         Ok(())
     }
 
     /// Fetches from an async source, and keeps what came back.
     ///
+    /// A *blocking* source is not refused — swapping one implementation for
+    /// the other must not be a breaking change for the caller — but it is not
+    /// run on the executor either: it goes through
+    /// [`off_thread`](crate::off_thread), so an async caller's worker thread
+    /// never sits inside a blocking network call.
+    ///
+    /// The same replaced-mid-fetch rule as [`refresh`](Self::refresh)
+    /// applies, and matters more here: the unlocked window spans an await.
+    ///
     /// # Errors
     ///
-    /// If no source is installed, or the fetch fails. A *blocking* source is
-    /// run inline here rather than refused: it is already allowed to block, and
-    /// refusing would make swapping one implementation for the other a breaking
-    /// change for the caller.
+    /// If no source is installed, or the fetch fails.
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     pub async fn refresh_async(&self) -> Result<(), Error> {
         // Cloned out of the lock before anything is awaited: holding a `std`
         // mutex across an await point is how an executor deadlocks itself.
-        let source = self.source_slot().clone();
+        let (source, generation) = {
+            let state = self.state();
 
-        let fetched = match source {
-            Some(Kind::Blocking(source)) => source.fetch()?,
-            Some(Kind::Asynchronous(source)) => source.fetch().await?,
-            None => return Err(none_installed()),
+            match state.source.as_ref() {
+                Some(source) => (source.clone(), state.generation),
+                None => return Err(none_installed()),
+            }
         };
 
-        *self.fetched_slot() = Some(fetched);
+        let fetched = match source {
+            Kind::Blocking(source) => {
+                crate::asynchronous::off_thread(move || source.fetch()).await?
+            }
+            Kind::Asynchronous(source) => source.fetch().await?,
+        };
+
+        self.commit(fetched, generation);
 
         Ok(())
     }
@@ -234,24 +293,35 @@ impl Remote {
     /// store, and re-fetching it to learn what it just said would be silly.
     ///
     /// No source need be installed for this to work — a program that only ever
-    /// watches never has to configure one.
+    /// watches never has to configure one. A watch loop serving a source that
+    /// has since been replaced should be stopped with its
+    /// [`RemoteWatch`] — this call cannot tell one store's push from
+    /// another's.
     pub fn install(&self, document: Fetched) {
-        *self.fetched_slot() = Some(document);
+        self.state().fetched = Some(document);
     }
 
     /// The document last fetched, if any.
+    #[must_use]
     pub fn document(&self) -> Option<Fetched> {
-        self.fetched_slot().clone()
+        self.state().fetched.clone()
     }
 
     /// Whether a source is installed.
+    #[must_use]
     pub fn is_configured(&self) -> bool {
-        self.source_slot().is_some()
+        self.state().source.is_some()
     }
 
     /// How the installed source names itself.
+    #[must_use]
     pub fn describe(&self) -> Option<String> {
-        self.source_slot().as_ref().map(|source| match source {
+        // The lock is held only for the clone: `describe()` on the source runs
+        // unlocked, so a source whose description does real work cannot stall
+        // readers.
+        let source = self.state().source.clone()?;
+
+        Some(match source {
             Kind::Blocking(source) => source.describe(),
             #[cfg(feature = "async")]
             Kind::Asynchronous(source) => source.describe(),
@@ -260,17 +330,23 @@ impl Remote {
 
     /// Drops the document, so the next load sees no remote layer.
     pub fn clear(&self) {
-        *self.fetched_slot() = None;
+        self.state().fetched = None;
     }
 
-    fn source_slot(&self) -> std::sync::MutexGuard<'_, Option<Kind>> {
-        self.source
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    /// Stores a fetch result, unless the source changed while it was in
+    /// flight — then the result belongs to a store nobody asked about any
+    /// more, and storing it would pair the new source with the old store's
+    /// values.
+    fn commit(&self, fetched: Fetched, generation: u64) {
+        let mut state = self.state();
+
+        if state.generation == generation {
+            state.fetched = Some(fetched);
+        }
     }
 
-    fn fetched_slot(&self) -> std::sync::MutexGuard<'_, Option<Fetched>> {
-        self.fetched
+    fn state(&self) -> std::sync::MutexGuard<'_, State> {
+        self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -520,6 +596,129 @@ mod tests {
 
         assert!(error.to_string().contains("went away"), "{error}");
         assert_eq!(remote.document(), before);
+    }
+
+    /// Blocks inside `fetch` on a pair of barriers, so a test can hold a
+    /// fetch mid-flight while it does something else to the `Remote`.
+    struct Parked {
+        started: std::sync::Arc<std::sync::Barrier>,
+        release: std::sync::Arc<std::sync::Barrier>,
+    }
+
+    impl RemoteSource for Parked {
+        fn fetch(&self) -> Result<Fetched, Error> {
+            self.started.wait();
+            self.release.wait();
+
+            Fake(r#"{"db": {"host": "stale"}}"#).fetch()
+        }
+
+        fn describe(&self) -> String {
+            "a parked store".to_owned()
+        }
+    }
+
+    /// The race the generation fence exists for: a fetch from the *old*
+    /// source lands after `set` installed a new one. Its result must be
+    /// discarded — new source, old store's document is the state this
+    /// module's docs promise cannot happen.
+    #[test]
+    fn a_fetch_from_a_replaced_source_is_discarded() {
+        let started = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let release = std::sync::Arc::new(std::sync::Barrier::new(2));
+
+        let remote = std::sync::Arc::new(Remote::new());
+        remote.set(Parked {
+            started: std::sync::Arc::clone(&started),
+            release: std::sync::Arc::clone(&release),
+        });
+
+        let refresher = {
+            let remote = std::sync::Arc::clone(&remote);
+            std::thread::spawn(move || remote.refresh())
+        };
+
+        // The fetch is provably in flight...
+        started.wait();
+
+        // ...when the source is replaced.
+        remote.set(Fake(r#"{"db": {"host": "fresh"}}"#));
+
+        release.wait();
+        refresher
+            .join()
+            .expect("the refresher must not panic")
+            .expect("the fetch itself succeeded");
+
+        assert_eq!(
+            remote.document(),
+            None,
+            "the old source's document landed after the replacement and must \
+             not be paired with the new source"
+        );
+
+        // And the new source works normally.
+        remote.refresh().unwrap();
+        assert!(remote.document().unwrap().text.contains("fresh"));
+    }
+
+    /// Readers must not wait for a slow store: `document()` and `describe()`
+    /// are on the `load()` path, and `load()` promises to touch no network.
+    #[test]
+    fn readers_are_not_blocked_by_a_fetch_in_flight() {
+        let started = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let release = std::sync::Arc::new(std::sync::Barrier::new(2));
+
+        let remote = std::sync::Arc::new(Remote::new());
+        remote.set(Parked {
+            started: std::sync::Arc::clone(&started),
+            release: std::sync::Arc::clone(&release),
+        });
+
+        let refresher = {
+            let remote = std::sync::Arc::clone(&remote);
+            std::thread::spawn(move || remote.refresh())
+        };
+
+        started.wait();
+
+        // With the fetch parked, a reader thread must finish promptly. The
+        // old two-lock design held the source lock across the fetch, so
+        // `describe()` — and with it every `load()` — waited out the store's
+        // full timeout.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        {
+            let remote = std::sync::Arc::clone(&remote);
+            std::thread::spawn(move || {
+                let described = remote.describe();
+                let document = remote.document();
+                let _ = sender.send((described, document));
+            });
+        }
+
+        let (described, document) = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("readers must not wait for the network");
+
+        assert_eq!(described.as_deref(), Some("a parked store"));
+        assert_eq!(document, None);
+
+        release.wait();
+        let _ = refresher.join();
+    }
+
+    /// `set` clears the document atomically with the source swap: no
+    /// interleaving may observe the new source paired with any document.
+    #[test]
+    fn replacing_the_source_and_dropping_the_document_is_one_step() {
+        let remote = Remote::new();
+        remote.set(Fake(r#"{"db": {"host": "a"}}"#));
+        remote.refresh().unwrap();
+        remote.install(Fetched::new("{}", crate::Format::Json));
+
+        remote.set(Fake(r#"{"db": {"host": "b"}}"#));
+
+        assert_eq!(remote.document(), None);
     }
 
     #[test]

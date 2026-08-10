@@ -82,3 +82,111 @@ fn one_failure_leaves_every_member_where_it_was() {
 
     Healthy::clear_overrides();
 }
+
+/// A hook that panics mid-group must not stop the remaining members'
+/// snapshots from installing — a half-committed group is the exact state the
+/// type promises against.
+#[test]
+fn a_panicking_commit_does_not_interrupt_the_other_commits() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static COMMITTED: AtomicUsize = AtomicUsize::new(0);
+
+    struct Panicking;
+    struct Quiet;
+
+    impl dynamic_config::Reloadable for Panicking {
+        fn prepare() -> Result<dynamic_config::Commit, dynamic_config::Error> {
+            Ok(Box::new(|| {
+                COMMITTED.fetch_add(1, Ordering::SeqCst);
+                panic!("a bug in a reload hook, surfacing during commit");
+            }))
+        }
+
+        fn name() -> &'static str {
+            "Panicking"
+        }
+    }
+
+    impl dynamic_config::Reloadable for Quiet {
+        fn prepare() -> Result<dynamic_config::Commit, dynamic_config::Error> {
+            Ok(Box::new(|| {
+                COMMITTED.fetch_add(1, Ordering::SeqCst);
+            }))
+        }
+
+        fn name() -> &'static str {
+            "Quiet"
+        }
+    }
+
+    let group = dynamic_config::ReloadGroup::new()
+        .with::<Panicking>()
+        .with::<Quiet>();
+
+    group
+        .reload()
+        .expect("prepare succeeded for every member, so the reload reports Ok");
+
+    assert_eq!(
+        COMMITTED.load(Ordering::SeqCst),
+        2,
+        "the member after the panicking one must still commit"
+    );
+}
+
+/// Two threads reloading the same group must serialize: their commit loops
+/// interleaving is how member A ends up on thread 1's prepare and member B
+/// on thread 2's.
+#[test]
+fn concurrent_reloads_serialize() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+
+    static IN_COMMIT: AtomicUsize = AtomicUsize::new(0);
+    static OVERLAPS: AtomicUsize = AtomicUsize::new(0);
+
+    struct Slow;
+
+    impl dynamic_config::Reloadable for Slow {
+        fn prepare() -> Result<dynamic_config::Commit, dynamic_config::Error> {
+            Ok(Box::new(|| {
+                // If another thread's commit loop is running right now, the
+                // serialization failed.
+                if IN_COMMIT.fetch_add(1, Ordering::SeqCst) > 0 {
+                    OVERLAPS.fetch_add(1, Ordering::SeqCst);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                IN_COMMIT.fetch_sub(1, Ordering::SeqCst);
+            }))
+        }
+
+        fn name() -> &'static str {
+            "Slow"
+        }
+    }
+
+    let group = Arc::new(dynamic_config::ReloadGroup::new().with::<Slow>());
+
+    let barrier = Arc::new(Barrier::new(4));
+    let threads: Vec<_> = (0..4)
+        .map(|_| {
+            let group = Arc::clone(&group);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                group.reload().unwrap();
+            })
+        })
+        .collect();
+
+    for thread in threads {
+        thread.join().unwrap();
+    }
+
+    assert_eq!(
+        OVERLAPS.load(Ordering::SeqCst),
+        0,
+        "commit loops from different threads must never overlap"
+    );
+}

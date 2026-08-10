@@ -108,6 +108,12 @@ impl Registry {
     /// counting on every read — would cost more than the lookup it replaced.
     /// The leak is bounded by the number of monomorphizations, which is fixed
     /// at compile time.
+    ///
+    /// # Panics
+    ///
+    /// If one registry is used with two different `V` types for the same `K`
+    /// — the generated code never does this; hand-written callers must keep
+    /// one value type per registry.
     pub fn entry<K, V>(&self) -> &'static V
     where
         K: 'static,
@@ -126,7 +132,9 @@ impl Registry {
 
         // Missing: rebuild the table with the new slot in it. This happens once
         // per monomorphization, so copying a table with a handful of entries is
-        // cheaper than making every read pay for a lock.
+        // cheaper than making every read pay for a lock. A lost race leaks
+        // this one allocation — bounded by the same monomorphization count as
+        // the deliberate leak above, so it is a footnote, not a leak *rate*.
         let leaked: &'static V = Box::leak(Box::new(V::default()));
         let mut installed: Option<&'static (dyn Any + Send + Sync)> = None;
 

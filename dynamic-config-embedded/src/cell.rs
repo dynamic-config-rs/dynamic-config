@@ -30,14 +30,14 @@ use crate::{Format, Validate};
 /// The section is held for a clone of the value and nothing else. Keep the
 /// configuration struct small — which a device's configuration is — and that is
 /// a memcpy with interrupts off, measured in microseconds.
-pub struct ConfigCell<T> {
+pub struct ConfigCell<T, const WAITERS: usize = { crate::DEFAULT_WAITERS }> {
     inner: Mutex<RefCell<Option<T>>>,
     /// Bumped on every store. Zero means nothing has been stored yet.
     #[cfg(feature = "async")]
-    notify: crate::asynchronous::Notify,
+    notify: crate::asynchronous::Notify<WAITERS>,
 }
 
-impl<T> ConfigCell<T> {
+impl<T, const WAITERS: usize> ConfigCell<T, WAITERS> {
     /// An empty cell.
     #[must_use]
     pub const fn new() -> Self {
@@ -49,7 +49,7 @@ impl<T> ConfigCell<T> {
     }
 }
 
-impl<T: Clone> ConfigCell<T> {
+impl<T: Clone, const WAITERS: usize> ConfigCell<T, WAITERS> {
     /// Installs `value`, replacing whatever was there.
     ///
     /// For compiled-in defaults at start-up, and for anything that builds a
@@ -83,17 +83,17 @@ impl<T: Clone> ConfigCell<T> {
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
     #[must_use]
-    pub fn changes(&'static self) -> crate::Changes<T> {
+    pub fn changes(&'static self) -> crate::Changes<T, WAITERS> {
         crate::Changes::new(self)
     }
 
     #[cfg(feature = "async")]
-    pub(crate) fn notify(&self) -> &crate::asynchronous::Notify {
+    pub(crate) fn notify(&self) -> &crate::asynchronous::Notify<WAITERS> {
         &self.notify
     }
 }
 
-impl<T: Clone + DeserializeOwned + Validate> ConfigCell<T> {
+impl<T: Clone + DeserializeOwned + Validate, const WAITERS: usize> ConfigCell<T, WAITERS> {
     /// Parses `document` and installs it, if it is usable.
     ///
     /// Everything that can fail happens before anything is installed: a
@@ -128,7 +128,19 @@ fn parse<T: DeserializeOwned>(document: &[u8], format: Format) -> Result<T, Erro
     match format {
         #[cfg(feature = "json")]
         Format::Json => serde_json_core::from_slice::<T>(document)
-            .map(|(value, _consumed)| value)
+            .and_then(|(value, consumed)| {
+                // The document must be *all* of the buffer. On a device the
+                // bytes arrive over a link into a reused buffer, and a short
+                // write leaving the tail of a longer previous document — or
+                // two concatenated frames — parses cleanly as the first
+                // object. Installing a configuration nobody sent is exactly
+                // what "everything fallible happens before install" is for.
+                if consumed == document.len() {
+                    Ok(value)
+                } else {
+                    Err(serde_json_core::de::Error::TrailingCharacters)
+                }
+            })
             .map_err(|error| {
                 // `serde-json-core` distinguishes a malformed document from one
                 // that does not fit, and the difference is what a person
@@ -153,7 +165,7 @@ fn parse<T: DeserializeOwned>(document: &[u8], format: Format) -> Result<T, Erro
     }
 }
 
-impl<T> Default for ConfigCell<T> {
+impl<T, const WAITERS: usize> Default for ConfigCell<T, WAITERS> {
     fn default() -> Self {
         Self::new()
     }
@@ -199,7 +211,7 @@ mod tests {
 
     #[test]
     fn a_stored_value_comes_back() {
-        let cell = ConfigCell::new();
+        let cell: ConfigCell<Settings> = ConfigCell::new();
 
         cell.store(Settings {
             interval_ms: 1000,
@@ -212,7 +224,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn a_document_replaces_the_configuration() {
-        let cell = ConfigCell::new();
+        let cell: ConfigCell<Settings> = ConfigCell::new();
 
         cell.store(Settings {
             interval_ms: 1000,
@@ -234,7 +246,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn a_document_that_does_not_parse_leaves_the_previous_one_serving() {
-        let cell = ConfigCell::new();
+        let cell: ConfigCell<Settings> = ConfigCell::new();
 
         cell.store(Settings {
             interval_ms: 1000,
@@ -256,7 +268,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn a_document_that_fails_validation_is_refused_whole() {
-        let cell = ConfigCell::new();
+        let cell: ConfigCell<Settings> = ConfigCell::new();
 
         cell.store(Settings {
             interval_ms: 1000,
@@ -297,7 +309,7 @@ mod tests {
     fn debug_never_prints_the_configuration() {
         extern crate std;
 
-        let cell = ConfigCell::new();
+        let cell: ConfigCell<Settings> = ConfigCell::new();
 
         cell.store(Settings {
             interval_ms: 1234,

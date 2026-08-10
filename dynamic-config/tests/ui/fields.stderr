@@ -9,3 +9,15 @@ error: unknown option; the only one is `secret`
    |
 18 |     #[config(sercet)]
    |              ^^^^^^
+
+error: cannot find attribute `config` in this scope
+  --> tests/ui/fields.rs:18:7
+   |
+18 |     #[config(sercet)]
+   |       ^^^^^^
+
+error: cannot find attribute `config` in this scope
+  --> tests/ui/fields.rs:11:7
+   |
+11 |     #[config(secret)]
+   |       ^^^^^^

@@ -171,10 +171,11 @@ impl Provider for DotenvProvider {
                 continue;
             };
 
-            // The same rule the real environment layer follows: `FOO=` is unset
-            // unless asked otherwise, because a deployment template that
-            // renders an unset value leaves exactly that.
-            if text.is_empty() && !self.allow_empty {
+            // The same rule the real environment layer follows: `FOO=` — or
+            // `FOO="  "`, whitespace being how a template renders "nothing"
+            // just as often — is unset unless asked otherwise. One rule for
+            // all three env-shaped layers; the loader documents it once.
+            if text.trim().is_empty() && !self.allow_empty {
                 continue;
             }
 

@@ -141,3 +141,54 @@ fn a_bad_override_is_attributed_to_the_override_layer() {
 
     Attributed::clear_overrides();
 }
+
+/// `set_defaults(&struct)` seeds the whole defaults layer at once — and
+/// stays a *defaults* layer: a real file value still wins.
+#[test]
+fn a_defaults_struct_seeds_the_bottom_layer() {
+    use serde::{Deserialize, Serialize};
+
+    #[dynamic_config::dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+    #[derive(Debug, Deserialize, Serialize)]
+    struct StructDefaults {
+        host: String,
+        #[serde(default)]
+        greeting: String,
+    }
+
+    StructDefaults::set_defaults(&StructDefaults {
+        host: "fallback-host".to_owned(),
+        greeting: "hello".to_owned(),
+    })
+    .unwrap();
+
+    let loaded = StructDefaults::load();
+    StructDefaults::clear_defaults();
+
+    let loaded = loaded.expect("defaults fill what the file lacks");
+    assert_eq!(
+        loaded.host, "localhost",
+        "a real file value beats the defaults struct"
+    );
+    assert_eq!(
+        loaded.greeting, "hello",
+        "a field no file supplies comes from the struct"
+    );
+}
+
+/// A bare value has no field to live under, and is refused with a message
+/// that says so.
+#[test]
+fn a_non_map_defaults_value_is_refused() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+    #[derive(Debug, Deserialize)]
+    struct BareDefaults {
+        #[allow(dead_code)]
+        host: String,
+    }
+
+    let error = BareDefaults::set_defaults(&42u16).expect_err("a bare number is not defaults");
+    assert!(error.to_string().contains("struct or a map"), "{error}");
+}
