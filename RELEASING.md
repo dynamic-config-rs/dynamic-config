@@ -27,40 +27,42 @@ CI publishes it in the first wave alongside the macros.
 Work lands on `dev`. `main` is production: it accepts no direct pushes — not
 even from admins — only pull requests whose gates ("CI is green", "Security
 is green") have passed, merged with a linear history (squash or rebase).
-Releases are cut from `main`, by tag.
+
+**Merging a version bump into `main` is the release.** There is no tag to
+push by hand: `release.yml` runs on every push to `main`, checks whether the
+workspace version is new, and — only then — verifies (including
+`cargo semver-checks` against the published baseline), publishes in waves,
+and mints the tag and the GitHub release itself, at the merge commit.
 
 ```text
-feature work ──▶ dev ──(pull request, gates green)──▶ main ──(tag vX.Y.Z)──▶ crates.io
+feature work ──▶ dev ──(PR, gates green)──▶ main
+                                             │
+                             version unchanged: green no-op
+                             version new: verify ─▶ publish ─▶ tag + release
 ```
 
 ## Releasing
 
-`cargo release` prepares; CI publishes. The split is deliberate: a laptop cannot
-push to crates.io without the checks having run.
+`cargo release` prepares; the merge publishes. The split is deliberate: a
+laptop cannot reach crates.io at all, and nothing reaches it without the
+gates in front of it.
 
 ```sh
 cargo install cargo-release just
 
-# On a branch cut from main:
+# On dev (or a branch that lands there):
 cargo release patch --execute     # 0.0.1 -> 0.0.2: bump + changelogs + commit
 cargo release minor --execute     # 0.0.1 -> 0.1.0, which pre-1.0 is a break
+
+./scripts/promote.sh              # PR, gates, merge — the merge releases
+./scripts/watch-release.sh        # watch the run the merge set off
 ```
 
-That runs `just check`, bumps every crate, moves each `## [Unreleased]` section
-under a dated version heading, and commits — it does **not** push or tag,
-because `main` only takes pull requests. Open the PR, let the gates pass,
-merge, then tag the merge commit on `main`:
-
-```sh
-git checkout main && git pull
-git tag -a vX.Y.Z -m "dynamic-config X.Y.Z"
-git push origin vX.Y.Z
-```
-
-The tag is what starts [`release.yml`](.github/workflows/release.yml), which
-verifies the tag matches the manifest and the changelog names the version,
-then publishes in three waves. Tag pushes are not branch pushes, so branch
-protection does not stand in their way.
+`cargo release` runs `just check`, bumps every crate, moves each
+`## [Unreleased]` section under a dated version heading, and commits — it
+does **not** push or tag; that is CI's job, after publishing succeeded. A
+crates.io *rate limit* mid-publish just needs the window waited out and the
+job re-run — publishing is idempotent, already-uploaded crates are skipped.
 
 ### Before you run it
 

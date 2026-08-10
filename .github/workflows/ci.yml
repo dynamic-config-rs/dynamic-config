@@ -6,11 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-# One job cancels the previous run on the same branch. A pull request pushed
-# three times in a minute should not occupy three runners proving the same
-# thing about two obsolete commits.
+# Keyed on the *commit*, not the branch: a push to dev and the pull request
+# it sits under would otherwise run the whole pipeline twice for the same
+# SHA — one run cancels the other instead.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -338,7 +338,7 @@ jobs:
             --exclude '^https://github\.com/ctolon/'
             --exclude '^https://docs\.rs/dynamic-config'
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
-            AGENTS.md CHANGELOG.md docs/*.md
+            AGENTS.md CHANGELOG.md docs/*.md scripts/README.md
             dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
             .claude/skills/*/SKILL.md .github/ISSUE_TEMPLATE/*.md
           fail: true
@@ -366,6 +366,41 @@ jobs:
       # that no longer compile, and this crate makes no promise about the
       # oldest `trybuild` anyone could build its test suite with.
       - run: cargo +stable check -p dynamic-config --locked --all-features
+
+  coverage:
+    name: coverage report
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      # A report, not a gate: a threshold that fights refactoring teaches
+      # people to game the number. The trend lives in the job summaries; the
+      # lcov artifact feeds anything that wants detail.
+      - run: >
+          cargo llvm-cov --workspace --features full
+          --exclude dynamic-config-etcd --exclude dynamic-config-consul
+          --exclude dynamic-config-nats --exclude dynamic-config-vault
+          --exclude dynamic-config-redis --exclude dynamic-config-s3
+          --exclude dynamic-config-firestore --exclude dynamic-config-embedded
+          --lcov --output-path lcov.info
+      - name: summary
+        run: |
+          {
+            echo '## Coverage'
+            echo '```'
+            cargo llvm-cov report --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: lcov.info
+          retention-days: 14
 
   actionlint:
     name: workflows lint clean

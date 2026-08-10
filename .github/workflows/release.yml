@@ -1,18 +1,49 @@
 name: Release
 
-# Publishing is triggered by a tag, and the tag is the only thing that decides
-# what gets published. Anything else — a branch, a manual click with a version
-# box — makes "what is on crates.io" a question rather than a fact.
+# Releases are managed through the pull-request pipeline, not by hand-pushed
+# tags: merging a version-bump PR into `main` IS the release. Every push to
+# `main` lands here; the `decide` job checks whether the workspace version is
+# new, and everything downstream is skipped when it is not — so a docs merge
+# is a green no-op and a version bump is a release.
+#
+# The tag is an *output* of a successful publish, minted by CI at the merge
+# commit. Since `main` only accepts pull requests that passed the gates, a
+# release inherits the whole review pipeline by construction.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  decide:
+    name: is this a release?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "v$version is already tagged — nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$version is new — this push is a release."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     name: verify before publishing
+    needs: decide
+    if: needs.decide.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -20,36 +51,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      # The tag and the manifest have to agree. They diverge exactly once, on
-      # the release where somebody forgot, and then the registry has a version
-      # nothing in the repository names.
-      - name: the tag matches the workspace version
-        run: |
-          tagged="${GITHUB_REF_NAME#v}"
-          declared=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-
-          if [ "$tagged" != "$declared" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match workspace version $declared"
-            exit 1
-          fi
-
       - name: the changelog names this version
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-
-          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
-            echo "::error file=CHANGELOG.md::no section for $version"
+          if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::no section for $VERSION"
             exit 1
           fi
 
-      - run: cargo fmt --all -- --check
       # `etcd-client` compiles its gRPC stubs at build time and needs `protoc`.
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --all-features
       # The same excludes as ci.yml's test job: the container suites need
       # Docker images pulled and a long leash, and they gate merges to main —
-      # a tag build re-proving them adds an hour, not confidence. The embedded
-      # crate has its own features and no `full`.
+      # a release build re-proving them adds an hour, not confidence. The
+      # embedded crate has its own features and no `full`.
       - run: >
           cargo test --workspace --features full
           --exclude dynamic-config-etcd
@@ -62,9 +80,16 @@ jobs:
           --exclude dynamic-config-embedded
       - run: cargo test -p dynamic-config-embedded --features std,async
 
+      # The version bump keeps the semver promise it makes: compared against
+      # the baseline already on crates.io. Pre-1.0, a breaking change needs
+      # the minor bumped — this is the check that notices when it was not.
+      - uses: taiki-e/install-action@cargo-semver-checks
+      - run: cargo semver-checks --workspace
+
   publish:
     name: publish to crates.io
-    needs: verify
+    needs: [decide, verify]
+    if: needs.decide.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: crates-io
@@ -88,8 +113,8 @@ jobs:
       #
       # Idempotent on purpose: a version already on the registry is *skipped*,
       # not died on. crates.io versions are permanent, so after a partial
-      # failure the only way forward is a rerun that publishes the remainder —
-      # a pipeline that trips over its own earlier success cannot recover.
+      # failure — a rate limit, most likely — the only way forward is a rerun
+      # that publishes the remainder.
       - name: publish, in dependency order
         run: |
           publish() {
@@ -97,7 +122,7 @@ jobs:
             if out=$(cargo publish -p "$1" 2>&1); then
               echo "published $1"
             elif grep -qE "already (uploaded|exists)" <<<"$out"; then
-              echo "$1 v$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2) is already on the registry — skipped"
+              echo "$1 is already on the registry — skipped"
             else
               printf '%s\n' "$out"
               return 1
@@ -124,21 +149,34 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-  github-release:
-    name: GitHub release
-    needs: publish
+  tag-and-release:
+    name: tag and GitHub release
+    needs: [decide, publish]
+    if: needs.decide.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - name: notes from the changelog
-        run: |
-          version="${GITHUB_REF_NAME#v}"
 
+      # The tag marks what was actually published: it is minted only after
+      # every crate is on the registry, at the merge commit that did it.
+      - name: tag the release
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "dynamic-config $VERSION" "$GITHUB_SHA"
+          git push origin "v$VERSION"
+
+      - name: notes from the changelog
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
           # The section for this version, up to the next one.
-          awk -v v="$version" '
+          awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" { found = 1; next }
             found && /^## \[/      { exit }
             found                  { print }
@@ -146,6 +184,9 @@ jobs:
 
           echo "--- notes ---"
           cat release-notes.md
+
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: v${{ needs.decide.outputs.version }}
+          name: v${{ needs.decide.outputs.version }}
           body_path: release-notes.md

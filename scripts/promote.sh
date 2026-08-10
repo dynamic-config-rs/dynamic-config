@@ -54,3 +54,5 @@ git reset --hard origin/main
 git push --force-with-lease origin dev
 
 echo "── promoted. main is at $(git rev-parse --short origin/main)."
+echo "if this bumped the workspace version, the merge just started a release:"
+echo "  ./scripts/watch-release.sh"

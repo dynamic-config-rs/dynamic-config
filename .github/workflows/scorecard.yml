@@ -1,0 +1,49 @@
+name: Scorecard
+
+# OpenSSF Scorecard: the repository's own supply-chain posture — branch
+# protection, token permissions, pinned dependencies, dangerous workflow
+# patterns — scored and uploaded to code scanning, where a regression shows
+# up as an alert rather than a surprise.
+#
+# Runs on `dev` because Scorecard only publishes results from the *default*
+# branch, and `dev` is it here. The schedule keeps the score honest when the
+# repository is quiet.
+on:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: supply-chain posture
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # SARIF upload into code scanning.
+      security-events: write
+      # Signed publishing to the OpenSSF REST API (the public badge).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@v2.4.2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 30
+
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif

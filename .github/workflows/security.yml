@@ -12,9 +12,10 @@ on:
     - cron: "17 6 * * 1"
   workflow_dispatch:
 
-# A push during a run makes the older run's answer obsolete.
+# Keyed on the commit, like ci.yml: a dev push and its pull request must
+# not run the same checks twice for the same SHA.
 concurrency:
-  group: security-${{ github.workflow }}-${{ github.ref }}
+  group: security-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
