@@ -42,6 +42,8 @@ jobs:
           fi
 
       - run: cargo fmt --all -- --check
+      # `etcd-client` compiles its gRPC stubs at build time and needs `protoc`.
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - run: cargo clippy --workspace --all-targets --all-features
       # The same excludes as ci.yml's test job: the container suites need
       # Docker images pulled and a long leash, and they gate merges to main —

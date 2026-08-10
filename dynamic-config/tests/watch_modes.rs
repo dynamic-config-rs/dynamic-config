@@ -88,6 +88,10 @@ fn the_poll_backend_notices_an_edit() {
 /// config.json -> ..data/config.json
 /// ..data      -> ..2026_08_09_00_00_00
 /// ```
+///
+/// Gated like its only caller: symlinks are the mechanism under test, and
+/// `std::os::unix` does not exist on Windows.
+#[cfg(unix)]
 fn write_configmap(root: &Path, generation: &str, value: u32) {
     let payload = root.join(generation);
     fs::create_dir_all(&payload).unwrap();
