@@ -4,18 +4,19 @@ name: Security
 # its own as well as on every change. A dependency that was clean on Monday is
 # not necessarily clean on Friday, and nothing about this repository has to
 # change for that to happen.
+# No push trigger for `dev` — same reasoning as ci.yml: dev travels through
+# pull requests, and a push twin under required checks poisons the gate.
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
 
-# Keyed on the commit, like ci.yml: a dev push and its pull request must
-# not run the same checks twice for the same SHA.
+# A push during a run makes the older run's answer obsolete.
 concurrency:
-  group: security-${{ github.event.pull_request.head.sha || github.sha }}
+  group: security-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

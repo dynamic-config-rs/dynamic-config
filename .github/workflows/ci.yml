@@ -1,16 +1,22 @@
 name: CI
 
+# No push trigger for `dev`: everything on dev travels through a pull
+# request anyway, and a push run would twin the PR run on the same commit —
+# under *required* checks, a deduplicating cancellation poisons the gate
+# (a cancelled twin's "CI is green" reads as failure and blocks the merge).
+# `main` keeps its push trigger because a rebase-merge mints a new SHA that
+# no PR run ever checked.
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
-# Keyed on the *commit*, not the branch: a push to dev and the pull request
-# it sits under would otherwise run the whole pipeline twice for the same
-# SHA — one run cancels the other instead.
+# One run cancels the previous on the same ref: a pull request pushed three
+# times in a minute should not occupy three runners proving the same thing
+# about two obsolete commits.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
