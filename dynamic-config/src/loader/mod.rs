@@ -197,6 +197,12 @@ const LAYERS: &[LayerDef] = &[
 
 /// Assembles the providers for `spec`, in precedence order.
 fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    // Unconditional, not positional: a path-shaped profile must be rejected
+    // whether or not any layer that *uses* it is active — an env-only load
+    // with `profile_env` pointing at `../secrets` is exactly the load that
+    // must not wait for a file layer to notice.
+    sections::validated_profile(spec)?;
+
     let mut figment = Figment::new();
 
     for layer in LAYERS {
@@ -215,6 +221,10 @@ fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
 /// wires every runtime layer unconditionally, so `Some` alone would put an
 /// empty `flag` row in every table. Content decides, not wiring.
 pub(crate) fn layer_figments(spec: &LoadSpec<'_>) -> Result<Vec<(&'static str, Figment)>, Error> {
+    // The same unconditional guard as `build` — the two walk the same table
+    // and must refuse the same profiles.
+    sections::validated_profile(spec)?;
+
     LAYERS
         .iter()
         .filter(|layer| (layer.active)(spec))
@@ -288,19 +298,19 @@ fn merge_remote(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error>
 }
 
 fn merge_environment(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    if spec.strict_env {
-        if let Some(prefix) = spec.full_env_prefix() {
-            environment::reject_ambiguous(&prefix)?;
-        }
-    }
-
     match spec.full_env_prefix() {
-        Some(prefix) => Ok(figment.merge(environment(
-            &prefix,
-            spec.key,
-            spec.nest,
-            spec.allow_empty_env,
-        ))),
+        Some(prefix) => {
+            if spec.strict_env {
+                environment::reject_ambiguous(&prefix)?;
+            }
+
+            Ok(figment.merge(environment(
+                &prefix,
+                spec.key,
+                spec.nest,
+                spec.allow_empty_env,
+            )))
+        }
         None => Ok(figment),
     }
 }

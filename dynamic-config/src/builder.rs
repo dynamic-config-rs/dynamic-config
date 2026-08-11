@@ -402,6 +402,20 @@ impl<T: DeserializeOwned> Builder<T> {
             return;
         };
 
+        // The same refusal `init` makes, as a structural belt: every path
+        // that writes must hold it, not just the one that happens to run
+        // the check first — a file *marked* redacted with nothing redacted
+        // would be the quiet worst case.
+        if !matches!(mode, CacheMode::Full) && self.secrets.is_none() {
+            crate::log::warning!(
+                "{}: not writing the cache at {path}: a redaction-dependent \
+                 mode needs the generated builder's secret knowledge",
+                self.key
+            );
+
+            return;
+        }
+
         let secrets = self.secrets.clone().unwrap_or_default();
         let secret_refs: Vec<&str> = secrets.iter().map(String::as_str).collect();
 

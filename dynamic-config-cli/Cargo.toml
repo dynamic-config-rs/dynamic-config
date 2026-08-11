@@ -1,11 +1,12 @@
 [package]
 name = "dynamic-config-cli"
-version = "0.2.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+# Its own floor, not the workspace's 1.71: clap needs more than the core does.
 rust-version = "1.85"
-license = "MIT"
+license.workspace = true
 description = "Command-line diagnostics for dynamic-config: explain a value, diff two documents"
-repository = "https://github.com/ctolon/dynamic-config"
+repository.workspace = true
 # Not on crates.io yet: Experimental, shipped in-repo. The release pipeline's
 # publish waves do not know it, and `cargo package --workspace` skips it.
 publish = false
@@ -21,6 +22,7 @@ dynamic-config = { version = "=0.2.0", path = "../dynamic-config", features = [
     "yaml",
     "dotenv",
 ] }
-# The same floor the core declares: a higher requirement here would drag
-# the whole workspace's clap past the core's 1.71 MSRV row.
+# clap at the same *requirement* floor the core declares (`^4.4`), not a
+# statement about this crate's rust-version: a `^4.5` here would unify the
+# whole workspace's clap to 4.5, whose MSRV breaks the core's 1.71 row.
 clap = { version = "4.4", features = ["derive"] }

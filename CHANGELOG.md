@@ -59,8 +59,9 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 ### Added
 
 - `explain(path)` — every configured layer's answer for one path, not just
-  the winner's, rendered as a table; the one diagnostic that shows values,
-  and `#[config(secret)]` fields stay `***`. Generated on every config type
+  the winner's, rendered as a table; the one diagnostic that shows values —
+  through `Display`, deliberately: its `Debug` is value-free — and
+  `#[config(secret)]` fields stay `***`. Generated on every config type
   and available as `dynamic_config::explain` without the macro.
 - `Snapshot::source_of(path)` — snapshots now carry the provenance of their
   own leaves, captured at resolution time; the free `source_of()` keeps its
@@ -70,7 +71,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 - `strict_env` (`.strict_env()` on the builder, `with_strict_env` on
   `LoadSpec`): the yes/no/on/off family in an environment value (or a
   `.env` file) becomes an error naming the variable, instead of arriving as
-  a string where a boolean was meant. Loose parsing stays the default.
+  a string where a boolean was meant — and the refusal holds on the cache
+  recovery path too. Loose parsing stays the default.
 - `Builder<T>`: runtime-chosen sources with the attribute's semantics —
   `Builder::new("db").file(path).env("APP_").load()`, no macro required. On
   a `#[dynamic_config]` type the generated `builder()` adds `init()`, which
@@ -78,9 +80,10 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   source-side parity with the attribute: `discover(name, paths)`,
   `cache(path, mode)` with last-known-good recovery (redaction-dependent
   modes are refused unless the generated `builder()` supplies the secret
-  fields), `watch(debounce)` through the same one-watcher-per-type registry,
-  and `load_async`/`init_async` under the `async` feature. The attribute's
-  arguments are unchanged; their deprecation is scheduled, not begun.
+  fields — and `Fingerprint` never recovers, even from a value-bearing
+  file an earlier deployment left at the same path), `watch(debounce)`
+  through the same one-watcher-per-type registry, and
+  `load_async`/`init_async` under the `async` feature.
 - Reload observability: under `tracing`, every watcher reload is a
   `config_reload` span with outcome and duration; the stderr lines carry
   the duration without it. `changed_paths(old, new)` names what moved

@@ -369,3 +369,30 @@ fn a_redacted_explanation_leaks_through_no_surface() {
         .iter()
         .all(|row| row.value.as_deref() != Some("hunter2-doors")));
 }
+
+/// The profile guard is unconditional, not positional: an env-only load —
+/// no files, no discovery — must still refuse a path-shaped profile.
+#[test]
+fn an_env_only_load_still_validates_the_profile() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct EnvOnly {
+        #[allow(dead_code)]
+        #[serde(default)]
+        host: String,
+    }
+
+    std::env::set_var("DCSECPROFILE_ENV", "../secrets");
+
+    let error = EnvOnly::builder("svc")
+        .env("DCSECPROFILE_")
+        .profile_env("DCSECPROFILE_ENV")
+        .load()
+        .expect_err("a traversal-shaped profile must be refused with no file layer active");
+
+    std::env::remove_var("DCSECPROFILE_ENV");
+
+    assert!(error.to_string().contains("DCSECPROFILE_ENV"), "{error}");
+}
