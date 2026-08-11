@@ -21,4 +21,6 @@ dynamic-config = { version = "=0.2.0", path = "../dynamic-config", features = [
     "yaml",
     "dotenv",
 ] }
-clap = { version = "4.5", features = ["derive"] }
+# The same floor the core declares: a higher requirement here would drag
+# the whole workspace's clap past the core's 1.71 MSRV row.
+clap = { version = "4.4", features = ["derive"] }
