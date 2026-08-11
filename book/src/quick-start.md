@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.1.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.2.0", features = ["toml", "watch"] }
 ```
 
 The attribute declares — *this type is a configuration* — and generates its
