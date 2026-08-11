@@ -1,0 +1,35 @@
+# Changelog
+
+All notable changes to `dynamic-config-cli` are documented here. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
+project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The crate is Experimental and ships in-repo, not on crates.io; it is
+versioned with the workspace all the same, so this file says what changed
+when.
+
+<!-- Keep this template. Add entries under `Unreleased` as you go, and move
+     the whole block under a new version heading at release time.
+     (Spelled `_Unreleased_` here so cargo-release's `exactly = 1` search
+     for the real heading matches only the real heading.)
+
+## [_Unreleased_]
+
+### Added
+### Changed
+### Deprecated
+### Removed
+### Fixed
+### Security
+
+-->
+
+## [Unreleased]
+
+### Added
+
+- The crate: `explain` (every layer's answer for one path, values shown,
+  `--secret` to mask) and `diff` (path-only difference between two
+  documents) from a shell, the load restated as flags.
+
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...HEAD
