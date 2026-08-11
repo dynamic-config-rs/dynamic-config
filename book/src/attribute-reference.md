@@ -135,7 +135,7 @@ sources — useful before anything is installed, or on a bare
 | `source_of(path)` / `is_set(path)` | | Which layer supplies a key, and whether anything does. |
 | `snapshot()` | | The resolved section, without deserializing. |
 | `check()` | | The full report: every key's provenance, unknown keys, whether a load would succeed. |
-| `explain(path)` | | Every layer's answer for one path. Unlike the generated `explain`, a bare builder does not know which fields are secret — redact accordingly. |
+| `explain(path)` | | Every layer's answer for one path. A generated `builder()` knows the secret fields and hands their paths back already `***`; a bare `Builder::new` does not — redact accordingly. |
 | `schema()` | `schema` | A JSON Schema for the file this section lives in, with `#[config(secret)]` fields marked `writeOnly`. Needs `T: JsonSchema`. |
 
 ### What only the generated builder can do

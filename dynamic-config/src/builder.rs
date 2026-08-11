@@ -557,11 +557,30 @@ impl<T: DeserializeOwned> Builder<T> {
 
     /// Explains `path` against this builder's sources; see [`crate::explain`].
     ///
+    /// A builder that knows which fields are secret — every generated
+    /// `builder()` does — hands back a path under one of them already
+    /// redacted, the same as the type-level `explain`. A bare
+    /// [`Builder::new`] knows no secrets and redacts nothing; pass the
+    /// result through [`Explanation::redacted`](crate::Explanation::redacted)
+    /// for a path you know to be sensitive.
+    ///
     /// # Errors
     ///
     /// The same failures as [`load`](Self::load).
     pub fn explain(&self, path: &str) -> Result<crate::Explanation, Error> {
-        self.with_spec(|spec| crate::explain::explain(spec, path))
+        let explanation = self.with_spec(|spec| crate::explain::explain(spec, path))?;
+
+        // The same head-of-path check as the generated method: secrets are
+        // field names, and every path under one is the secret's.
+        if let Some(secrets) = &self.secrets {
+            let head = path.split('.').next().unwrap_or(path);
+
+            if secrets.iter().any(|secret| secret == head) {
+                return Ok(explanation.redacted());
+            }
+        }
+
+        Ok(explanation)
     }
 
     /// The generated `builder()`: the struct's field names, for unknown-key

@@ -396,3 +396,48 @@ fn an_env_only_load_still_validates_the_profile() {
 
     assert!(error.to_string().contains("DCSECPROFILE_ENV"), "{error}");
 }
+
+/// Every door to `explain` redacts when the secrets are known — the
+/// generated builder handle included, not just the type-level method.
+#[test]
+fn the_generated_builders_explain_redacts_too() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Deserialize)]
+    struct BuilderExplain {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/security-builder-explain.json",
+        r#"{"db": {"host": "localhost", "token": "hunter2-builder-door"}}"#,
+    )
+    .unwrap();
+
+    let explanation = BuilderExplain::builder("db")
+        .file("tests/scratch/security-builder-explain.json")
+        .explain("token")
+        .expect("the source reads cleanly");
+
+    assert!(
+        !explanation.to_string().contains("hunter2-builder-door"),
+        "{explanation}"
+    );
+    assert!(explanation
+        .rows()
+        .iter()
+        .all(|row| row.value.as_deref() != Some("hunter2-builder-door")));
+
+    // The non-secret neighbour still explains with its value visible.
+    let host = BuilderExplain::builder("db")
+        .file("tests/scratch/security-builder-explain.json")
+        .explain("host")
+        .expect("the source reads cleanly");
+    assert!(host.to_string().contains("localhost"), "{host}");
+}
