@@ -1,6 +1,6 @@
 [package]
 name = "dynamic-config-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
@@ -15,7 +15,7 @@ name = "dynamic-config"
 path = "src/main.rs"
 
 [dependencies]
-dynamic-config = { version = "=0.1.0", path = "../dynamic-config", features = [
+dynamic-config = { version = "=0.2.0", path = "../dynamic-config", features = [
     "json",
     "toml",
     "yaml",

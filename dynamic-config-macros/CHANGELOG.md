@@ -25,6 +25,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-11
+
 ### Breaking
 
 - The attribute takes no arguments; the error for any argument is a
@@ -76,6 +78,6 @@ Initial release.
 - Compile-fail suites (`trybuild`) pinning the diagnostics, including the
   ones that only exist when a feature is off.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...HEAD
 [0.1.0]: https://github.com/ctolon/dynamic-config/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/ctolon/dynamic-config/releases/tag/v0.0.1

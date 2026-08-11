@@ -26,10 +26,12 @@ when.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-11
+
 ### Added
 
 - The crate: `explain` (every layer's answer for one path, values shown,
   `--secret` to mask) and `diff` (path-only difference between two
   documents) from a shell, the load restated as flags.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...HEAD

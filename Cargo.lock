@@ -1823,7 +1823,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "dynamic-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "actix-web",
  "age",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "dynamic-config",
@@ -1860,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-consul"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "dynamic-config",
@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-embedded"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "critical-section",
  "serde",
@@ -1882,7 +1882,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-etcd"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dynamic-config",
  "etcd-client",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-firestore"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dynamic-config",
  "serde",
@@ -1904,7 +1904,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1913,7 +1913,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-nats"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-nats",
  "dynamic-config",
@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-redis"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dynamic-config",
  "redis",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-s3"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
@@ -1950,7 +1950,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-vault"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dynamic-config",
  "serde",
