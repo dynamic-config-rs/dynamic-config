@@ -75,7 +75,7 @@ argument to opt in with; an unused method costs nothing.
 | `snapshot() -> Result<Snapshot, Error>` | | Resolve without deserializing, for keys with no field. |
 | `check() -> Result<Report, Error>` | | What the configuration resolves to, and whether it would load — works when the load fails, which is when it is worth running. |
 | `explain(path) -> Result<Explanation, Error>` | | Every layer's answer for one path, values included — secret fields come back already `***`. |
-| `set_remote(source)` / `refresh_remote()` / `apply_remote(document)` / `clear_remote()` | | Install a remote store, fetch from it explicitly, push a watched document through the reload path, drop what it gave. |
+| `set_remote(source)` / `refresh_remote()` / `remote_sink()` / `clear_remote()` | | Install a remote store, fetch from it explicitly, take the fenced sink a watch loop pushes through, drop what it gave. |
 | `bind_clap(matches, bindings)` | `clap` | Copy named clap arguments into the flags layer — only ones that really came from the command line. |
 | `load_async()` / `init_async()` | `async` | The remembered builder's load and init, off the async executor. |
 | `changes()` | `async` | A handle woken by every later reload; a `Future`, so any executor drives it. |

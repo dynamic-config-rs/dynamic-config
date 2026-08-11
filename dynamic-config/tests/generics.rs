@@ -190,11 +190,12 @@ fn a_pushed_document_lands_in_one_instantiation_only() {
         .init()
         .expect("the fixture is complete");
 
-    Watched::<Primary>::apply_remote(Fetched::new(
-        r#"{"db": {"host": "primary.internal"}}"#,
-        Format::Json,
-    ))
-    .expect("the document merges over the file");
+    Watched::<Primary>::remote_sink()
+        .apply(Fetched::new(
+            r#"{"db": {"host": "primary.internal"}}"#,
+            Format::Json,
+        ))
+        .expect("the document merges over the file");
 
     assert_eq!(Watched::<Primary>::current().host, "primary.internal");
     assert_eq!(

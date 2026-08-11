@@ -106,6 +106,14 @@ tempfile = "3"
 # dev-dependency, so it never touches the MSRV story — the floor jobs are
 # `cargo check` without tests.
 proptest = "1"
+trybuild = "1.0"
+
+# The runtimes and web frameworks the examples exercise, kept out of loom
+# builds: `--cfg loom` applies to every crate in the graph, and tokio (and
+# the executors built on it or on `event-listener`) have their own loom
+# wiring that a plain flag does not satisfy. The loom job builds only the
+# `loom` test target, which touches none of these.
+[target.'cfg(not(loom))'.dev-dependencies]
 # The two web-framework examples. Dev-dependencies, so nothing a user of this
 # crate depends on.
 axum = "0.8"
@@ -118,7 +126,6 @@ embassy-executor = { version = "0.10", features = [
 ] }
 embassy-futures = "0.1"
 static_cell = "2.1"
-trybuild = "1.0"
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "time", "sync"] }
 
 [package.metadata.docs.rs]
@@ -240,3 +247,14 @@ required-features = ["json"]
 [[example]]
 name = "last_known_good"
 required-features = ["json"]
+
+# `--cfg loom` builds swap std::sync for loom's mirror (src/sync.rs); the
+# cfg is declared here so stable builds do not warn about it.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(loom)"] }
+
+# A real dependency, not a dev one: the library itself swaps its primitives
+# under `--cfg loom`, and dev-dependencies are invisible to it. Inert in
+# every build that does not pass the cfg.
+[target.'cfg(loom)'.dependencies]
+loom = { version = "0.7", features = ["futures"] }

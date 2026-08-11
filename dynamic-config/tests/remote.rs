@@ -228,7 +228,7 @@ mod watching {
             RELOADS.fetch_add(1, Ordering::SeqCst);
         });
 
-        // `apply_remote` reloads through the builder the type was configured
+        // `remote_sink().apply(..)` reloads through the builder the type was configured
         // with, so the `init` below is what gives the push somewhere to land.
         Pushed::builder("db")
             .file("tests/fixtures/base.json")
@@ -240,7 +240,8 @@ mod watching {
             "the file's value, to begin with"
         );
 
-        Pushed::apply_remote(Fetched::new(r#"{"db": {"port": 9100}}"#, Format::Json))
+        Pushed::remote_sink()
+            .apply(Fetched::new(r#"{"db": {"port": 9100}}"#, Format::Json))
             .expect("the document merges over the file");
 
         assert_eq!(Pushed::current().port, 9100);
@@ -281,11 +282,12 @@ mod watching {
     fn a_document_that_does_not_fit_leaves_the_snapshot_alone() {
         rejecting_builder().init().expect("the file is fine");
 
-        let failure = Rejecting::apply_remote(Fetched::new(
-            r#"{"db": {"port": "not a number"}}"#,
-            Format::Json,
-        ))
-        .expect_err("the store is pushing something this program cannot use");
+        let failure = Rejecting::remote_sink()
+            .apply(Fetched::new(
+                r#"{"db": {"port": "not a number"}}"#,
+                Format::Json,
+            ))
+            .expect_err("the store is pushing something this program cannot use");
 
         assert_eq!(failure.kind(), dynamic_config::ErrorKind::Type);
         assert_eq!(
@@ -437,4 +439,81 @@ mod fileless {
         initialized.expect("and the environment still layers over it");
         assert_eq!(NoFiles::current().host, "from-the-machine");
     }
+}
+
+/// The push-side fence: a sink taken for one source refuses to deliver
+/// after that source is replaced — by construction, not by a request in
+/// the documentation to please stop the loop first.
+#[test]
+fn a_stale_sink_cannot_overwrite_the_store_that_followed_it() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Fenced {
+        greeting: String,
+    }
+
+    struct StoreA;
+    impl dynamic_config::RemoteSource for StoreA {
+        fn describe(&self) -> String {
+            "store A".to_owned()
+        }
+
+        fn fetch(&self) -> Result<dynamic_config::Fetched, dynamic_config::Error> {
+            Ok(dynamic_config::Fetched::new(
+                r#"{"svc": {"greeting": "from A"}}"#,
+                dynamic_config::Format::Json,
+            ))
+        }
+    }
+
+    struct StoreB;
+    impl dynamic_config::RemoteSource for StoreB {
+        fn describe(&self) -> String {
+            "store B".to_owned()
+        }
+
+        fn fetch(&self) -> Result<dynamic_config::Fetched, dynamic_config::Error> {
+            Ok(dynamic_config::Fetched::new(
+                r#"{"svc": {"greeting": "from B"}}"#,
+                dynamic_config::Format::Json,
+            ))
+        }
+    }
+
+    Fenced::set_remote(StoreA);
+    Fenced::refresh_remote().expect("store A answers");
+    Fenced::builder("svc")
+        .init()
+        .expect("the document is complete");
+
+    // The wiring moment: this sink belongs to store A.
+    let stale = Fenced::remote_sink();
+
+    // The operator switches stores; A's loop has not noticed yet.
+    Fenced::set_remote(StoreB);
+    Fenced::refresh_remote().expect("store B answers");
+    let fresh = Fenced::remote_sink();
+    fresh
+        .apply(dynamic_config::Fetched::new(
+            r#"{"svc": {"greeting": "B pushed"}}"#,
+            dynamic_config::Format::Json,
+        ))
+        .expect("the current store's sink delivers");
+
+    // A's last in-flight delivery arrives late — and bounces.
+    let error = stale
+        .apply(dynamic_config::Fetched::new(
+            r#"{"svc": {"greeting": "A pushed after replacement"}}"#,
+            dynamic_config::Format::Json,
+        ))
+        .expect_err("a replaced source's sink must refuse");
+
+    assert!(error.to_string().contains("replaced"), "{error}");
+    assert_eq!(
+        Fenced::current().greeting,
+        "B pushed",
+        "the stale push must not have landed"
+    );
 }

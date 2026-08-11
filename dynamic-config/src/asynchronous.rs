@@ -16,8 +16,10 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
+
+use crate::sync::atomic::{AtomicU64, Ordering};
+use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::error::{Error, ErrorKind};
@@ -30,26 +32,37 @@ use crate::error::{Error, ErrorKind};
 ///
 /// Const-constructible, so it lives inside a `ConfigCell` in a `static`.
 #[derive(Debug)]
-pub(crate) struct Notify {
+pub struct Notify {
     /// Bumped on every store. Zero means nothing has been stored yet.
     generation: AtomicU64,
     waiting: Mutex<Vec<Waker>>,
 }
 
 impl Notify {
-    pub(crate) const fn new() -> Self {
+    #[cfg(not(loom))]
+    pub const fn new() -> Self {
         Self {
             generation: AtomicU64::new(0),
             waiting: Mutex::new(Vec::new()),
         }
     }
 
-    pub(crate) fn generation(&self) -> u64 {
+    /// The same, minus `const`: loom's constructors are not.
+    #[cfg(loom)]
+    pub fn new() -> Self {
+        Self {
+            generation: AtomicU64::new(0),
+            waiting: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// The current change counter — each bump is one reload observed.
+    pub fn generation(&self) -> u64 {
         self.generation.load(Ordering::Acquire)
     }
 
     /// Records a new snapshot and wakes everything waiting.
-    pub(crate) fn bump(&self) {
+    pub fn bump(&self) {
         self.generation.fetch_add(1, Ordering::Release);
 
         let woken = {
@@ -65,6 +78,43 @@ impl Notify {
         }
     }
 
+    /// The whole wait step: has the generation moved past `seen`, and did
+    /// `load` produce the value it implies?
+    ///
+    /// Check, register, check again — a bump landing between the first
+    /// check and the registration would otherwise be a wake-up nobody
+    /// receives. This is the one copy of that protocol; `Changes` polls
+    /// through it, and the loom suite drives exactly this function.
+    pub fn poll_with<T>(
+        &self,
+        seen: &mut u64,
+        waker: &Waker,
+        mut load: impl FnMut() -> Option<T>,
+    ) -> std::task::Poll<T> {
+        let mut attempt = |seen: &mut u64| -> Option<T> {
+            let current = self.generation();
+
+            if current == *seen {
+                return None;
+            }
+
+            *seen = current;
+
+            load()
+        };
+
+        if let Some(value) = attempt(seen) {
+            return std::task::Poll::Ready(value);
+        }
+
+        self.register(waker);
+
+        match attempt(seen) {
+            Some(value) => std::task::Poll::Ready(value),
+            None => std::task::Poll::Pending,
+        }
+    }
+
     fn register(&self, waker: &Waker) {
         let mut waiting = self.lock();
 
@@ -75,7 +125,7 @@ impl Notify {
         waiting.push(waker.clone());
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<Waker>> {
+    fn lock(&self) -> crate::sync::MutexGuard<'_, Vec<Waker>> {
         self.waiting
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -154,34 +204,13 @@ impl<T: Send + Sync + 'static> Future for Changed<'_, T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Arc<T>> {
         let changes = &mut self.get_mut().changes;
-        let notify = changes.cell.notify();
+        let cell = changes.cell;
+        let notify = cell.notify();
 
-        if let Some(value) = take(changes, notify) {
-            return Poll::Ready(value);
-        }
-
-        notify.register(context.waker());
-
-        // Checked again after registering: a store between the first check and
-        // the registration would otherwise be a wake-up nobody receives.
-        match take(changes, notify) {
-            Some(value) => Poll::Ready(value),
-            None => Poll::Pending,
-        }
+        // The check-register-check protocol lives in `poll_with`; the load
+        // closure supplies the value a moved generation implies.
+        notify.poll_with(&mut changes.seen, context.waker(), || cell.load())
     }
-}
-
-fn take<T: Send + Sync + 'static>(changes: &mut Changes<T>, notify: &Notify) -> Option<Arc<T>> {
-    let current = notify.generation();
-
-    if current == changes.seen {
-        return None;
-    }
-
-    changes.seen = current;
-
-    // A non-zero generation means `store` ran, so there is a value.
-    changes.cell.load()
 }
 
 // ---------------------------------------------------------------------------

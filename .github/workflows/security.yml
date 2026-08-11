@@ -60,6 +60,12 @@ jobs:
               exit 1
             fi
           done
+          # The CLI is a binary: its root is main.rs, so it gets its own line
+          # rather than a silent exemption from the loop above.
+          if ! grep -q '#!\[forbid(unsafe_code)\]' dynamic-config-cli/src/main.rs; then
+            echo "::error file=dynamic-config-cli/src/main.rs::missing #![forbid(unsafe_code)]"
+            exit 1
+          fi
 
   secrets-in-diagnostics:
     name: secrets stay out of diagnostics

@@ -38,6 +38,13 @@ mocks:
     cargo test -p dynamic-config-vault --test mock_vault
     cargo test -p dynamic-config-firestore --test mock_firestore
 
+# The loom models: every interleaving of the remote fence and the wake
+# protocol, on the real code (`src/sync.rs` swaps the primitives). Only the
+# `loom` test target builds under `--cfg loom` — the runtimes the examples
+# use have their own loom wiring the flag alone does not satisfy.
+loom:
+    RUSTFLAGS="--cfg loom" cargo test -p dynamic-config --no-default-features --features json,async --test loom --release
+
 # Documentation, with the badges docs.rs renders. Needs a nightly toolchain
 # (`rustup toolchain install nightly`), the same way docs.rs builds it.
 docs:

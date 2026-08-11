@@ -67,7 +67,21 @@ pub struct ConfigCell<T> {
 impl<T> ConfigCell<T> {
     /// An empty cell.
     #[must_use]
+    #[cfg(not(loom))]
     pub const fn new() -> Self {
+        Self {
+            inner: OnceLock::new(),
+            hooks: OnceLock::new(),
+            next_token: std::sync::atomic::AtomicU64::new(0),
+            #[cfg(feature = "async")]
+            notify: crate::asynchronous::Notify::new(),
+        }
+    }
+
+    /// The same, minus `const`: loom's constructors are not.
+    #[must_use]
+    #[cfg(loom)]
+    pub fn new() -> Self {
         Self {
             inner: OnceLock::new(),
             hooks: OnceLock::new(),

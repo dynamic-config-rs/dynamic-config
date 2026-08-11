@@ -163,15 +163,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// A real watch loop lives in the companion crate — `Etcd::watch`,
 /// `Consul::watch` and the rest — and it does exactly what this loop does:
-/// hand each document to `apply_remote` and let the crate do the rest.
+/// take one sink at wiring time and hand it each document.
 fn watching() -> Result<(), Box<dyn std::error::Error>> {
     use dynamic_config::RemoteWatch;
 
     println!("\n--- watching ---\n");
 
-    // `apply_remote` reloads through the configuration this `init` remembers,
-    // so the builder step comes first.
+    // The sink reloads through the configuration this `init` remembers, so
+    // the builder step comes first — and the sink is taken *here*, at wiring:
+    // it carries the identity of the source installed now, which is exactly
+    // what lets it refuse a push after the source is replaced.
     sources().init()?;
+    let sink = ServerConfig::remote_sink();
 
     ServerConfig::on_reload(|previous, current| {
         println!("  hook: port {} -> {}", previous.port, current.port);
@@ -194,7 +197,7 @@ fn watching() -> Result<(), Box<dyn std::error::Error>> {
 
             // Everything a file edit would do happens here: validation, the
             // reload hooks, the cache.
-            if let Err(error) = ServerConfig::apply_remote(document) {
+            if let Err(error) = sink.apply(document) {
                 println!("  loop: the store pushed something unusable: {error}");
             }
 

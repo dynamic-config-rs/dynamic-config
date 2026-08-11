@@ -70,7 +70,7 @@ list stops being a list.
 ```text
 #[dynamic_config]                  expand/ generates the type's storage, accessors
         ↓                          and `builder(key)` — the attribute takes no arguments
-Builder                            builder.rs — files, env, discovery, cache, validate,
+Builder                            builder/ — files, env, discovery, cache, validate,
         ↓                          chosen at runtime; funnels into one `LoadSpec`
 LoadSpec                           source.rs — which sources, which section, which prefix
         ↓
@@ -90,14 +90,14 @@ Config::current()                  an atomic load. No lock, no parse, no allocat
 #### `lib.rs` — the front door
 
 Crate documentation, re-exports, and `load()`. The hidden `__`-prefixed
-`macro_rules!` the generated code calls live next door in `redirects.rs` —
+`macro_rules!` the generated code calls live next door in `redirects/` —
 `#[macro_export]` roots them at the crate top regardless of module, so they
 could move out of the front page. Three remain, all item-level
 (`__async_methods!`, `__async_remote_methods!`, `__clap_methods!`), for
 methods whose *signatures* name a feature-gated type: a signature cannot
 hide behind an expression-level `compile_error!`, and a `cfg` emitted into
 generated code would be evaluated against the user's features instead of
-ours. The expression-level redirects the attribute's source arguments once
+ours. One family per file: `clap.rs` and `asynchronous.rs`. The expression-level redirects the attribute's source arguments once
 needed are gone with the arguments — a format, `.env` file or encrypted
 source whose feature is off is a *load-time* error naming the feature now,
 because the path it arrives on is runtime data.
@@ -106,18 +106,21 @@ Still in `lib.rs` itself: the logging helpers `__log_remote_*` — those are
 *functions*, reached by path, so unlike an exported macro they must stay
 somewhere `pub`-reachable from the root.
 
-#### `builder.rs` — where a configuration is stated
+#### `builder/` — where a configuration is stated
 
-`Builder<T>`: the runtime half of the attribute split. Sources (`file`,
-`discover`, `env` and its knobs, `env_file`, `profile_env`), the cache, the
-`validate` hook — then `load`/`init`/`reload`/`prepare`, `watch`/
-`watch_with`, the async variants, and the diagnostics (`explain`,
-`source_of`, `is_set`, `snapshot`, `check`, `schema`). Everything funnels
-through one private `with_spec`, so the builder cannot drift from the
-`LoadSpec` semantics. `Configured<T>` remembers the builder at a successful
-`init`, which is how the generated type-level diagnostics answer for the
-running configuration. Recovery from the last-known-good cache lives here
-too (`recover`), in `init` rather than `load` — `load` stays pure.
+`Builder<T>`: the runtime half of the attribute split. `mod.rs` holds the
+struct, the fluent surface (`file`, `discover`, `env` and its knobs,
+`env_file`, `profile_env`, the cache, the `validate` hook) and the one
+private `with_spec` funnel, so the builder cannot drift from the
+`LoadSpec` semantics. `lifecycle.rs` is everything that commits —
+`load`/`init`/`reload`/`prepare`, the async variants, and recovery from
+the last-known-good cache (`recover`), in `init` rather than `load`
+because `load` stays pure. `diagnostics.rs` answers without installing
+(`explain`, `source_of`, `is_set`, `snapshot`, `check`, `schema`);
+`watching.rs` starts the file watcher through this builder; and
+`configured.rs` is `Configured<T>`, which remembers the builder at a
+successful `init` — how the generated type-level diagnostics answer for
+the running configuration.
 
 #### `source.rs` — what to read
 
@@ -216,12 +219,17 @@ Three modes — `full`, `redacted`, `fingerprint` — because what lands on disk
 a trade-off with no single right answer. Recovery reads no files: the files are
 what broke.
 
-#### `watch.rs` — the file watcher
+#### `watch/` — the file watcher
 
 Watches *directories*, not files: editors and `mv`-based saves replace the
-inode, which silently detaches a file-level watch. `is_mount_marker` is what
-makes a Kubernetes ConfigMap update visible — the kubelet swings a `..data`
-symlink and the file's own path never receives an event.
+inode, which silently detaches a file-level watch. `mod.rs` is what a
+watcher is pointed at (`Watched`) and how it detects changes
+(`WatchMode`); `handle.rs` starts and stops one — the one-watcher-per-type
+registry and its failure rollback; `debounce.rs` is the background loop
+that waits out an editor's flurry; `relevance.rs` decides which events are
+about our files — including `is_mount_marker`, which is what makes a
+Kubernetes ConfigMap update visible: the kubelet swings a `..data` symlink
+and the file's own path never receives an event.
 
 #### `remote.rs` — the remote layer
 

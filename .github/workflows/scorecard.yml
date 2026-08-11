@@ -10,7 +10,7 @@ name: Scorecard
 # repository is quiet.
 on:
   push:
-    branches: [dev]
+    branches: [main]
   schedule:
     - cron: "23 7 * * 1"
   workflow_dispatch:

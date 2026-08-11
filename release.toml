@@ -32,7 +32,13 @@ tag-message = "{{crate_name}} {{version}}"
 pre-release-commit-message = "release {{version}}"
 
 # Everything has to be green first. This runs before a version number moves.
-pre-release-hook = ["just", "check"]
+# The rotation script handles the workspace CHANGELOG.md, which the
+# per-package replacements below never touch; it no-ops after the first
+# package, so the per-package repetition of this hook is harmless.
+# The hook runs from each crate's own directory, so the script is reached
+# through the repository root, not a relative path — `just` already finds
+# the root justfile by walking up.
+pre-release-hook = ["bash", "-c", "just check && \"$(git rev-parse --show-toplevel)\"/scripts/rotate-root-changelog.sh"]
 
 # Applied to every package, so each companion crate's own changelog gets the
 # same treatment as the workspace one.
@@ -42,8 +48,10 @@ search = "## \\[Unreleased\\]"
 replace = "## [Unreleased]\n\n## [{{version}}] — {{date}}"
 exactly = 1
 
+# Moves the `[Unreleased]` compare link forward *and* writes the released
+# version's own reference link — previously a hand-edit, and forgotten.
 [[pre-release-replacements]]
 file = "CHANGELOG.md"
-search = "compare/v[0-9.]+\\.\\.\\.HEAD"
-replace = "compare/v{{version}}...HEAD"
+search = "\\[Unreleased\\]: (.*)/compare/v([0-9.]+)\\.\\.\\.HEAD"
+replace = "[Unreleased]: ${1}/compare/v{{version}}...HEAD\n[{{version}}]: ${1}/compare/v${2}...v{{version}}"
 exactly = 1

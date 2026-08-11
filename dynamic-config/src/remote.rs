@@ -38,7 +38,7 @@
 //! way a single trait cannot honestly cover.
 //!
 //! What the loop pushes through is here: a document arrives, [`Remote::install`]
-//! puts it in the slot, and the generated `apply_remote` reloads exactly the way
+//! puts it in the slot, and a [`RemoteSink`]'s `apply` reloads exactly the way
 //! a file change does — hooks, diffing, validation, the cache.
 //!
 //! The two halves are cancelled differently, and neither imposes a runtime:
@@ -51,8 +51,10 @@
 //!
 //! [`Vault`]: https://docs.rs/dynamic-config-vault
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
+
+use crate::sync::atomic::{AtomicBool, Ordering};
+use crate::sync::Mutex;
 use std::time::Duration;
 
 use crate::error::{Error, ErrorKind};
@@ -173,7 +175,21 @@ enum Kind {
 impl Remote {
     /// An empty slot: no source, no document.
     #[must_use]
+    #[cfg(not(loom))]
     pub const fn new() -> Self {
+        Self {
+            state: Mutex::new(State {
+                source: None,
+                fetched: None,
+                generation: 0,
+            }),
+        }
+    }
+
+    /// The same, minus `const`: loom's constructors are not.
+    #[must_use]
+    #[cfg(loom)]
+    pub fn new() -> Self {
         Self {
             state: Mutex::new(State {
                 source: None,
@@ -287,18 +303,53 @@ impl Remote {
         Ok(())
     }
 
-    /// Puts a document in the slot without fetching one.
+    /// The generation a sink created now would carry; see [`RemoteSink`].
+    pub(crate) fn generation(&self) -> u64 {
+        self.state().generation
+    }
+
+    /// Installs `document` if the source it came from is still the one
+    /// installed — the push-side twin of the fetch fence.
     ///
-    /// What a watch loop calls: the document already arrived, pushed by the
-    /// store, and re-fetching it to learn what it just said would be silly.
+    /// # Errors
     ///
-    /// No source need be installed for this to work — a program that only ever
-    /// watches never has to configure one. A watch loop serving a source that
-    /// has since been replaced should be stopped with its
-    /// [`RemoteWatch`] — this call cannot tell one store's push from
-    /// another's.
-    pub fn install(&self, document: Fetched) {
-        self.state().fetched = Some(document);
+    /// When the source has been replaced since `generation` was captured:
+    /// the document belongs to a store nobody asked about any more, and
+    /// installing it would hand a stale watcher the last word.
+    pub(crate) fn install_if(&self, generation: u64, document: Fetched) -> Result<(), Error> {
+        let mut state = self.state();
+
+        if state.generation != generation {
+            return Err(Error::new(
+                crate::ErrorKind::Backend,
+                "the remote source this sink was created for has been \
+                 replaced; stop the old watch loop and take a fresh sink \
+                 from `remote_sink()`",
+            ));
+        }
+
+        state.fetched = Some(document);
+
+        Ok(())
+    }
+
+    /// Not public API: the loom suite's door to the fence internals.
+    #[cfg(loom)]
+    #[doc(hidden)]
+    #[must_use]
+    pub fn generation_for_loom(&self) -> u64 {
+        self.generation()
+    }
+
+    /// Not public API: the loom suite's door to the fence internals.
+    ///
+    /// # Errors
+    ///
+    /// As `install_if`.
+    #[cfg(loom)]
+    #[doc(hidden)]
+    pub fn install_if_for_loom(&self, generation: u64, document: Fetched) -> Result<(), Error> {
+        self.install_if(generation, document)
     }
 
     /// The document last fetched, if any.
@@ -345,7 +396,7 @@ impl Remote {
         }
     }
 
-    fn state(&self) -> std::sync::MutexGuard<'_, State> {
+    fn state(&self) -> crate::sync::MutexGuard<'_, State> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -714,10 +765,20 @@ mod tests {
         let remote = Remote::new();
         remote.set(Fake(r#"{"db": {"host": "a"}}"#));
         remote.refresh().unwrap();
-        remote.install(Fetched::new("{}", crate::Format::Json));
+        let generation = remote.generation();
+        remote
+            .install_if(generation, Fetched::new("{}", crate::Format::Json))
+            .expect("the source has not moved");
 
         remote.set(Fake(r#"{"db": {"host": "b"}}"#));
 
+        assert_eq!(remote.document(), None);
+
+        // And the push-side fence itself: the pre-swap generation is now
+        // stale, so a late delivery bounces instead of landing.
+        remote
+            .install_if(generation, Fetched::new("{}", crate::Format::Json))
+            .expect_err("a replaced source's generation must be refused");
         assert_eq!(remote.document(), None);
     }
 
@@ -751,5 +812,105 @@ mod tests {
             remote.document().is_none(),
             "a new source answering with the old store's values would be a puzzle"
         );
+    }
+}
+
+/// A fenced door for a remote watch loop's pushes.
+///
+/// Created by the generated `remote_sink()` *after* the source is
+/// installed, it remembers which source that was. [`apply`](Self::apply)
+/// installs the document and reloads — unless the source has since been
+/// replaced, in which case it refuses: a watch loop serving yesterday's
+/// store cannot overwrite today's, by construction rather than by the old
+/// documentation's request to please stop the loop first.
+///
+/// Cheap to clone; each wiring of a watch loop should take its own —
+/// **once, where the loop starts**. A sink taken per delivery reads the
+/// generation of that moment and fences nothing.
+#[derive(Clone, Copy)]
+pub struct RemoteSink {
+    remote: &'static Remote,
+    generation: u64,
+    reload: fn() -> Result<(), Error>,
+    name: &'static str,
+}
+
+impl RemoteSink {
+    /// Not public API: called by the generated `remote_sink()`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn new(
+        remote: &'static Remote,
+        reload: fn() -> Result<(), Error>,
+        name: &'static str,
+    ) -> Self {
+        Self {
+            remote,
+            generation: remote.generation(),
+            reload,
+            name,
+        }
+    }
+
+    /// Installs a document the watch pushed, and reloads.
+    ///
+    /// Everything a file change would do happens here too — validation,
+    /// the reload hooks, the cache — because it is the same code path,
+    /// reached with a document instead of a filesystem event. A failure
+    /// leaves the previous snapshot serving.
+    ///
+    /// # Errors
+    ///
+    /// If the source has been replaced since this sink was created —
+    /// checked before the reload *and again after it*, because a
+    /// replacement can land while the reload runs — or if the resulting
+    /// configuration does not load or validate.
+    pub fn apply(&self, document: Fetched) -> Result<(), Error> {
+        self.remote.install_if(self.generation, document)?;
+
+        let outcome = (self.reload)();
+
+        // The reload read the slot as it stood while it ran. If the source
+        // was replaced mid-flight — after `install_if` said yes — what just
+        // installed may derive from this sink's document even though the
+        // fence now belongs to the replacement. Reload once more against
+        // the slot as it stands, so the replacement's state has the last
+        // word, then refuse like any other stale push.
+        if self.remote.generation() != self.generation {
+            let _ = (self.reload)();
+
+            let error = Error::new(
+                crate::ErrorKind::Backend,
+                "the remote source this sink was created for was replaced \
+                 while its delivery reloaded; the replacement's state was \
+                 restored — stop the old watch loop and take a fresh sink \
+                 from `remote_sink()`",
+            );
+            crate::__log_remote_failure(self.name, &error);
+
+            return Err(error);
+        }
+
+        match outcome {
+            Ok(()) => {
+                crate::__log_remote_reload(self.name, None);
+
+                Ok(())
+            }
+            Err(error) => {
+                crate::__log_remote_failure(self.name, &error);
+
+                Err(error)
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for RemoteSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteSink")
+            .field("config", &self.name)
+            .field("generation", &self.generation)
+            .finish_non_exhaustive()
     }
 }

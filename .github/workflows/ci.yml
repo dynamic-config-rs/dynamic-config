@@ -243,6 +243,23 @@ jobs:
       # here rather than in a user's incident.
       - run: cargo test -p dynamic-config --test loader --features json,toml,yaml
 
+  loom:
+    name: loom model checking
+    runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # The concurrency claims, model-checked: loom runs the remote fence and
+      # the wake protocol through every interleaving, on the real code —
+      # `src/sync.rs` swaps the primitives, so nothing here is a copy that
+      # can drift.
+      - run: RUSTFLAGS="--cfg loom" cargo test -p dynamic-config --no-default-features --features json,async --test loom --release
+
   bench:
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
@@ -463,6 +480,7 @@ jobs:
       - embedded
       - features
       - loader
+      - loom
       - bench
       - msrv
       - docs

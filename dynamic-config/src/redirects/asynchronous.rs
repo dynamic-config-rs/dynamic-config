@@ -1,55 +1,6 @@
-//! Redirect macros used by the generated code.
-//!
-//! A proc-macro cannot see which features this crate was built with, so it
-//! emits a call to one of these instead of naming `Format::Toml` directly.
-//! When the feature is off the redirect expands to a `compile_error!` that says
-//! exactly what to add — rather than "no variant named `Toml`", or worse, a
-//! runtime failure on a machine that only runs the code path in production.
-//!
-//! The `#[cfg]` has to live *here*, in the facade: a `cfg` emitted into
-//! generated code is evaluated against the user's crate features, not
-//! dynamic-config's. Every macro is `#[macro_export]`, which exports at the
-//! crate root regardless of module, and every path inside is `$crate::`-
-//! absolute — so this module needs no `pub` and changes nothing about how the
-//! macros are reached.
-
-/// Not public API.
-///
-/// Expands to `bind_clap` when the `clap` feature is on, and to nothing when it
-/// is not. An item-level macro rather than an expression-level redirect,
-/// because the signature names a clap type.
-#[cfg(feature = "clap")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __clap_methods {
-    () => {
-        /// Copies clap arguments into the flags layer, by
-        /// `(argument id, key path)`.
-        ///
-        /// Only arguments that came from the command line are taken: clap's own
-        /// `default_value` is indistinguishable from a typed flag in
-        /// `ArgMatches`, and letting one outrank a configuration file would
-        /// invert the precedence order.
-        ///
-        /// # Errors
-        ///
-        /// If a key path is unusable, or an argument is not valid UTF-8.
-        pub fn bind_clap(
-            matches: &$crate::__private::clap::ArgMatches,
-            bindings: &[(&str, &str)],
-        ) -> ::core::result::Result<(), $crate::Error> {
-            Self::dynamic_config_flags().bind_clap(matches, bindings)
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "clap"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __clap_methods {
-    () => {};
-}
+//! The async redirects: the loading surface and the remote surface,
+//! separately — a program can want an async *store* without wanting the
+//! async *loading* methods; they are different axes.
 
 /// Not public API.
 ///

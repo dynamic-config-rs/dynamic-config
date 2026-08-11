@@ -142,11 +142,18 @@ fn the_documented_methods_are_the_generated_ones() {
             );
         }
     }
-    generated_names(
-        &fs::read_to_string(repo.join("dynamic-config/src/redirects.rs"))
-            .expect("redirects.rs is readable"),
-        &mut generated,
-    );
+    for entry in
+        fs::read_dir(repo.join("dynamic-config/src/redirects")).expect("src/redirects/ is readable")
+    {
+        let path = entry.expect("the directory listing is readable").path();
+
+        if path.extension().is_some_and(|e| e == "rs") {
+            generated_names(
+                &fs::read_to_string(&path).expect("a redirect file is readable"),
+                &mut generated,
+            );
+        }
+    }
 
     assert!(
         generated.contains("builder") && generated.len() > 30,

@@ -31,6 +31,9 @@ fi
 step "the workspace suite (container crates excluded)"
 just test
 
+step "the loom models, every interleaving"
+just loom
+
 step "the scripted-server mocks"
 just mocks
 

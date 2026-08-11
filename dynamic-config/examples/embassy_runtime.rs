@@ -18,7 +18,7 @@
 //! Not this. The builder reads files and the environment, and a
 //! microcontroller has neither. What it *does* have is a remote store or a
 //! serial link, and both arrive through the same door: hand a document to
-//! `apply_remote`, and every reader wakes up. That path is `std`-only today —
+//! `remote_sink().apply(..)`, and every reader wakes up. That path is `std`-only today —
 //! see the roadmap — but the async half is already runtime-free, and this
 //! example is the part that can be shown now.
 
@@ -36,7 +36,7 @@ struct ServerConfig {
 
 /// The document the device boots with — where a real one would read flash.
 ///
-/// It exists because `apply_remote` reloads through the configuration that
+/// It exists because `remote_sink().apply(..)` reloads through the configuration that
 /// `init` remembered, and an `init` with nothing to load would fail: the boot
 /// document is what there is to load.
 struct BootDocument;
@@ -77,7 +77,7 @@ async fn reader() {
 /// Stands in for whatever pushes configuration on a device — a remote store, a
 /// serial link, a message on a bus.
 #[embassy_executor::task]
-async fn pusher() {
+async fn pusher(sink: dynamic_config::RemoteSink) {
     // The reader's handle observes changes made *after* it exists, and it does
     // not exist until the reader task is first polled. Which task an executor
     // polls first is its business, not ours, so this yields before pushing
@@ -87,8 +87,8 @@ async fn pusher() {
 
     println!("two pushes with no turn for the reader in between:");
 
-    push("first", 1);
-    push("second", 2);
+    push(&sink, "first", 1);
+    push(&sink, "second", 2);
 
     // A yield, not a timer: no clock, nothing a microcontroller would have to
     // configure. Two, so the reader is certainly polled before the next push.
@@ -101,7 +101,7 @@ async fn pusher() {
     println!("  a queue would hand it stale ones first.\n");
 
     println!("and one more, with the reader waiting:");
-    push("third", 3);
+    push(&sink, "third", 3);
 
     embassy_futures::yield_now().await;
     embassy_futures::yield_now().await;
@@ -113,21 +113,22 @@ async fn pusher() {
     std::process::exit(0);
 }
 
-/// Applies one document, the way a watch loop would.
-fn push(greeting: &str, workers: usize) {
+/// Applies one document, the way a watch loop would — through the sink the
+/// wiring took, which is what makes a stale loop's push refusable.
+fn push(sink: &dynamic_config::RemoteSink, greeting: &str, workers: usize) {
     let document = format!(r#"{{"server": {{"greeting": "{greeting}", "workers": {workers}}}}}"#);
 
-    if let Err(error) = ServerConfig::apply_remote(Fetched::new(document, Format::Json)) {
+    if let Err(error) = sink.apply(Fetched::new(document, Format::Json)) {
         println!("  the document did not apply: {error}");
     }
 }
 
 #[embassy_executor::task]
-async fn start(spawner: Spawner) {
+async fn start(spawner: Spawner, sink: dynamic_config::RemoteSink) {
     // A `#[task]` hands back a token or says the pool is full; the spawner
     // itself is infallible once it has one.
     spawner.spawn(reader().expect("the task pool has room"));
-    spawner.spawn(pusher().expect("the task pool has room"));
+    spawner.spawn(pusher(sink).expect("the task pool has room"));
 }
 
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
@@ -135,14 +136,15 @@ static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 fn main() {
     // No files, no environment prefix: the fetched boot document is the whole
     // configuration, and initializing through the builder is what later lets
-    // `apply_remote` reload.
+    // `remote_sink().apply(..)` reload.
     ServerConfig::set_remote(BootDocument);
     ServerConfig::refresh_remote().expect("the boot document is well-formed");
+    let sink = ServerConfig::remote_sink();
     ServerConfig::builder("server")
         .init()
         .expect("the boot document supplies every field");
 
     let executor = EXECUTOR.init(Executor::new());
 
-    executor.run(|spawner| spawner.spawn(start(spawner).expect("the task pool has room")));
+    executor.run(|spawner| spawner.spawn(start(spawner, sink).expect("the task pool has room")));
 }

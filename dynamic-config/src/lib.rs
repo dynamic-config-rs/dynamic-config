@@ -244,6 +244,7 @@ mod remote;
 pub mod schema;
 mod snapshot;
 mod source;
+pub(crate) mod sync;
 mod units;
 mod write;
 
@@ -251,6 +252,10 @@ mod write;
 #[cfg_attr(docsrs, doc(cfg(feature = "watch")))]
 pub mod watch;
 
+/// Not public API: the loom suite drives the wake protocol directly.
+#[cfg(all(feature = "async", loom))]
+#[doc(hidden)]
+pub use asynchronous::Notify as LoomNotify;
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use asynchronous::{set_blocking_executor, BlockingExecutor, Changes};
@@ -283,7 +288,7 @@ pub use registry::Registry;
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
-pub use remote::{Fetched, Remote, RemoteSource, RemoteWatch, Watching};
+pub use remote::{Fetched, Remote, RemoteSink, RemoteSource, RemoteWatch, Watching};
 pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};

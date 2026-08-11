@@ -5,7 +5,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
 
-/// `set_remote`, `refresh_remote` and `apply_remote`.
+/// `set_remote`, `refresh_remote` and `remote_sink`.
 pub(super) fn remote_methods(name: &Ident) -> TokenStream {
     quote! {
         /// Installs a remote store to read configuration from.
@@ -31,44 +31,35 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
             Self::dynamic_config_remote().refresh()
         }
 
-        /// Installs a document a watch pushed, and reloads.
+        /// A fenced door for a remote watch loop's pushes.
         ///
-        /// The sink a remote watch loop calls. Everything a file change
-        /// would do happens here too — validation, the reload hooks, the
-        /// cache — because it is the same code path, reached with
-        /// a document instead of a filesystem event.
+        /// Take the sink *after* [`set_remote`](Self::set_remote) — it
+        /// remembers which source was installed — and hand it to the watch
+        /// loop's callback. [`apply`](::dynamic_config::RemoteSink::apply)
+        /// installs the document and reloads through this type's
+        /// configured builder; a sink whose source has since been replaced
+        /// refuses, so a stale watcher cannot overwrite the store that
+        /// followed it. Take it **once, where the loop starts** — a sink
+        /// taken per delivery reads that moment's generation and fences
+        /// nothing.
         ///
-        /// A failure leaves the previous snapshot serving, again exactly as
-        /// a bad file edit does. The document itself stays installed: it is
-        /// what the store currently says, and dropping it would hand the
-        /// files back the decision without anyone asking.
-        ///
-        /// # Errors
-        ///
-        /// If the resulting configuration does not load or validate.
-        pub fn apply_remote(
-            document: ::dynamic_config::Fetched,
-        ) -> ::core::result::Result<(), ::dynamic_config::Error> {
-            Self::dynamic_config_remote().install(document);
+        /// No source need be installed first: a program that only ever
+        /// watches never calls `set_remote`, and its sink works — the
+        /// "after" above orders the two calls when both exist, it does not
+        /// require the first.
+        #[must_use]
+        pub fn remote_sink() -> ::dynamic_config::RemoteSink {
+            ::dynamic_config::RemoteSink::new(
+                Self::dynamic_config_remote(),
+                Self::dynamic_config_remote_reload,
+                ::core::stringify!(#name),
+            )
+        }
 
-            match Self::dynamic_config_builder()?.reload() {
-                ::core::result::Result::Ok(()) => {
-                    ::dynamic_config::__log_remote_reload(
-                        ::core::stringify!(#name),
-                        ::core::option::Option::None,
-                    );
-
-                    ::core::result::Result::Ok(())
-                }
-                ::core::result::Result::Err(error) => {
-                    ::dynamic_config::__log_remote_failure(
-                        ::core::stringify!(#name),
-                        &error,
-                    );
-
-                    ::core::result::Result::Err(error)
-                }
-            }
+        /// One reload through the remembered builder; see `remote_sink`.
+        fn dynamic_config_remote_reload() -> ::core::result::Result<(), ::dynamic_config::Error>
+        {
+            Self::dynamic_config_builder()?.reload()
         }
     }
 }

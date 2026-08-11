@@ -67,7 +67,7 @@ pub trait Reloadable: 'static {
 pub struct ReloadGroup {
     members: Vec<Member>,
     /// Serializes [`reload`](Self::reload); see there.
-    reloading: std::sync::Mutex<()>,
+    reloading: crate::sync::Mutex<()>,
 }
 
 struct Member {
@@ -78,10 +78,21 @@ struct Member {
 impl ReloadGroup {
     /// An empty group.
     #[must_use]
+    #[cfg(not(loom))]
     pub const fn new() -> Self {
         Self {
             members: Vec::new(),
-            reloading: std::sync::Mutex::new(()),
+            reloading: crate::sync::Mutex::new(()),
+        }
+    }
+
+    /// The same, minus `const`: loom's constructors are not.
+    #[must_use]
+    #[cfg(loom)]
+    pub fn new() -> Self {
+        Self {
+            members: Vec::new(),
+            reloading: crate::sync::Mutex::new(()),
         }
     }
 

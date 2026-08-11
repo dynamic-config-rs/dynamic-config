@@ -72,7 +72,7 @@ safe to redo; nothing before step 5 leaves the laptop.
    the same idea.
 6. **`./scripts/promote.sh`.** Pushes `dev`, ensures the PR exists, arms
    auto-merge and waits; when "CI is green" and "Security is green" pass,
-   the rebase-merge lands — **that merge is the release** — and `dev` is
+   the squash-merge lands — **that merge is the release** — and `dev` is
    re-synced onto `main`.
 7. **`./scripts/watch-release.sh`.** Follows the run the merge set off:
    verification (including `cargo semver-checks` against the published
@@ -90,6 +90,7 @@ laptop cannot reach crates.io at all, and nothing reaches it without the
 gates in front of it.
 
 ```sh
+# python3 is also needed: the pre-release hook's changelog rotation uses it.
 cargo install cargo-release just
 
 # On dev (or a branch that lands there):
@@ -101,8 +102,11 @@ cargo release minor --execute     # 0.0.1 -> 0.1.0, which pre-1.0 is a break
 ```
 
 `cargo release` runs `just check`, bumps every crate, moves each
-`## [Unreleased]` section under a dated version heading, and commits — it
-does **not** push or tag; that is CI's job, after publishing succeeded. A
+`## [Unreleased]` section under a dated version heading — the workspace
+`CHANGELOG.md` included, which `scripts/rotate-root-changelog.sh` handles
+from the pre-release hook because the per-package replacements never touch
+it — and commits. It does **not** push or tag; that is CI's job, after
+publishing succeeded. A
 crates.io *rate limit* mid-publish just needs the window waited out and the
 job re-run — publishing is idempotent, already-uploaded crates are skipped.
 

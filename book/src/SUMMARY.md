@@ -14,6 +14,7 @@
 - [Async & Runtimes](async-runtimes.md)
 - [Remote Stores](remote-stores.md)
   - [Store Crates at a Glance](remote-stores/store-crates.md)
+  - [Writing a Store](remote-stores/writing-a-store.md)
 - [Persistence & Writing](persistence.md)
 - [Encryption](encryption.md)
 - [Validation & Diagnostics](validation-diagnostics.md)

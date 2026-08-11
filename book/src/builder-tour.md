@@ -334,8 +334,8 @@ AppConfig::builder("app").env("APP_").init()?; // store + env, one configuration
 A store layers above the files and below the environment. `current()`
 never touches the network: `refresh_remote()` (or `refresh_remote_async`)
 is the explicit round trip, and a store's watch pushes documents into
-`apply_remote`, which reloads through the remembered builder — validation,
-hooks, cache and all. Seven store crates ship;
+the sink from `remote_sink()`, which reloads through the remembered
+builder — validation, hooks, cache and all. Seven store crates ship;
 [Remote Stores](remote-stores.md) has the contract.
 
 ## Diagnostics
