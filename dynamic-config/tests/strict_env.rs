@@ -100,3 +100,49 @@ fn a_dotenv_file_is_held_to_the_same_standard() {
     assert!(message.contains("STRICTDOTENV_SVC_MODE"), "{message}");
     assert!(message.contains("strict.env"), "{message}");
 }
+
+/// The opted-in invariant holds on the fallback path too: an ambiguous
+/// spelling refused during the normal load is refused during recovery.
+#[test]
+fn recovery_is_held_to_strict_env() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct StrictRecovery {
+        #[allow(dead_code)]
+        #[serde(default)]
+        mode: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/strict-recovery.json",
+        r#"{"svc": {"mode": "fast"}}"#,
+    )
+    .unwrap();
+
+    let builder = StrictRecovery::builder("svc")
+        .file("tests/scratch/strict-recovery.json")
+        .env("STRICTRECOVER_")
+        .strict_env()
+        .cache(
+            "tests/scratch/strict-recovery-cache.json",
+            dynamic_config::CacheMode::Full,
+        );
+    builder
+        .init()
+        .expect("the source reads cleanly; the cache is written");
+
+    // The source breaks, and the environment now carries the exact
+    // ambiguity strict mode exists for.
+    std::fs::write("tests/scratch/strict-recovery.json", "{ not json").unwrap();
+    std::env::set_var("STRICTRECOVER_SVC_MODE", "off");
+
+    let error = builder
+        .init()
+        .expect_err("recovery must not suspend strict_env");
+    let message = error.to_string();
+
+    std::env::remove_var("STRICTRECOVER_SVC_MODE");
+
+    assert!(message.contains("STRICTRECOVER_SVC_MODE"), "{message}");
+}

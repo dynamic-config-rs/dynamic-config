@@ -299,6 +299,8 @@ jobs:
             package: dynamic-config-s3
           - rust: "1.85"
             package: dynamic-config-firestore
+          - rust: "1.85"
+            package: dynamic-config-cli
           - rust: "1.83"
             package: dynamic-config-embedded
             flags: "--no-default-features --features json,async"

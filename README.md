@@ -117,6 +117,7 @@ stop latency and change-detection rule side by side in
 | `schema` feature | 1.74 (schemars) |
 | `watch` / `age` / `full` features | 1.85 (measured, not declared) |
 | store crates | 1.85 — nats/redis/s3: 1.88 (their clients) |
+| `dynamic-config-cli` | 1.85 |
 | `dynamic-config-embedded` | 1.83 |
 
 MSRV changes are breaking. Every floor has a CI row against a real

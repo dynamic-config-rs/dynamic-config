@@ -222,7 +222,10 @@ impl<T> ConfigCell<T> {
     /// If nothing has been stored yet.
     pub fn get_or_panic(&self, type_name: &str) -> Arc<T> {
         self.load().unwrap_or_else(|| {
-            panic!("{type_name} has not been initialized; call `{type_name}::init()` first")
+            panic!(
+                "{type_name} has no snapshot installed; configure and install \
+                 one first: `{type_name}::builder(\"..\")...init()?`"
+            )
         })
     }
 
@@ -410,8 +413,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "`DbConfig::init()`")]
-    fn get_or_panic_points_at_init() {
+    #[should_panic(expected = "`DbConfig::builder(")]
+    fn get_or_panic_points_at_the_builder() {
         ConfigCell::<u16>::new().get_or_panic("DbConfig");
     }
 }

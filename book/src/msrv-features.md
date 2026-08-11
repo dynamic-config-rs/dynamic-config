@@ -33,6 +33,7 @@ YAML.
 | any format, `tokio`, `tracing`, `dotenv`, `figment` | 1.71 |
 | `watch` enabled | 1.85 (`notify 8` requires it) |
 | `schema` enabled | 1.74 (`schemars` requires it) |
+| `dynamic-config-cli` | 1.85 |
 | `age` enabled | 1.85 — measured, not declared (see below) |
 | the companion crates (etcd, Consul, Vault, Firestore) | 1.85 |
 | `dynamic-config-nats`, `-redis`, `-s3` | 1.88 (their clients require it) |

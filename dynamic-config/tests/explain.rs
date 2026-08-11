@@ -168,3 +168,68 @@ fn a_secret_path_comes_back_redacted() {
     let host = WithSecret::explain("host").expect("the sources read cleanly");
     assert!(host.to_string().contains("localhost"), "{host}");
 }
+
+/// An alias deliberately displaces a runtime default at its destination;
+/// the explanation must report the alias as the winner, not the default.
+#[test]
+fn an_alias_that_displaces_a_default_wins_the_explanation() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Aliased {
+        #[allow(dead_code)]
+        #[serde(default)]
+        max_size: u16,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/explain-alias.json",
+        r#"{"db": {"size": 64}}"#,
+    )
+    .unwrap();
+
+    Aliased::set_default("max_size", 8).expect("a runtime default");
+    Aliased::alias("size", "max_size").expect("the old key keeps working");
+
+    let explanation = Aliased::builder("db")
+        .file("tests/scratch/explain-alias.json")
+        .explain("max_size")
+        .expect("the sources read cleanly");
+
+    let winner = explanation.winner().expect("something supplies it");
+    assert_eq!(winner.layer, "alias", "{explanation}");
+    assert_eq!(winner.value.as_deref(), Some("64"), "{explanation}");
+}
+
+/// `Display` is the sanctioned way to see values; `{:?}` is what lands in
+/// logs by habit, and must not carry them — redacted or not.
+#[test]
+fn an_explanation_debug_never_shows_values() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Debugged {
+        #[allow(dead_code)]
+        token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/explain-debug.json",
+        r#"{"db": {"token": "hunter2-debug"}}"#,
+    )
+    .unwrap();
+
+    // Deliberately un-redacted: a bare builder knows no secrets, and this
+    // is exactly the explanation a routine `debug!(?explanation)` would log.
+    let explanation = Debugged::builder("db")
+        .file("tests/scratch/explain-debug.json")
+        .explain("token")
+        .expect("the sources read cleanly");
+
+    let rendered = format!("{explanation:?}");
+    assert!(!rendered.contains("hunter2-debug"), "{rendered}");
+    assert!(
+        rendered.contains("token"),
+        "paths are the safe half: {rendered}"
+    );
+}

@@ -214,3 +214,44 @@ fn the_builder_watch_reloads_into_the_same_snapshot() {
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// Fingerprint promises to diagnose and never recover — even from a
+/// value-bearing cache an earlier deployment left at the same path.
+#[test]
+fn a_fingerprint_builder_never_boots_from_a_value_cache() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Fingerprinted {
+        #[allow(dead_code)]
+        port: u16,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/builder-fingerprint.json",
+        r#"{"svc": {"port": 5555}}"#,
+    )
+    .unwrap();
+
+    // An earlier deployment cached values at this path.
+    Fingerprinted::builder("svc")
+        .file("tests/scratch/builder-fingerprint.json")
+        .cache(
+            "tests/scratch/builder-fingerprint-cache.json",
+            dynamic_config::CacheMode::Full,
+        )
+        .init()
+        .expect("the source reads cleanly; the cache is written");
+
+    // This deployment is configured to diagnose only.
+    std::fs::write("tests/scratch/builder-fingerprint.json", "{ not json").unwrap();
+
+    Fingerprinted::builder("svc")
+        .file("tests/scratch/builder-fingerprint.json")
+        .cache(
+            "tests/scratch/builder-fingerprint-cache.json",
+            dynamic_config::CacheMode::Fingerprint,
+        )
+        .init()
+        .expect_err("the on-disk values must not override the configured mode");
+}

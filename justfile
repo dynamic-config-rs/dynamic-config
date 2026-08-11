@@ -73,6 +73,7 @@ msrv:
     cargo +1.88 check -p dynamic-config-redis --locked
     cargo +1.88 check -p dynamic-config-s3 --locked
     cargo +1.85 check -p dynamic-config-firestore --locked
+    cargo +1.85 check -p dynamic-config-cli --locked
     cargo +1.83 check -p dynamic-config-embedded --locked --no-default-features --features json,async
 
 # Every pairwise feature combination compiles — CI's `features` job.

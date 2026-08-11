@@ -37,6 +37,13 @@ pub(crate) fn recover<T: DeserializeOwned>(
     figment = merge_env_files(figment, spec)?;
 
     if let Some(prefix) = spec.full_env_prefix() {
+        // The invariant a caller opted into does not get suspended on the
+        // fallback path: an ambiguous spelling refused during the normal
+        // load is refused during recovery too.
+        if spec.strict_env {
+            super::environment::reject_ambiguous(&prefix)?;
+        }
+
         figment = figment.merge(environment(
             &prefix,
             spec.key,

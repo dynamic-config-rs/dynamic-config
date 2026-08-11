@@ -419,9 +419,15 @@ impl<T: DeserializeOwned> Builder<T> {
     /// The last known good configuration, when the sources will not load —
     /// or the original failure back, when there is nothing to recover from.
     fn recover(&self, failure: Error) -> Result<T, Error> {
-        let Some((path, _)) = &self.cache else {
+        let Some((path, mode)) = &self.cache else {
             return Err(failure);
         };
+
+        // The configured mode decides, not the file on disk: a value-bearing
+        // cache left behind by an earlier deployment must not resurrect a
+        // configuration the operator deliberately switched away from.
+        // Fingerprint promises to diagnose and still fail.
+        let may_recover = mode.recovers();
 
         // What the sources resolve to *now*, if they resolve at all — the
         // drift report needs it, and a parse failure means there is nothing
@@ -433,9 +439,19 @@ impl<T: DeserializeOwned> Builder<T> {
             // `.env` files layer over the cache exactly as they would over
             // the files, which is what lets a redacted cache work — the
             // values it dropped come back from wherever they were live.
-            Ok(Recovery::Usable(snapshot)) => self
+            Ok(Recovery::Usable(snapshot)) if may_recover => self
                 .with_spec(|spec| crate::loader::recover::<T>(spec, &snapshot))
                 .map(|(value, _snapshot)| value),
+            Ok(Recovery::Usable(_)) => {
+                crate::log::warning!(
+                    "{}: the cache at {path} holds values, but this builder \
+                     is configured `Fingerprint`, which diagnoses and never \
+                     recovers; refusing to start from it",
+                    self.key
+                );
+
+                Err(failure)
+            }
             // A fingerprint cannot rebuild a configuration, but it can still
             // say what moved since the last good state — the diagnosis that
             // makes the failure actionable at three in the morning.

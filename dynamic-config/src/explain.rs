@@ -18,7 +18,7 @@ use crate::error::{Error, Origin};
 use crate::source::LoadSpec;
 
 /// One layer's answer for one path.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[non_exhaustive]
 pub struct Contribution {
     /// The layer, by its name in the precedence order.
@@ -38,7 +38,7 @@ pub struct Contribution {
 /// Produced by [`explain`](crate::explain) or a generated `explain()`.
 /// `Display` renders the table; the rows are public for anything that wants
 /// to format its own.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Explanation {
     path: String,
     rows: Vec<Contribution>,
@@ -81,6 +81,29 @@ impl Explanation {
         }
 
         self
+    }
+}
+
+// Hand-written, value-free: `Display` is the sanctioned way to see the
+// values — you asked for a table. `{:?}` is what lands in logs by habit,
+// and a routine `debug!(?explanation)` must not become the leak the rest
+// of the crate exists to prevent.
+impl fmt::Debug for Contribution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Contribution")
+            .field("layer", &self.layer)
+            .field("origin", &self.origin)
+            .field("value", &self.value.as_ref().map(|_| "..."))
+            .finish()
+    }
+}
+
+impl fmt::Debug for Explanation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Explanation")
+            .field("path", &self.path)
+            .field("rows", &self.rows)
+            .finish()
     }
 }
 
@@ -169,15 +192,26 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
         });
     }
 
-    // Aliases are a gap-fill, not a layer: a value that only an alias
-    // supplies shows up in no per-layer probe. When that happens, the
-    // composed load is asked directly and the answer gets a row of its own.
-    if rows.iter().all(|row| row.value.is_none()) {
-        let merged = crate::loader::merged(spec)?;
+    // Aliases are a gap-fill, not a layer, and they can *win*: a value
+    // that only an alias supplies shows up in no per-layer probe, and an
+    // alias deliberately displaces a runtime default at its destination.
+    // Both cases are caught the same way — ask the composed load and, when
+    // its answer comes from somewhere no per-layer row claims, give the
+    // alias a row of its own (above every raw layer, which is where it
+    // actually sits).
+    let merged = crate::loader::merged(spec)?;
 
-        if let Ok(value) = merged.find_value(path) {
-            let origin = crate::loader::origin_in(&merged, path);
+    if let Ok(value) = merged.find_value(path) {
+        let origin = crate::loader::origin_in(&merged, path);
+        let walk_winner = rows.iter().rev().find(|row| row.value.is_some());
+        let disagrees = match walk_winner {
+            None => true,
+            Some(winner) => {
+                !matches!(origin, Origin::Unknown) && winner.origin.as_ref() != Some(&origin)
+            }
+        };
 
+        if disagrees {
             rows.push(Contribution {
                 layer: "alias",
                 origin: Some(origin),

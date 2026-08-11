@@ -12,7 +12,9 @@ use notify::{Event, EventKind, RecursiveMode, Watcher};
 
 use crate::discovery;
 use crate::error::Error;
-use crate::log::{info, warning};
+#[cfg(not(feature = "tracing"))]
+use crate::log::info;
+use crate::log::warning;
 use crate::source::LoadSpec;
 
 /// What a watcher looks at, owned.
@@ -339,8 +341,32 @@ fn run(
 
         let started = std::time::Instant::now();
         let outcome = reload();
-        let duration_ms = started.elapsed().as_millis();
+        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
 
+        // Under `tracing`, the outcome and duration are structured *fields*
+        // — the alert the docs promise must not require parsing message
+        // strings. Without it, the stderr lines carry both in text.
+        #[cfg(feature = "tracing")]
+        match &outcome {
+            Ok(summary) => ::tracing::info!(
+                target: "dynamic_config",
+                config = name,
+                outcome = "reloaded",
+                duration_ms,
+                summary = summary.as_deref().unwrap_or(""),
+                "{name}: reloaded in {duration_ms}ms"
+            ),
+            Err(error) => ::tracing::warn!(
+                target: "dynamic_config",
+                config = name,
+                outcome = "failed",
+                duration_ms,
+                error = %error,
+                "{name}: reload failed in {duration_ms}ms, keeping the previous snapshot"
+            ),
+        }
+
+        #[cfg(not(feature = "tracing"))]
         match outcome {
             Ok(Some(summary)) => info!("{name}: reloaded in {duration_ms}ms, {summary}"),
             Ok(None) => info!("{name}: reloaded in {duration_ms}ms"),
