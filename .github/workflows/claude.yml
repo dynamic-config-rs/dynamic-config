@@ -1,5 +1,3 @@
-name: Claude
-
 # Mention-based: write `@claude <ask>` in an issue, a PR comment or a review
 # and it answers in context — explain this failure, fix this, review this
 # diff, open a PR for that. Only mentions from users with write access
@@ -13,6 +11,7 @@ name: Claude
 # (Settings → Secrets and variables → Actions → Variables), so switching to
 # e.g. `claude-opus-5` is a settings change, not a commit. Unset, it falls
 # back to Sonnet.
+
 on:
   issue_comment:
     types: [created]
@@ -21,6 +20,9 @@ on:
   pull_request_review:
     types: [submitted]
   issues:
+    # `assigned` is inert under the `if` below — assigning someone doesn't
+    # put `@claude` in the body or title. Kept only so adding an
+    # assignment-based trigger later is a one-line change.
     types: [opened, assigned]
 
 permissions:
@@ -46,6 +48,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      # DIAGNOSTIC — remove once auth is confirmed working.
+      # Prints only the fixed `sk-ant-oat01` prefix (zero entropy) and a
+      # length. Do not widen the substring: GitHub masks secrets by exact
+      # match, so a longer slice would print unmasked.
+      - name: Token shape check
+        env:
+          T: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          echo "length: ${#T}"
+          echo "prefix: ${T:0:12}"
+          case "$T" in *[[:space:]]*) echo "!! contains whitespace/newline" ;; esac
+          echo "--- anthropic env vars (names only) ---"
+          env | grep -i anthropic | cut -d= -f1 || echo "(none)"
+
       - uses: anthropics/claude-code-action@6b082c41935b4c8a3b8b0ef85ba4ba4d9eeb8975 # v1
         # The token rides in `env` as well as `with`: subscription OAuth
         # tokens intermittently fail to reach the Claude subprocess through
@@ -62,12 +78,14 @@ jobs:
             --model ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5' }}
             --allowedTools "Bash(cargo build:*),Bash(cargo check:*),Bash(cargo test:*),Bash(cargo clippy:*),Bash(cargo fmt:*),Bash(gh pr:*),Bash(gh issue:*)"
 
-
+      # DIAGNOSTIC — remove once auth is confirmed working.
+      # The action's own error line reports `subtype: success` even on
+      # failure; the real message lives in the `result` field of this file.
       - name: Dump Claude result
         if: always()
         run: |
           f=/home/runner/work/_temp/claude-execution-output.json
-          [ -f "$f" ] || { echo "output file not found"; exit 0; }
+          [ -f "$f" ] || { echo "no output file — died before the SDK started"; exit 0; }
           jq -r '(if type=="array" then .[] else . end)
                  | select(.type=="result")
                  | {is_error, subtype, duration_ms, total_cost_usd,
