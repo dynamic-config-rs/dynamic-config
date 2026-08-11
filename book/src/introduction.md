@@ -1,7 +1,7 @@
 # dynamic-config
 
-Hot-reloadable, lock-free application configuration for Rust, behind one attribute.
-Built on [figment].
+Hot-reloadable, lock-free application configuration for Rust: one attribute
+declares the type, one builder states its sources. Built on [figment].
 
 - **crates.io:** <https://crates.io/crates/dynamic-config>
 - **API documentation:** <https://docs.rs/dynamic-config>
@@ -28,8 +28,8 @@ broken file. This crate is all three.
 
 The loader is figment — layered providers, profile selection and loose typing of
 environment values are problems it already solves well. What this crate adds is
-everything around it: the attribute, the lock-free snapshot, the watcher, and a
-reload that cannot take the process down.
+everything around it: the attribute and its builder, the lock-free snapshot,
+the watcher, and a reload that cannot take the process down.
 
 ## The shape of the crate
 

@@ -7,7 +7,7 @@
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/secrets.json"], key = "db", env = "APP_")]
+#[dynamic_config]
 // No `Debug` in the derive: `#[config(secret)]` writes one, and having both
 // would be a compile error rather than a race between two impls.
 #[derive(Deserialize)]
@@ -24,7 +24,10 @@ struct DatabaseConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = DatabaseConfig::load()?;
+    let config = DatabaseConfig::builder("db")
+        .file("dynamic-config/examples/secrets.json")
+        .env("APP_")
+        .load()?;
 
     // The values loaded perfectly well — redaction is about printing.
     println!("connecting as {} to {}", config.username, config.host);

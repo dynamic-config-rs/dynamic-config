@@ -13,20 +13,15 @@
 //! atomic load, so every worker sees the new snapshot without a lock between
 //! them and without anyone being told to reload.
 
+use std::time::Duration;
+
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use dynamic_config::dynamic_config;
 use serde::{Deserialize, Serialize};
 
 const DIRECTORY: &str = "/tmp/dynamic-config-actix";
 
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-actix/config.json"],
-    key = "server",
-    env = "APP_",
-    watch,
-    diff,
-    validate,
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize, Serialize)]
 struct ServerConfig {
     greeting: String,
@@ -90,7 +85,14 @@ async fn main() -> std::io::Result<()> {
 "#,
     )?;
 
-    ServerConfig::init().map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+    let sources = ServerConfig::builder("server")
+        .file("/tmp/dynamic-config-actix/config.json")
+        .env("APP_")
+        .validate(|config| dynamic_config::Error::ok_or_invalid(config.validate()));
+
+    sources
+        .init()
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
 
     // Read once, before the watcher starts: a listener cannot move to a new
     // port without dropping every connection on the old one, so `port` is
@@ -98,7 +100,7 @@ async fn main() -> std::io::Result<()> {
     let port = ServerConfig::current().port;
 
     // `.detach()` because this watcher should outlive `main`'s body.
-    ServerConfig::start_watch()?.detach();
+    sources.watch(Duration::from_millis(250))?.detach();
 
     println!("listening on http://127.0.0.1:{port}");
     println!("edit {DIRECTORY}/config.json and curl again — no restart");

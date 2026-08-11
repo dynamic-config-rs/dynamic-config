@@ -15,10 +15,14 @@ use serde::Deserialize;
 
 const PATH: &str = "tests/scratch/reload.json";
 
-#[dynamic_config(files = ["tests/scratch/reload.json"], key = "app", watch, debounce = 50, diff)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct AppConfig {
     value: u32,
+}
+
+fn app_builder() -> dynamic_config::Builder<AppConfig> {
+    AppConfig::builder("app").file(PATH)
 }
 
 fn write(contents: &str) {
@@ -48,14 +52,19 @@ fn the_watcher_reloads_on_edit_and_survives_a_broken_file() {
     fs::create_dir_all("tests/scratch").expect("the scratch directory should be creatable");
     write(r#"{"app": {"value": 1}}"#);
 
-    AppConfig::init().expect("the initial load should succeed");
+    let builder = app_builder();
+    builder.init().expect("the initial load should succeed");
     assert_eq!(AppConfig::current().value, 1);
 
-    let watch = AppConfig::start_watch().expect("the watcher thread should spawn");
+    let watch = builder
+        .watch(Duration::from_millis(50))
+        .expect("the watcher thread should spawn");
 
     // A duplicate is refused loudly — and the refusal must not take down
     // the watcher that is actually running.
-    let error = AppConfig::start_watch().expect_err("a second watcher is an error");
+    let error = builder
+        .watch(Duration::from_millis(50))
+        .expect_err("a second watcher is an error");
     assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
 
     write(r#"{"app": {"value": 2}}"#);

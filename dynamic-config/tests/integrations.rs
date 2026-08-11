@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 macro_rules! db_config {
     ($name:ident) => {
-        #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = "DCINT_")]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             #[allow(dead_code)]
@@ -15,6 +15,16 @@ macro_rules! db_config {
             port: u16,
             #[allow(dead_code)]
             pool: Pool,
+        }
+
+        impl $name {
+            /// The `db` section of the base fixture, with the environment
+            /// layer between the files and the flags.
+            fn sources() -> dynamic_config::Builder<$name> {
+                $name::builder("db")
+                    .file("tests/fixtures/base.json")
+                    .env("DCINT_")
+            }
         }
     };
 }
@@ -42,10 +52,10 @@ fn an_absent_flag_leaves_the_files_alone() {
     // mean "not given".
     Flagged::set_flag("port", None::<u16>).unwrap();
 
-    assert_eq!(Flagged::load().unwrap().port, 5432);
+    assert_eq!(Flagged::sources().load().unwrap().port, 5432);
 
     Flagged::set_flag("port", Some(9000u16)).unwrap();
-    assert_eq!(Flagged::load().unwrap().port, 9000);
+    assert_eq!(Flagged::sources().load().unwrap().port, 9000);
 
     Flagged::clear_flags();
 }
@@ -54,7 +64,9 @@ fn an_absent_flag_leaves_the_files_alone() {
 fn assignments_read_the_way_environment_variables_do() {
     Assigned::set_assignments(["port=9001", "pool.max_size=64"]).unwrap();
 
-    let config = Assigned::load().expect("both assignments are well formed");
+    let config = Assigned::sources()
+        .load()
+        .expect("both assignments are well formed");
 
     assert_eq!(config.port, 9001, "`9001` is a number, not the string");
     assert_eq!(
@@ -75,16 +87,16 @@ fn a_malformed_assignment_names_itself() {
 #[test]
 fn a_flag_outranks_a_file_and_an_override_outranks_the_flag() {
     Ranked::set_flag("port", Some(1u16)).unwrap();
-    assert_eq!(Ranked::load().unwrap().port, 1);
+    assert_eq!(Ranked::sources().load().unwrap().port, 1);
     assert_eq!(
-        Ranked::source_of("port").unwrap(),
+        Ranked::sources().source_of("port").unwrap(),
         Some(Origin::Runtime("command-line flag"))
     );
 
     Ranked::set_override("port", 2u16).unwrap();
-    assert_eq!(Ranked::load().unwrap().port, 2);
+    assert_eq!(Ranked::sources().load().unwrap().port, 2);
     assert_eq!(
-        Ranked::source_of("port").unwrap(),
+        Ranked::sources().source_of("port").unwrap(),
         Some(Origin::Runtime("override"))
     );
 
@@ -96,7 +108,7 @@ fn a_flag_outranks_a_file_and_an_override_outranks_the_flag() {
 // check
 // ─────────────────────────────────────────────
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Checked {
     #[allow(dead_code)]
@@ -107,9 +119,16 @@ struct Checked {
     pool: Pool,
 }
 
+/// The `db` section of the base fixture.
+fn checked_builder() -> dynamic_config::Builder<Checked> {
+    Checked::builder("db").file("tests/fixtures/base.json")
+}
+
 #[test]
 fn a_report_names_every_key_and_where_it_came_from() {
-    let report = Checked::check().expect("the fixture reads cleanly");
+    let report = checked_builder()
+        .check()
+        .expect("the fixture reads cleanly");
 
     assert!(report.is_clean(), "{report}");
     assert!(report.failure.is_none());
@@ -127,7 +146,7 @@ fn a_report_names_every_key_and_where_it_came_from() {
 
 #[test]
 fn a_report_never_prints_a_value() {
-    let rendered = Checked::check().unwrap().to_string();
+    let rendered = checked_builder().check().unwrap().to_string();
 
     assert!(rendered.contains("host"), "{rendered}");
     assert!(
@@ -137,7 +156,7 @@ fn a_report_never_prints_a_value() {
 }
 
 /// The struct names `port`; the file will supply `prot`.
-#[dynamic_config(files = ["tests/fixtures/typo.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Typoed {
     #[allow(dead_code)]
@@ -149,7 +168,10 @@ struct Typoed {
 
 #[test]
 fn a_typo_is_caught_and_a_correction_offered() {
-    let report = Typoed::check().expect("the fixture reads cleanly");
+    let report = Typoed::builder("db")
+        .file("tests/fixtures/typo.json")
+        .check()
+        .expect("the fixture reads cleanly");
 
     assert!(!report.is_clean());
     assert_eq!(report.unknown.len(), 1, "{report}");
@@ -163,7 +185,7 @@ fn a_typo_is_caught_and_a_correction_offered() {
 }
 
 /// A section the struct cannot deserialize: `port` is required and absent.
-#[dynamic_config(files = ["tests/fixtures/typo.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Incomplete {
     #[allow(dead_code)]
@@ -174,7 +196,10 @@ struct Incomplete {
 
 #[test]
 fn a_report_survives_a_configuration_that_would_not_load() {
-    let report = Incomplete::check().expect("the sources still parse");
+    let report = Incomplete::builder("db")
+        .file("tests/fixtures/typo.json")
+        .check()
+        .expect("the sources still parse");
 
     assert!(!report.is_clean());
 
@@ -199,13 +224,20 @@ mod clap_binding {
     /// One type per test: the flags layer lives in a `static`.
     macro_rules! bound {
         ($name:ident) => {
-            #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+            #[dynamic_config]
             #[derive(Debug, Deserialize)]
             struct $name {
                 #[allow(dead_code)]
                 host: String,
                 #[allow(dead_code)]
                 port: u16,
+            }
+
+            impl $name {
+                /// The `db` section of the base fixture.
+                fn sources() -> dynamic_config::Builder<$name> {
+                    $name::builder("db").file("tests/fixtures/base.json")
+                }
             }
         };
     }
@@ -227,7 +259,9 @@ mod clap_binding {
 
         Bound::bind_clap(&matches, &[("db-host", "host"), ("db-port", "port")]).unwrap();
 
-        let config = Bound::load().expect("the fixture plus the flag are complete");
+        let config = Bound::sources()
+            .load()
+            .expect("the fixture plus the flag are complete");
 
         assert_eq!(config.host, "from-flag");
         assert_eq!(
@@ -246,7 +280,7 @@ mod clap_binding {
 
         // The argument was declared without a value parser, so clap hands back
         // a string; it still reaches a `u16`.
-        assert_eq!(Shaped::load().unwrap().port, 9999);
+        assert_eq!(Shaped::sources().load().unwrap().port, 9999);
 
         Shaped::clear_flags();
     }

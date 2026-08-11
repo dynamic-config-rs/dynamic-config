@@ -16,13 +16,7 @@ use std::time::Duration;
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(
-    files = ["dynamic-config/examples/config.toml"],
-    key = "server",
-    env = "APP_",
-    watch,
-    debounce = 250
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
@@ -30,9 +24,13 @@ struct ServerConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ServerConfig::init()?;
+    let sources = ServerConfig::builder("server")
+        .file("dynamic-config/examples/config.toml")
+        .env("APP_");
+
+    sources.init()?;
     // A server watches for as long as it runs, so nothing here owns the handle.
-    ServerConfig::start_watch()?.detach();
+    sources.watch(Duration::from_millis(250))?.detach();
 
     println!("edit dynamic-config/examples/config.toml — ctrl-c to stop");
 

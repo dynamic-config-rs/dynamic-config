@@ -20,11 +20,18 @@ use std::sync::Mutex;
 use dynamic_config::{dynamic_config, Error, Fetched, Format, RemoteSource};
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "server", env = "APP_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
     port: u16,
+}
+
+/// The local sources the store's document layers into.
+fn sources() -> dynamic_config::Builder<ServerConfig> {
+    ServerConfig::builder("server")
+        .file("dynamic-config/examples/app.json")
+        .env("APP_")
 }
 
 /// A store that answers with whatever it was last told to, and counts reads.
@@ -73,6 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Real code hands the source over and forgets about it.
     let store = std::sync::Arc::new(FakeStore::new(r#"{"server": {"port": 8443}}"#));
 
+    let sources = sources();
+
     ServerConfig::set_remote(Handle(std::sync::Arc::clone(&store)));
 
     // ---------------------------------------------------------------------
@@ -83,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         store.reads.load(Ordering::SeqCst)
     );
 
-    let config = ServerConfig::load()?;
+    let config = sources.load()?;
     println!(
         "after load:         reads = {}",
         store.reads.load(Ordering::SeqCst)
@@ -102,14 +111,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         store.reads.load(Ordering::SeqCst)
     );
 
-    let config = ServerConfig::load()?;
+    let config = sources.load()?;
     println!(
         "after load:         reads = {}",
         store.reads.load(Ordering::SeqCst)
     );
     println!("  port = {} (the store wins over the file)", config.port);
     // Not "an inline source": the store's own `describe` is what shows up.
-    if let Some(origin) = ServerConfig::source_of("port")? {
+    if let Some(origin) = sources.source_of("port")? {
         println!("  port comes {origin}");
     }
 
@@ -118,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     std::env::set_var("APP_SERVER_PORT", "9999");
 
-    let config = ServerConfig::load()?;
+    let config = sources.load()?;
     println!("\nwith APP_SERVER_PORT=9999:");
     println!("  port = {} (the environment beats the store)", config.port);
 
@@ -132,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let failure = ServerConfig::refresh_remote().unwrap_err();
     println!("\nstore went away:  {failure}");
 
-    let config = ServerConfig::load()?;
+    let config = sources.load()?;
     println!(
         "  port = {} — the last document it handed back is still serving",
         config.port
@@ -141,7 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Dropping it deliberately is a separate call, so it is never an accident.
     ServerConfig::clear_remote();
 
-    let config = ServerConfig::load()?;
+    let config = sources.load()?;
     println!("\nafter clear_remote:");
     println!("  port = {} (back to the file)", config.port);
 
@@ -160,7 +169,9 @@ fn watching() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n--- watching ---\n");
 
-    ServerConfig::init()?;
+    // `apply_remote` reloads through the configuration this `init` remembers,
+    // so the builder step comes first.
+    sources().init()?;
 
     ServerConfig::on_reload(|previous, current| {
         println!("  hook: port {} -> {}", previous.port, current.port);
@@ -182,7 +193,7 @@ fn watching() -> Result<(), Box<dyn std::error::Error>> {
                 Fetched::new(format!(r#"{{"server": {{"port": {port}}}}}"#), Format::Json);
 
             // Everything a file edit would do happens here: validation, the
-            // reload hooks, the diff, the cache.
+            // reload hooks, the cache.
             if let Err(error) = ServerConfig::apply_remote(document) {
                 println!("  loop: the store pushed something unusable: {error}");
             }

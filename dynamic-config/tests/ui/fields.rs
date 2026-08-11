@@ -5,14 +5,14 @@ use serde::Deserialize;
 
 // Both would generate a `Debug`, and the derived one would win the race to
 // print the secret.
-#[dynamic_config(files = ["a.json"], key = "a")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct DebugAndSecret {
     #[config(secret)]
     password: String,
 }
 
-#[dynamic_config(files = ["a.json"], key = "a")]
+#[dynamic_config]
 #[derive(Deserialize)]
 struct UnknownOption {
     #[config(sercet)]

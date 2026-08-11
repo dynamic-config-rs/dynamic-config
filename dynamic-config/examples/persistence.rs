@@ -4,10 +4,10 @@
 //! cargo run -p dynamic-config --example persistence --features json
 //! ```
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, Format};
 use serde::{Deserialize, Serialize};
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "server", save)]
+#[dynamic_config]
 #[derive(Debug, Deserialize, Serialize)]
 struct ServerConfig {
     host: String,
@@ -15,7 +15,9 @@ struct ServerConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut config = ServerConfig::load()?;
+    let sources = ServerConfig::builder("server").file("dynamic-config/examples/app.json");
+
+    let mut config = sources.load()?;
     println!("loaded: {config:?}");
 
     // A CLI persisting a preference. The write is atomic — temporary file and
@@ -24,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.port = 9090;
 
     let path = std::env::temp_dir().join("dynamic-config-example.json");
-    config.save(&path)?;
+    dynamic_config::save(&config, &path, Format::Json, "server")?;
 
     println!("\nwrote {}:", path.display());
     println!("{}", std::fs::read_to_string(&path)?);
@@ -32,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Reading keys the struct does not name: a plugin's table, a user-defined
     // section, anything whose shape is not known at compile time.
-    let snapshot = ServerConfig::snapshot()?;
+    let snapshot = sources.snapshot()?;
 
     println!("\nreading without a struct:");
     println!("  host        = {}", snapshot.get::<String>("host")?);

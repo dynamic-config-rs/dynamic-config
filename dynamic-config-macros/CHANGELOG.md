@@ -25,6 +25,21 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+### Breaking
+
+- The attribute takes no arguments; the error for any argument is a
+  migration map to the builder. Generated code shrinks to the declaration
+  surface: storage slots, `builder(key)`, accessors, hooks, remote and
+  layer setters, `prepare`, and the redacted `Debug`.
+- (superseded in the same release by the builder move) `cache` with no
+  `cache_mode` briefly generated the redacted cache; the argument then moved
+  to `Builder::cache(path, mode)`, where the mode is always spelled out.
+
+### Added
+
+- Generated `explain(path)` (secrets pre-redacted) and `builder()`; the
+  `strict_env` attribute flag.
+
 ## [0.1.0] — 2026-08-10
 
 ### Breaking

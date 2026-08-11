@@ -13,7 +13,7 @@
 use dynamic_config::{dynamic_config, Origin};
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/config.json"], key = "server", env = "APP_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     #[allow(dead_code)]
@@ -24,9 +24,16 @@ struct ServerConfig {
     workers: u16,
 }
 
+fn sources() -> dynamic_config::Builder<ServerConfig> {
+    ServerConfig::builder("server")
+        .file("dynamic-config/examples/config.json")
+        .env("APP_")
+}
+
 fn show(stage: &str) -> Result<(), dynamic_config::Error> {
-    let config = ServerConfig::load()?;
-    let origin = ServerConfig::source_of("port")?.unwrap_or(Origin::Unknown);
+    let sources = sources();
+    let config = sources.load()?;
+    let origin = sources.source_of("port")?.unwrap_or(Origin::Unknown);
 
     println!(
         "{stage:<24} port = {:<6} workers = {:<4} ({origin})",

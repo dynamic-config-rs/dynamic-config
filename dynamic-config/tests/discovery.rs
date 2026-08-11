@@ -6,7 +6,7 @@
 
 #![cfg(feature = "json")]
 
-use dynamic_config::{dynamic_config, load, LoadSpec, Search};
+use dynamic_config::{dynamic_config, load, Builder, LoadSpec, Search};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -15,12 +15,7 @@ struct Db {
     port: u16,
 }
 
-/// Three directories, layered in the order they are listed.
-#[dynamic_config(
-    name = "config",
-    paths = ["tests/search/etc", "tests/search/home", "tests/search/local"],
-    key = "db"
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize, PartialEq)]
 struct Layered {
     host: String,
@@ -28,13 +23,19 @@ struct Layered {
     tls: bool,
 }
 
-/// Discovery and an explicit file together.
-#[dynamic_config(
-    name = "config",
-    paths = ["tests/search/etc"],
-    files = ["tests/fixtures/override.json"],
-    key = "db"
-)]
+/// Three directories, layered in the order they are listed.
+fn layered_builder() -> Builder<Layered> {
+    Layered::builder("db").discover(
+        "config",
+        [
+            "tests/search/etc",
+            "tests/search/home",
+            "tests/search/local",
+        ],
+    )
+}
+
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct WithExplicit {
     #[allow(dead_code)]
@@ -44,9 +45,18 @@ struct WithExplicit {
     tls: bool,
 }
 
+/// Discovery and an explicit file together.
+fn with_explicit_builder() -> Builder<WithExplicit> {
+    WithExplicit::builder("db")
+        .discover("config", ["tests/search/etc"])
+        .file("tests/fixtures/override.json")
+}
+
 #[test]
 fn later_directories_layer_over_earlier_ones() {
-    let config = Layered::load().expect("the three fixtures together are complete");
+    let config = layered_builder()
+        .load()
+        .expect("the three fixtures together are complete");
 
     assert_eq!(
         config.host, "local-host",
@@ -64,11 +74,13 @@ fn later_directories_layer_over_earlier_ones() {
 
 #[test]
 fn an_explicit_file_outranks_a_discovered_one() {
-    let config = WithExplicit::load().expect("discovery plus the explicit file are complete");
+    let config = with_explicit_builder()
+        .load()
+        .expect("discovery plus the explicit file are complete");
 
     assert_eq!(
         config.port, 6432,
-        "`files = [..]` is a deliberate statement; a search result is a guess"
+        "`.file(..)` is a deliberate statement; a search result is a guess"
     );
 }
 

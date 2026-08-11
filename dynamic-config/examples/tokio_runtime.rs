@@ -20,14 +20,7 @@ use serde::Deserialize;
 
 const DIRECTORY: &str = "/tmp/dynamic-config-tokio";
 
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-tokio/config.json"],
-    key = "server",
-    env = "APP_",
-    watch,
-    async,
-    diff,
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     greeting: String,
@@ -47,15 +40,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&directory)?;
     write(&directory, "hello from tokio", 4)?;
 
+    let sources = ServerConfig::builder("server")
+        .file("/tmp/dynamic-config-tokio/config.json")
+        .env("APP_");
+
     // With the `tokio` feature there is no `set_blocking_executor` call: the
     // crate uses `spawn_blocking`, because a tokio program already has a pool
     // and growing a second habit would be a waste of threads.
-    ServerConfig::init_async().await?;
+    sources.init_async().await?;
 
     println!("loaded: {}", ServerConfig::current().greeting);
     println!("workers: {}\n", ServerConfig::current().workers);
 
-    let handle = ServerConfig::start_watch()?;
+    let handle = sources.watch(Duration::from_millis(250))?;
 
     // Two readers, to show the shape that matters: `changes()` is per-handle,
     // so every task wakes on its own rather than sharing a receiver.

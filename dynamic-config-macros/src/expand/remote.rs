@@ -19,7 +19,7 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
 
         /// Reads the remote store, and keeps what came back.
         ///
-        /// Takes effect on the next `load()`. Nothing here touches the
+        /// Takes effect on the next reload. Nothing here touches the
         /// network on any other call — a round trip on every configuration
         /// read would be indefensible.
         ///
@@ -35,7 +35,7 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
         ///
         /// The sink a remote watch loop calls. Everything a file change
         /// would do happens here too — validation, the reload hooks, the
-        /// diff, the cache — because it is the same code path, reached with
+        /// cache — because it is the same code path, reached with
         /// a document instead of a filesystem event.
         ///
         /// A failure leaves the previous snapshot serving, again exactly as
@@ -51,11 +51,11 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
         ) -> ::core::result::Result<(), ::dynamic_config::Error> {
             Self::dynamic_config_remote().install(document);
 
-            match Self::dynamic_config_apply() {
-                ::core::result::Result::Ok(summary) => {
+            match Self::dynamic_config_builder()?.reload() {
+                ::core::result::Result::Ok(()) => {
                     ::dynamic_config::__log_remote_reload(
                         ::core::stringify!(#name),
-                        summary.as_deref(),
+                        ::core::option::Option::None,
                     );
 
                     ::core::result::Result::Ok(())

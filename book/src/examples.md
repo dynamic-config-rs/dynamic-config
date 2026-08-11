@@ -16,7 +16,7 @@ Twenty-six of them, each showing one idea. All run from the workspace root.
 |---|---|---|
 | [`layers`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/layers.rs) | `json` | One key climbing all five layers, with `source_of` naming each. |
 | [`env_only`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/env_only.rs) | `json` | No files at all: the 12-factor arrangement, nested and list values included. |
-| [`discovery`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/discovery.rs) | `json` | `name` + `paths` across two directories, plus a profile overlay. |
+| [`discovery`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/discovery.rs) | `json` | `.discover(name, paths)` across two directories, plus a profile overlay. |
 | [`cli`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/cli.rs) | `clap`, `json` | Flags over the environment, `--set key=value`, and `--check` instead of booting. |
 
 ## Reloading
@@ -58,7 +58,7 @@ Twenty-six of them, each showing one idea. All run from the workspace root.
 | [`generic`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/generic.rs) | `json` | `Db<Postgres>` and `Db<Mysql>` with separate snapshots. |
 | [`persistence`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/persistence.rs) | `json` | Writing back atomically, and reading keys with no field. |
 | [`remote`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/remote.rs) | `json` | A `RemoteSource` of your own: explicit fetch, where it sits between the layers, an unreachable store, and a watch loop pushing through `apply_remote`. |
-| [`last_known_good`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/last_known_good.rs) | `json` | All three `cache_mode`s against the same broken file, with each cache file printed. |
+| [`last_known_good`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/last_known_good.rs) | `json` | All three `CacheMode`s against the same broken file, with each cache file printed. |
 | [`encrypted`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/encrypted.rs) | `age`, `json` | A `secrets.json.age` next to a plain `config.json`: generated key, real ciphertext, and what the wrong key looks like. |
 | [`schema`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/schema.rs) | `schema`, `json` | A JSON Schema for the file two config types share, with secrets marked and `required` dropped. |
 | [`no_macro`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/no_macro.rs) | `json` | `load`, `LoadSpec`, `Layer` and `ConfigCell` without the attribute. |

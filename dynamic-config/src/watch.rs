@@ -15,6 +15,44 @@ use crate::error::Error;
 use crate::log::{info, warning};
 use crate::source::LoadSpec;
 
+/// What a watcher looks at, owned.
+///
+/// The watch used to borrow a `LoadSpec<'static>`, which chained every
+/// watcher to statics only the attribute can produce. Owning the three
+/// facts the watch actually uses — the explicit file paths, the discovery
+/// name, the searched directories — frees the builder (or anything else)
+/// to start one from runtime data.
+#[derive(Debug, Clone)]
+pub struct Watched {
+    files: Vec<PathBuf>,
+    search_name: Option<String>,
+    search_directories: Vec<PathBuf>,
+}
+
+impl Watched {
+    /// Captures what a watcher needs from `spec`, with any lifetime.
+    ///
+    /// The searched directories are resolved here, once — the same moment
+    /// the directory watches are registered, so the two cannot disagree.
+    #[must_use]
+    pub fn from_spec(spec: &LoadSpec<'_>) -> Self {
+        Self {
+            files: spec
+                .sources
+                .iter()
+                .filter_map(|source| source.path())
+                .map(PathBuf::from)
+                .collect(),
+            search_name: spec.search.as_ref().map(|search| search.name.to_owned()),
+            search_directories: spec
+                .search
+                .as_ref()
+                .map(|search| discovery::search_directories(search))
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// Pause after the debounce window, before the files are read back.
 ///
 /// An atomic save writes a temporary file and renames it into place. The rename
@@ -161,11 +199,11 @@ impl std::fmt::Debug for WatchHandle {
 pub fn spawn(
     key: TypeId,
     name: &'static str,
-    spec: LoadSpec<'static>,
+    watched: Watched,
     debounce: Duration,
     reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
-    spawn_with(key, name, spec, debounce, WatchMode::default(), reload)
+    spawn_with(key, name, watched, debounce, WatchMode::default(), reload)
 }
 
 /// [`spawn`], with the detection strategy chosen explicitly.
@@ -177,7 +215,7 @@ pub fn spawn(
 pub fn spawn_with(
     key: TypeId,
     name: &'static str,
-    spec: LoadSpec<'static>,
+    watched: Watched,
     debounce: Duration,
     mode: WatchMode,
     reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
@@ -222,13 +260,13 @@ pub fn spawn_with(
     };
 
     match &mut backend {
-        Backend::Native(watcher) => watch_directories(name, watcher, &spec)?,
-        Backend::Poll(watcher) => watch_directories(name, watcher, &spec)?,
+        Backend::Native(watcher) => watch_directories(name, watcher, &watched)?,
+        Backend::Poll(watcher) => watch_directories(name, watcher, &watched)?,
     }
 
     thread::Builder::new()
         .name(format!("config-watch-{name}"))
-        .spawn(move || run(name, spec, debounce, reload, &receiver))?;
+        .spawn(move || run(name, &watched, debounce, reload, &receiver))?;
 
     // Everything that could fail has succeeded; from here the *handle* owns
     // the registration and frees it on drop.
@@ -274,13 +312,13 @@ fn to_io(error: notify::Error) -> std::io::Error {
 
 fn run(
     name: &'static str,
-    spec: LoadSpec<'static>,
+    watched: &Watched,
     debounce: Duration,
     reload: impl Fn() -> Result<Option<String>, Error>,
     receiver: &mpsc::Receiver<notify::Result<Event>>,
 ) {
     loop {
-        match collect_relevant(receiver, name, debounce, &spec) {
+        match collect_relevant(receiver, name, debounce, watched) {
             Collected::Dirty => {}
             Collected::Disconnected => {
                 // The watcher was dropped, so no further events can arrive.
@@ -290,10 +328,26 @@ fn run(
 
         thread::sleep(ATOMIC_SAVE_GRACE);
 
-        match reload() {
-            Ok(Some(summary)) => info!("{name}: reloaded, {summary}"),
-            Ok(None) => info!("{name}: reloaded"),
-            Err(error) => warning!("{name}: reload failed, keeping the previous snapshot: {error}"),
+        // Under `tracing`, the reload is a span with its outcome and
+        // duration as fields — enough to alert on "has not reloaded
+        // cleanly in an hour" without parsing message strings. Without it,
+        // the messages below carry the duration and stderr carries the
+        // messages.
+        #[cfg(feature = "tracing")]
+        let _span = ::tracing::info_span!(target: "dynamic_config", "config_reload", config = name)
+            .entered();
+
+        let started = std::time::Instant::now();
+        let outcome = reload();
+        let duration_ms = started.elapsed().as_millis();
+
+        match outcome {
+            Ok(Some(summary)) => info!("{name}: reloaded in {duration_ms}ms, {summary}"),
+            Ok(None) => info!("{name}: reloaded in {duration_ms}ms"),
+            Err(error) => warning!(
+                "{name}: reload failed after {duration_ms}ms, keeping the previous snapshot: \
+                 {error}"
+            ),
         }
     }
 }
@@ -318,7 +372,7 @@ enum Collected {
 fn watch_directories(
     name: &'static str,
     watcher: &mut impl Watcher,
-    spec: &LoadSpec<'static>,
+    watched: &Watched,
 ) -> std::io::Result<()> {
     let mut directories = Vec::<PathBuf>::new();
 
@@ -329,10 +383,9 @@ fn watch_directories(
             }
         };
 
-        for file in spec.sources.iter().filter_map(|source| source.path()) {
+        for file in &watched.files {
             push(
-                Path::new(file)
-                    .parent()
+                file.parent()
                     .filter(|parent| !parent.as_os_str().is_empty())
                     .unwrap_or_else(|| Path::new("."))
                     .to_path_buf(),
@@ -341,10 +394,8 @@ fn watch_directories(
 
         // Every searched directory, whether or not it holds a file today: a
         // config file appearing later is exactly the event worth catching.
-        if let Some(search) = &spec.search {
-            for directory in discovery::search_directories(search) {
-                push(directory);
-            }
+        for directory in &watched.search_directories {
+            push(directory.clone());
         }
     }
 
@@ -396,12 +447,12 @@ fn collect_relevant(
     receiver: &mpsc::Receiver<notify::Result<Event>>,
     name: &'static str,
     debounce: Duration,
-    spec: &LoadSpec<'static>,
+    watched: &Watched,
 ) -> Collected {
     // Phase 1: sleep until something we care about happens.
     loop {
         match receiver.recv() {
-            Ok(Ok(event)) if is_relevant(&event, spec) => break,
+            Ok(Ok(event)) if is_relevant(&event, watched) => break,
             Ok(Ok(_)) => {}
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
             Err(mpsc::RecvError) => return Collected::Disconnected,
@@ -425,7 +476,7 @@ fn collect_relevant(
             // A relevant event restarts the quiet period (up to the deadline);
             // an irrelevant one merely waits out the remainder — a neighbour's
             // churn must not delay our reload.
-            Ok(Ok(event)) if is_relevant(&event, spec) => {
+            Ok(Ok(event)) if is_relevant(&event, watched) => {
                 quiet_until = std::time::Instant::now() + debounce;
             }
             Ok(Ok(_)) => {}
@@ -442,23 +493,17 @@ fn collect_relevant(
 /// Paths are compared in both directions because event paths are absolute while
 /// configured paths are usually relative to the working directory; a rare false
 /// positive costs one redundant reload, which is harmless.
-fn is_relevant(event: &Event, spec: &LoadSpec<'static>) -> bool {
+fn is_relevant(event: &Event, watched: &Watched) -> bool {
     matches!(
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    ) && event.paths.iter().any(|changed| is_ours(changed, spec))
+    ) && event.paths.iter().any(|changed| is_ours(changed, watched))
 }
 
-fn is_ours(changed: &Path, spec: &LoadSpec<'static>) -> bool {
-    let explicit = spec
-        .sources
-        .iter()
-        .filter_map(|source| source.path())
-        .any(|file| {
-            let configured = Path::new(file);
-
-            changed == configured || changed.ends_with(configured) || configured.ends_with(changed)
-        });
+fn is_ours(changed: &Path, watched: &Watched) -> bool {
+    let explicit = watched.files.iter().any(|configured| {
+        changed == configured || changed.ends_with(configured) || configured.ends_with(changed)
+    });
 
     if explicit {
         return true;
@@ -467,15 +512,15 @@ fn is_ours(changed: &Path, spec: &LoadSpec<'static>) -> bool {
     // Only the searched directories are watched, so matching on the file name
     // alone is enough — and it catches a `config.toml` that did not exist when
     // the watcher started.
-    if spec
-        .search
-        .as_ref()
-        .is_some_and(|search| discovery::is_candidate(changed, search.name))
+    if watched
+        .search_name
+        .as_deref()
+        .is_some_and(|name| discovery::is_candidate(changed, name))
     {
         return true;
     }
 
-    is_mount_marker(changed, spec)
+    is_mount_marker(changed, watched)
 }
 
 /// Whether `changed` is the bookkeeping entry of an atomically remounted
@@ -487,7 +532,7 @@ fn is_ours(changed: &Path, spec: &LoadSpec<'static>) -> bool {
 /// matching on the file alone sees a ConfigMap update as silence. Entries
 /// beginning with `..` are the kubelet's convention and effectively nothing
 /// else's, which keeps this from firing on ordinary files.
-fn is_mount_marker(changed: &Path, spec: &LoadSpec<'static>) -> bool {
+fn is_mount_marker(changed: &Path, watched: &Watched) -> bool {
     let is_marker = changed
         .file_name()
         .and_then(|name| name.to_str())
@@ -501,21 +546,16 @@ fn is_mount_marker(changed: &Path, spec: &LoadSpec<'static>) -> bool {
         return false;
     };
 
-    let mut watched = spec
-        .sources
-        .iter()
-        .filter_map(|source| source.path())
-        .filter_map(|file| Path::new(file).parent());
+    let mut parents = watched.files.iter().filter_map(|file| file.parent());
 
-    if watched.any(|parent| directory.ends_with(parent) || parent.ends_with(directory)) {
+    if parents.any(|parent| directory.ends_with(parent) || parent.ends_with(directory)) {
         return true;
     }
 
-    spec.search.as_ref().is_some_and(|search| {
-        discovery::search_directories(search)
-            .iter()
-            .any(|parent| directory.ends_with(parent) || parent.ends_with(directory))
-    })
+    watched
+        .search_directories
+        .iter()
+        .any(|parent| directory.ends_with(parent) || parent.ends_with(directory))
 }
 
 #[cfg(test)]
@@ -543,26 +583,27 @@ mod tests {
     fn an_absolute_event_path_matches_a_relative_configured_path() {
         let probe = event(EventKind::Modify(ModifyKind::Any), "/srv/app/config.toml");
 
-        assert!(is_relevant(&probe, &explicit_spec()));
+        assert!(is_relevant(&probe, &Watched::from_spec(&explicit_spec())));
     }
 
     #[test]
     fn a_discovered_name_matches_even_though_no_file_was_listed() {
         let paths: &'static [&'static str] = &["/srv/app"];
         let spec = LoadSpec::new("db", &[]).with_search("config", paths);
+        let watched = Watched::from_spec(&spec);
 
         let probe = event(EventKind::Create(CreateKind::File), "/srv/app/config.toml");
-        assert!(is_relevant(&probe, &spec));
+        assert!(is_relevant(&probe, &watched));
 
         let probe = event(EventKind::Create(CreateKind::File), "/srv/app/other.toml");
-        assert!(!is_relevant(&probe, &spec));
+        assert!(!is_relevant(&probe, &watched));
     }
 
     #[test]
     fn an_unrelated_file_in_the_same_directory_is_ignored() {
         let probe = event(EventKind::Modify(ModifyKind::Any), "/srv/app/notes.txt");
 
-        assert!(!is_relevant(&probe, &explicit_spec()));
+        assert!(!is_relevant(&probe, &Watched::from_spec(&explicit_spec())));
     }
 
     #[test]
@@ -572,7 +613,7 @@ mod tests {
             "/srv/app/config.toml",
         );
 
-        assert!(!is_relevant(&probe, &explicit_spec()));
+        assert!(!is_relevant(&probe, &Watched::from_spec(&explicit_spec())));
     }
 
     #[test]
@@ -585,7 +626,7 @@ mod tests {
         let first = spawn(
             key,
             "DuplicateTest",
-            spec,
+            Watched::from_spec(&spec),
             Duration::from_millis(10),
             || Ok(None),
         )
@@ -597,7 +638,7 @@ mod tests {
         let error = spawn(
             key,
             "DuplicateTest",
-            spec,
+            Watched::from_spec(&spec),
             Duration::from_millis(10),
             || Ok(None),
         )
@@ -621,7 +662,7 @@ mod tests {
         let again = spawn(
             key,
             "DuplicateTest",
-            spec,
+            Watched::from_spec(&spec),
             Duration::from_millis(10),
             || Ok(None),
         )
@@ -648,7 +689,7 @@ mod tests {
         let _ = spawn(
             key,
             "FailedSpawnTest",
-            bad,
+            Watched::from_spec(&bad),
             Duration::from_millis(10),
             || Ok(None),
         )
@@ -663,7 +704,7 @@ mod tests {
         let handle = spawn(
             key,
             "FailedSpawnTest",
-            explicit_spec(),
+            Watched::from_spec(&explicit_spec()),
             Duration::from_millis(10),
             || Ok(None),
         )
@@ -684,7 +725,10 @@ mod tests {
         ] {
             let probe = event(kind, "config.toml");
 
-            assert!(is_relevant(&probe, &explicit_spec()), "{kind:?}");
+            assert!(
+                is_relevant(&probe, &Watched::from_spec(&explicit_spec())),
+                "{kind:?}"
+            );
         }
     }
 }

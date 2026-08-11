@@ -12,7 +12,7 @@ use serde::Deserialize;
 // source_of / is_set
 // ─────────────────────────────────────────────
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = "DCOBS_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Traced {
     #[allow(dead_code)]
@@ -21,9 +21,17 @@ struct Traced {
     port: u16,
 }
 
+/// The `db` section of the base fixture, overridable through `DCOBS_DB_*`.
+fn traced_builder() -> dynamic_config::Builder<Traced> {
+    Traced::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCOBS_")
+}
+
 #[test]
 fn a_value_from_a_file_names_the_file() {
-    let origin = Traced::source_of("host")
+    let origin = traced_builder()
+        .source_of("host")
         .expect("the fixture reads cleanly")
         .expect("`host` is set by the fixture");
 
@@ -39,7 +47,7 @@ fn a_value_from_a_runtime_layer_says_so() {
     Traced::set_override("port", 9999u16).unwrap();
 
     assert_eq!(
-        Traced::source_of("port").unwrap(),
+        traced_builder().source_of("port").unwrap(),
         Some(Origin::Runtime("override")),
         "the override outranks the file, so it is what the next load would use"
     );
@@ -49,16 +57,19 @@ fn a_value_from_a_runtime_layer_says_so() {
 
 #[test]
 fn is_set_distinguishes_absent_from_falsy() {
-    assert!(Traced::is_set("host").unwrap());
-    assert!(!Traced::is_set("nothing_supplies_this").unwrap());
-    assert_eq!(Traced::source_of("nothing_supplies_this").unwrap(), None);
+    assert!(traced_builder().is_set("host").unwrap());
+    assert!(!traced_builder().is_set("nothing_supplies_this").unwrap());
+    assert_eq!(
+        traced_builder().source_of("nothing_supplies_this").unwrap(),
+        None
+    );
 }
 
 // ─────────────────────────────────────────────
 // on_reload
 // ─────────────────────────────────────────────
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Hooked {
     host: String,
@@ -78,7 +89,10 @@ fn a_callback_sees_both_sides_of_a_reload_but_not_the_first_load() {
             .push((previous.host.clone(), current.host.clone()));
     });
 
-    Hooked::init().expect("the fixture reads cleanly");
+    Hooked::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture reads cleanly");
     assert!(
         seen.lock().unwrap().is_empty(),
         "installing the first snapshot is not a reload"
@@ -99,7 +113,7 @@ fn a_callback_sees_both_sides_of_a_reload_but_not_the_first_load() {
 // ─────────────────────────────────────────────
 
 /// No `#[derive(Debug)]`: `#[config(secret)]` writes one that redacts.
-#[dynamic_config(files = ["tests/fixtures/secrets.json"], key = "db")]
+#[dynamic_config]
 #[derive(Deserialize)]
 struct Guarded {
     host: String,
@@ -109,9 +123,14 @@ struct Guarded {
     token: String,
 }
 
+/// The `db` section of the secrets fixture.
+fn guarded_builder() -> dynamic_config::Builder<Guarded> {
+    Guarded::builder("db").file("tests/fixtures/secrets.json")
+}
+
 #[test]
 fn a_marked_field_never_reaches_a_debug_log() {
-    let config = Guarded::load().expect("the fixture is complete");
+    let config = guarded_builder().load().expect("the fixture is complete");
 
     // The values really did load — redaction is about printing, not parsing.
     assert_eq!(config.password, "hunter2");
@@ -127,7 +146,7 @@ fn a_marked_field_never_reaches_a_debug_log() {
 
 #[test]
 fn an_unmarked_field_is_still_printed() {
-    let rendered = format!("{:?}", Guarded::load().unwrap());
+    let rendered = format!("{:?}", guarded_builder().load().unwrap());
 
     assert!(rendered.contains("host: \"localhost\""), "{rendered}");
 }

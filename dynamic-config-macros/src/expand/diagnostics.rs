@@ -88,9 +88,45 @@ fn derives_debug(input: &ItemStruct) -> Option<&syn::Attribute> {
     })
 }
 
-/// `source_of`, `is_set` and `snapshot`: the read-only introspection surface.
-pub(super) fn introspection_methods() -> TokenStream {
+/// `source_of`, `is_set`, `snapshot` and `explain`: the read-only
+/// introspection surface.
+pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
     quote! {
+        /// Explains `path`: every configured layer's answer, not just the
+        /// winner's — what each layer had to say and who beat whom.
+        ///
+        /// The result **contains values**; that is its point. Paths under a
+        /// `#[config(secret)]` field come back with every value already
+        /// replaced by `***` — the origins stay, because *where* a secret
+        /// comes from is the useful half.
+        ///
+        /// The marking follows the *field's* path. An old key kept alive by
+        /// [`alias`](Self::alias) is not covered when queried under its old
+        /// name — explain the field's path, or pass the result through
+        /// [`Explanation::redacted`](::dynamic_config::Explanation::redacted).
+        ///
+        /// Re-reads the sources, so it explains what the *next* load would
+        /// see, the same way [`source_of`](Self::source_of) does.
+        ///
+        /// # Errors
+        ///
+        /// The same failures as a load — or the type not having been
+        /// configured yet.
+        pub fn explain(
+            path: &str,
+        ) -> ::core::result::Result<::dynamic_config::Explanation, ::dynamic_config::Error> {
+            const SECRETS: &[&str] = &[#(#secret_names),*];
+
+            let explanation = Self::dynamic_config_builder()?.explain(path)?;
+            let head = path.split('.').next().unwrap_or(path);
+
+            if SECRETS.contains(&head) {
+                return ::core::result::Result::Ok(explanation.redacted());
+            }
+
+            ::core::result::Result::Ok(explanation)
+        }
+
         /// Where the value at `path` would come from, if anything supplies it.
         ///
         /// Re-reads the sources, so it reports what the *next* load would
@@ -99,23 +135,25 @@ pub(super) fn introspection_methods() -> TokenStream {
         ///
         /// # Errors
         ///
-        /// The same failures as [`load`](Self::load).
+        /// The same failures as a load — or the type not having been
+        /// configured yet.
         pub fn source_of(
             path: &str,
         ) -> ::core::result::Result<
             ::core::option::Option<::dynamic_config::Origin>,
             ::dynamic_config::Error,
         > {
-            ::dynamic_config::source_of(&Self::dynamic_config_spec(), path)
+            Self::dynamic_config_builder()?.source_of(path)
         }
 
         /// Whether anything supplies `path`.
         ///
         /// # Errors
         ///
-        /// The same failures as [`load`](Self::load).
+        /// The same failures as a load — or the type not having been
+        /// configured yet.
         pub fn is_set(path: &str) -> ::core::result::Result<bool, ::dynamic_config::Error> {
-            ::dynamic_config::is_set(&Self::dynamic_config_spec(), path)
+            Self::dynamic_config_builder()?.is_set(path)
         }
 
         /// Resolves the section without deserializing it.
@@ -127,12 +165,13 @@ pub(super) fn introspection_methods() -> TokenStream {
         ///
         /// # Errors
         ///
-        /// The same failures as [`load`](Self::load).
+        /// The same failures as a load — or the type not having been
+        /// configured yet.
         pub fn snapshot() -> ::core::result::Result<
             ::dynamic_config::Snapshot,
             ::dynamic_config::Error,
         > {
-            ::dynamic_config::snapshot(&Self::dynamic_config_spec())
+            Self::dynamic_config_builder()?.snapshot()
         }
     }
 }
@@ -155,10 +194,7 @@ pub(super) fn check_method() -> TokenStream {
             ::dynamic_config::Report,
             ::dynamic_config::Error,
         > {
-            ::dynamic_config::check::<Self>(
-                &Self::dynamic_config_spec(),
-                Self::DYNAMIC_CONFIG_FIELDS,
-            )
+            Self::dynamic_config_builder()?.check()
         }
     }
 }

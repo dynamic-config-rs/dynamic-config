@@ -19,10 +19,38 @@ Each of these is a real request with a real answer. They are refused rather than
 unbuilt, so that nobody spends an afternoon discovering the reason — and each
 says what would reopen it.
 
+### A `ReloadExecutor` / `ReloadPolicy` abstraction
+
+Exists under another name: `set_blocking_executor` already steers where the
+blocking half of a reload runs, and the `tokio` feature installs the blocking
+pool. A second abstraction over the same choice would be a synonym. Reopened
+by a steering need the executor hook cannot express.
+
+### `on_reload_async`
+
+`changes()` *is* the async reload event — a `Future` on your executor, free
+to await whatever the reaction needs. See
+[The Reload Lifecycle](reload-lifecycle.md). Reopened by nothing; this is
+what `changes()` is for.
+
+### Splitting the core into `-core`/`-watch`/`-schema` crates
+
+Feature flags already give the isolation a split would: disable a feature
+and the dependency is gone. A crate split adds a version matrix to maintain
+without removing anything anyone is forced to take. Reopened by a feature
+whose dependency cannot be made optional.
+
+### Fewer official store backends
+
+The seven exist, are tested against real servers, and are marked
+Experimental. Withdrawing shipped crates punishes their users to save
+unshipped maintenance. Revisited per crate if one's client dependency
+becomes unmaintainable.
+
 ### Nested profiles from figment
 
 figment's profiles are a general mechanism. This crate spends them on
-**sections** — `key = "db"` selects the `db` profile — and re-implements the
+**sections** — `builder("db")` selects the `db` profile — and re-implements the
 profile *idea* on top with [`profile_env`](profiles-and-discovery.md#profile_env) and sibling files
 (`config.production.toml`). So a provider handed to
 [`Source::provider`](sources-and-precedence.md#bringing-your-own-figment-provider) cannot carry its own

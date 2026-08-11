@@ -1,17 +1,18 @@
 # Schema
 
-## The `schema` attribute
+## The `schema` method
 
 ```rust
-#[dynamic_config(files = ["config.json"], key = "db", schema)]
-#[derive(Deserialize, JsonSchema)]
+let schema = DbConfig::builder("db").schema();
 ```
 
-Generates `schema()`. Requires the `schema` feature and `Self: JsonSchema` —
-opt-in for the same reason `save` is: the method needs a trait you have to
-derive, and a `where Self: JsonSchema` clause cannot express that (rustc rejects
-an inherent method whose bound a concrete `Self` does not meet, at the
-definition rather than at the call).
+With the `schema` feature, the builder has `schema()`. It lives on the builder
+rather than on the type for two reasons: the schema wraps the struct under the
+builder's *key*, which the type alone does not know, and the method needs
+`T: JsonSchema` — a bound a generated inherent method cannot carry (rustc
+rejects an inherent method whose bound a concrete `Self` does not meet, at the
+definition rather than at the call; the builder's generic `impl` block can
+state it).
 
 ## A schema for the config files
 
@@ -19,7 +20,7 @@ With the `schema` feature, every config type can describe the file it reads, so
 an editor completes and validates it:
 
 ```rust
-#[dynamic_config(files = ["config.json"], key = "db", schema)]
+#[dynamic_config]
 #[derive(Deserialize, JsonSchema)]
 struct DbConfig {
     /// Where the database lives.        <- becomes the hover text
@@ -28,10 +29,13 @@ struct DbConfig {
     password: String,
 }
 
-let schema = DbConfig::schema();
+let schema = DbConfig::builder("db").schema();
 
 // Several types over one file describe that one file together.
-let whole = dynamic_config::schema::merge([DbConfig::schema(), ServerConfig::schema()]);
+let whole = dynamic_config::schema::merge([
+    DbConfig::builder("db").schema(),
+    ServerConfig::builder("server").schema(),
+]);
 ```
 
 What comes out describes the **file**, not the struct — the struct is one

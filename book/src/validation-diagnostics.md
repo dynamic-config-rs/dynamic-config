@@ -3,43 +3,57 @@
 ## `validate`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "pool", validate)]
+#[dynamic_config]
 #[derive(Deserialize, Validate)]        // validator, garde, or a method of your own
 struct Pool { min_size: u16, max_size: u16 }
+
+Pool::builder("pool")
+    .file("config.toml")
+    .validate(|pool| dynamic_config::Error::ok_or_invalid(pool.validate()))
+    .init()?;
 ```
 
-Every load calls `self.validate()` and turns an `Err` into `ErrorKind::Invalid`,
-so a reload that fails validation keeps the previous snapshot exactly as a parse
-failure does. For the case where every field is valid on its own and the whole
-is still nonsense.
+`.validate(f)` runs after deserializing and before anything installs — on
+`init`, on every watch reload, and on a recovery from the cache — so a reload
+that fails validation keeps the previous snapshot exactly as a parse failure
+does. For the case where every field is valid on its own and the whole is
+still nonsense.
 
-`validate` is resolved at **your** call site — an inherent method, or any trait
-in scope — so this crate never pins a version of a validation library.
+The check is a function you pass, not a method the macro resolves, so this
+crate never pins a version of a validation library:
+`Error::ok_or_invalid(..)` adapts whatever `Result` yours returns into
+`ErrorKind::Invalid`.
 
-## `diff`
+## Key-level diffs
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", watch, diff)]
+DbConfig::on_reload(|old, new| {
+    for change in dynamic_config::changed_paths(old, new).unwrap_or_default() {
+        tracing::info!(%change, "configuration changed");
+    }
+});
 ```
 
 ```text
-[dynamic-config] DbConfig: reloaded, pool.max_size changed, tls added
+pool.max_size changed
+tls added
 ```
 
-Logs which keys a reload changed. **Paths only, never values** — otherwise a
-reload of `db.password` would do in the log exactly what `#[config(secret)]`
-exists to prevent. Costs no extra file reads: the reload resolves once and both
-deserializes and compares.
+`changed_paths` reports which keys a reload changed. **Paths only, never
+values** — otherwise a reload of `db.password` would do in the log exactly
+what `#[config(secret)]` exists to prevent.
 
-Applies to every reload, not only the watcher's: a document a
+It runs in an `on_reload` hook, so it applies to every reload, not only the
+watcher's: a document a
 [remote watch](remote-stores.md#watching-a-store) pushed through `apply_remote`
-is reported the same way. That is why it needs no `watch` — a program with no
-config file at all, watching only a store, still wants to know what moved.
+is reported the same way. A program with no config file at all, watching only
+a store, still learns what moved. For two resolved trees rather than two
+structs, `Snapshot::diff` answers the same question.
 
 ## `#[config(secret)]`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db")]
+#[dynamic_config]
 #[derive(Deserialize)]          // note: no `Debug`
 struct DatabaseConfig {
     host: String,
@@ -96,7 +110,51 @@ DbConfig::is_set("pool.tls")?;  // false — absent, not "present but false"
 ```
 
 Both re-read the sources, so they report what the *next* load would see rather
-than what the current snapshot holds.
+than what the current snapshot holds. The snapshot answers for *itself*:
+`DbConfig::snapshot()?.source_of("port")` names the source of the value that
+was actually resolved into that snapshot — provenance is captured while the
+load still knows it. A snapshot that did not come from a live resolution (one
+read back from the cache) has none.
+
+## Why is this value what it is?
+
+`source_of` names the winner. `explain` shows the whole argument:
+
+```rust
+println!("{}", DbConfig::explain("pool.max_size")?);
+```
+
+```text
+pool.max_size = 32
+
+layer        source                 value
+default      set as default         8
+file         in config.toml         16
+environment  from APP_DB_POOL__MAX_SIZE  absent
+override     set as override        32   ← winner
+```
+
+One row per layer that has anything to say, lowest precedence first; the
+winner is the highest row with a value. Unlike every other diagnostic in this
+crate, an explanation **contains values** — that is its point; you asked.
+Fields marked `#[config(secret)]` come back with every value already `***`
+(the origins stay — *where* a secret comes from is the useful half), and
+[`Explanation::redacted`](https://docs.rs/dynamic-config/latest/dynamic_config/struct.Explanation.html)
+blanks any explanation the caller knows to be sensitive — including a
+secret's *old* key kept alive by an alias, which the field's marking cannot
+cover. The rows are public on the returned `Explanation` for anything that
+wants its own format.
+
+The same two questions from a shell, without writing a program:
+
+```sh
+dynamic-config explain pool.max_size --file config.toml --key db --env APP_
+dynamic-config diff old.toml new.toml --key db     # paths only, never values
+```
+
+That is `dynamic-config-cli`, an Experimental workspace member. A CLI cannot
+see your attribute, so the flags restate the load — they have to match what
+the application declares, or the answer is about a different load.
 
 ## Errors
 

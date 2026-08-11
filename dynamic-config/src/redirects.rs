@@ -15,203 +15,6 @@
 
 /// Not public API.
 ///
-/// Expands to `save_encrypted` when the `decrypt` feature is on, and to
-/// nothing when it is not — nothing rather than a compile error, because
-/// `save` alone is fully legitimate without decryption, and the method's very
-/// signature names [`Encryptor`], which only exists with the feature.
-///
-/// It lives here rather than in the proc-macro because a `#[cfg]` emitted into
-/// generated code is evaluated against the *user's* crate features; this macro
-/// is expanded inside dynamic-config, where `decrypt` actually lives.
-///
-/// [`Encryptor`]: crate::Encryptor
-#[cfg(feature = "decrypt")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __save_encrypted_method {
-    ($key:expr) => {
-        /// Writes this configuration to `path`, encrypted.
-        ///
-        /// The counterpart to reading a `secrets.json.age`. The format comes
-        /// from the extension *under* the `.age` suffix, so
-        /// `secrets.json.age` is JSON.
-        ///
-        /// The encryptor is passed here rather than installed process-wide,
-        /// because *who may read this file* is a decision about this write.
-        ///
-        /// # Errors
-        ///
-        /// If the name resolves to no supported format, the value cannot be
-        /// serialized, encryption fails, or the file cannot be written.
-        pub fn save_encrypted(
-            &self,
-            path: impl ::core::convert::AsRef<::std::path::Path>,
-            encryptor: &dyn $crate::Encryptor,
-        ) -> ::core::result::Result<(), $crate::Error> {
-            let path = path.as_ref();
-            let format = $crate::Format::from_path(path)?;
-
-            $crate::save_encrypted(self, path, format, $key, encryptor)
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "decrypt"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __save_encrypted_method {
-    ($key:expr) => {};
-}
-
-/// Not public API.
-///
-/// Nothing when this build can read `.env` files, and a compile error naming
-/// the feature when it cannot.
-#[cfg(feature = "dotenv")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __require_dotenv {
-    () => {};
-}
-
-/// Not public API.
-#[cfg(not(feature = "dotenv"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __require_dotenv {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `env_files` in #[dynamic_config(..)] requires the `dotenv` \
-             feature; add features = [\"dotenv\"] to your dynamic-config dependency"
-        );
-    };
-}
-
-/// Not public API.
-///
-/// An encrypted source when this build can decrypt, and a compile error naming
-/// the feature when it cannot — the same treatment a `.toml` file gets without
-/// the `toml` feature, for the same reason: a silent runtime failure on the one
-/// machine that has an encrypted file is worse than a build that will not start.
-#[cfg(feature = "decrypt")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __source_encrypted {
-    ($path:expr, $format:expr) => {
-        $crate::Source::encrypted($path, $format)
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "decrypt"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __source_encrypted {
-    ($path:expr, $format:expr) => {{
-        ::core::compile_error!(
-            "dynamic-config: a `.age` config file needs decryption support; \
-             add features = [\"age\"] to your dynamic-config dependency"
-        );
-
-        $crate::Source::file($path, $format)
-    }};
-}
-
-/// Not public API.
-#[cfg(feature = "json")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_json {
-    () => {
-        $crate::Format::Json
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "json"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_json {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.json` files require the `json` feature; \
-             add features = [\"json\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-#[cfg(feature = "toml")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_toml {
-    () => {
-        $crate::Format::Toml
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "toml"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_toml {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.toml` files require the `toml` feature; \
-             add features = [\"toml\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-#[cfg(feature = "yaml")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_yaml {
-    () => {
-        $crate::Format::Yaml
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "yaml"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __format_yaml {
-    () => {
-        ::core::compile_error!(
-            "dynamic-config: `.yaml` and `.yml` files require the `yaml` feature; \
-             add features = [\"yaml\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-#[cfg(feature = "watch")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __spawn_watch {
-    ($($argument:tt)*) => {
-        $crate::watch::spawn_with($($argument)*)
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "watch"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __spawn_watch {
-    ($($argument:tt)*) => {
-        ::core::compile_error!(
-            "dynamic-config: `watch` in #[dynamic_config(..)] requires the `watch` feature; \
-             add features = [\"watch\"] to your dynamic-config dependency"
-        )
-    };
-}
-
-/// Not public API.
-///
 /// Expands to `bind_clap` when the `clap` feature is on, and to nothing when it
 /// is not. An item-level macro rather than an expression-level redirect,
 /// because the signature names a clap type.
@@ -250,54 +53,6 @@ macro_rules! __clap_methods {
 
 /// Not public API.
 ///
-/// Expands to `schema` when the `schema` feature is on, and to nothing when it
-/// is not. An item-level macro rather than an expression-level redirect,
-/// because the `where` clause names a schemars trait.
-#[cfg(feature = "schema")]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __schema_methods {
-    ($key:expr, $secrets:expr) => {
-        /// A JSON Schema for the *file* this section lives in.
-        ///
-        /// Not the struct's schema: the struct is one section, and a config
-        /// file is a map of them, so this is the struct's schema wrapped under
-        /// its key. Fields marked `#[config(secret)]` carry `writeOnly`, which
-        /// is how JSON Schema says *not for reading back*.
-        ///
-        /// Combine several with `dynamic_config::schema::merge` when more than
-        /// one config type shares a file. See that module for what the schema
-        /// deliberately leaves out, and for how each format wires one up.
-        pub fn schema() -> ::dynamic_config::__private::serde_json::Value
-        where
-            Self: ::dynamic_config::__private::schemars::JsonSchema,
-        {
-            let generated = ::dynamic_config::__private::schemars::schema_for!(Self);
-
-            ::dynamic_config::schema::section(
-                $key,
-                ::core::convert::Into::into(generated),
-                $secrets,
-            )
-        }
-    };
-}
-
-/// Not public API.
-#[cfg(not(feature = "schema"))]
-#[macro_export]
-#[doc(hidden)]
-macro_rules! __schema_methods {
-    ($key:expr, $secrets:expr) => {
-        ::core::compile_error!(
-            "dynamic-config: `schema` in #[dynamic_config(..)] requires the `schema` feature; \
-             add features = [\"schema\"] to your dynamic-config dependency"
-        );
-    };
-}
-
-/// Not public API.
-///
 /// Expands to the async half of the generated `impl`. It lives here rather than
 /// in the proc-macro because these method *signatures* mention tokio types, and
 /// a signature cannot be hidden behind an expression-level `compile_error!`.
@@ -312,7 +67,7 @@ macro_rules! __async_methods {
         ///
         /// Same as `load`, plus if the blocking task is cancelled.
         pub async fn load_async() -> ::core::result::Result<Self, $crate::Error> {
-            $crate::load_async(Self::dynamic_config_spec()).await
+            Self::dynamic_config_builder()?.load_async().await
         }
 
         /// Loads the configuration and installs it as the initial snapshot,
@@ -322,9 +77,7 @@ macro_rules! __async_methods {
         ///
         /// Same as `load_async`.
         pub async fn init_async() -> ::core::result::Result<(), $crate::Error> {
-            $crate::off_thread(Self::dynamic_config_apply).await?;
-
-            ::core::result::Result::Ok(())
+            Self::dynamic_config_builder()?.init_async().await
         }
 
         /// A handle woken by every later reload.
@@ -389,11 +142,5 @@ macro_rules! __async_remote_methods {
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __async_methods {
-    ($name:ident) => {
-        ::core::compile_error!(
-            "dynamic-config: `async` in #[dynamic_config(..)] requires the `async` feature \
-             (or `tokio`, which implies it); add features = [\"async\"] to your \
-             dynamic-config dependency"
-        );
-    };
+    ($name:ident) => {};
 }

@@ -5,9 +5,7 @@ use figment::Figment;
 #[cfg(feature = "dotenv")]
 use std::path::Path;
 
-use crate::error::Error;
-#[cfg(not(feature = "dotenv"))]
-use crate::error::ErrorKind;
+use crate::error::{Error, ErrorKind};
 use crate::source::LoadSpec;
 
 /// The environment provider for one section.
@@ -34,6 +32,60 @@ pub(super) fn environment(prefix: &str, key: &str, nest: &str, allow_empty: bool
     }
 
     env.split(nest).profile(key)
+}
+
+/// The spellings strict mode refuses: they read like booleans (or like
+/// nothing) and arrive as strings, which is silently right in a `String`
+/// field and silently wrong everywhere else.
+const AMBIGUOUS: &[&str] = &["yes", "no", "on", "off", "null", "nil", "none"];
+
+fn is_ambiguous(value: &str) -> bool {
+    let trimmed = value.trim();
+
+    AMBIGUOUS
+        .iter()
+        .any(|candidate| trimmed.eq_ignore_ascii_case(candidate))
+}
+
+/// One refusal, naming the variable and what to write instead — and not the
+/// value: the ambiguous family is seven known words, but a diagnostic that
+/// echoes environment values is a diagnostic one copy-paste away from
+/// echoing a secret. Values stay out of messages everywhere, including here.
+fn ambiguous(variable: &str) -> Error {
+    Error::new(
+        ErrorKind::Env,
+        format!(
+            "`{variable}` is set to one of the ambiguous yes/no/on/off \
+             spellings, which `strict_env` refuses: it would arrive as a \
+             string, not a boolean; write `true`, `false`, or the value you \
+             mean"
+        ),
+    )
+}
+
+/// Rejects ambiguous values among the real environment variables under
+/// `prefix`. Strict mode's whole job; a no-op without it.
+pub(super) fn reject_ambiguous(prefix: &str) -> Result<(), Error> {
+    // `vars_os` for the same reason as `empty_keys` below: a non-UTF-8 name
+    // cannot match an ASCII prefix, and this must not panic on one.
+    for (name, value) in std::env::vars_os() {
+        let Ok(name) = name.into_string() else {
+            continue;
+        };
+        let Ok(value) = value.into_string() else {
+            continue;
+        };
+
+        let matches_prefix = name
+            .get(..prefix.len())
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix));
+
+        if matches_prefix && is_ambiguous(&value) {
+            return Err(ambiguous(&name));
+        }
+    }
+
+    Ok(())
 }
 
 /// Prefix-stripped names of the variables under `prefix` whose value is blank.
@@ -75,6 +127,12 @@ pub(super) fn merge_env_files(mut figment: Figment, spec: &LoadSpec<'_>) -> Resu
 
         if entries.is_empty() {
             continue;
+        }
+
+        if spec.strict_env {
+            if let Some((name, _)) = entries.iter().find(|(_, value)| is_ambiguous(value)) {
+                return Err(ambiguous(name).with_origin(crate::Origin::File(path.to_owned())));
+            }
         }
 
         figment = figment.merge(crate::dotenv::DotenvProvider::new(

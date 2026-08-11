@@ -12,17 +12,12 @@
 //! cargo run -p dynamic-config --example async_reload --features tokio,watch,json
 //! ```
 
+use std::time::Duration;
+
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(
-    files = ["dynamic-config/examples/config.json"],
-    key = "server",
-    env = "APP_",
-    watch,
-    debounce = 250,
-    async
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
@@ -31,11 +26,15 @@ struct ServerConfig {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let sources = ServerConfig::builder("server")
+        .file("dynamic-config/examples/config.json")
+        .env("APP_");
+
     // `init_async` reads the files on a blocking worker, so startup does not
     // stall whatever else the runtime is already doing.
-    ServerConfig::init_async().await?;
+    sources.init_async().await?;
     // A server watches for as long as it runs, so nothing here owns the handle.
-    ServerConfig::start_watch()?.detach();
+    sources.watch(Duration::from_millis(250))?.detach();
 
     let initial = ServerConfig::current();
     println!("starting with {}:{}", initial.host, initial.port);

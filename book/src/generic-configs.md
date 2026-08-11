@@ -4,7 +4,7 @@
 different snapshots:
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Db<D: Driver> {
     url: String,
@@ -12,8 +12,8 @@ struct Db<D: Driver> {
     driver: PhantomData<fn() -> D>,   // `fn() -> D`, so the marker stays Send + Sync
 }
 
-Db::<Postgres>::init()?;
-Db::<Mysql>::init()?;                 // its own snapshot, its own layers
+Db::<Postgres>::builder("db").file("config.toml").init()?;
+Db::<Mysql>::builder("db").file("config.toml").init()?;   // its own snapshot, its own layers
 ```
 
 Type and const parameters both work. A **lifetime** parameter does not, and is

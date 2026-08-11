@@ -25,6 +25,85 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+### Breaking
+
+- **The attribute declares; the builder configures.** `#[dynamic_config]`
+  takes no arguments any more: every source argument moved to the `Builder`
+  — `files` → `.file(..)`, `name`+`paths` → `.discover(..)`, `key` →
+  `builder("key")`, `env`/`nest`/`allow_empty_env`/`strict_env` →
+  `.env(..)`/`.nest(..)`/`.allow_empty_env()`/`.strict_env()`, `env_files`
+  → `.env_file(..)`, `profile_env` → `.profile_env(..)`,
+  `cache`/`cache_mode` → `.cache(path, mode)`, `validate` →
+  `.validate(f)`, `watch`/`debounce`/`poll` → `.watch(debounce)` /
+  `.watch_with(debounce, mode)` on the builder `init()` was called on.
+  Generated `load`/`init`/`start_watch`/`save*`/`schema` methods are gone:
+  loading goes through the builder, `save`/`save_new`/`save_encrypted` are
+  the free functions they always also were, and `schema` is
+  `builder.schema()`. A successful `init` remembers its builder, which is
+  how `source_of`, `check`, `explain`, `prepare`, `apply_remote` and the
+  async loaders on the type keep answering. The attribute error for any
+  argument is the migration map. The `diff` argument is gone —
+  `changed_paths` in an `on_reload` hook is its replacement.
+- `watch::spawn` / `spawn_with` take an owned `watch::Watched` (built with
+  `Watched::from_spec`) instead of a `LoadSpec<'static>` — the watch no
+  longer requires statics only the attribute can produce, which is what
+  frees the builder (or anything else) to start one from runtime data.
+- The cache is configured on the builder, and the mode is always spelled
+  out: `.cache(path, CacheMode::Redacted)`. Secrets on disk are a decision,
+  not a side effect — `Redacted` recovers completely when the secrets
+  arrive from somewhere live, and the redaction-dependent modes are refused
+  on a bare `Builder::new`, which cannot know which fields are secret.
+
+### Added
+
+- `explain(path)` — every configured layer's answer for one path, not just
+  the winner's, rendered as a table; the one diagnostic that shows values,
+  and `#[config(secret)]` fields stay `***`. Generated on every config type
+  and available as `dynamic_config::explain` without the macro.
+- `Snapshot::source_of(path)` — snapshots now carry the provenance of their
+  own leaves, captured at resolution time; the free `source_of()` keeps its
+  next-load meaning, now documented as such.
+- `dynamic-config-cli` (Experimental, in-repo, not yet published): `explain`
+  and `diff` from a shell, the load restated as flags.
+- `strict_env` (`.strict_env()` on the builder, `with_strict_env` on
+  `LoadSpec`): the yes/no/on/off family in an environment value (or a
+  `.env` file) becomes an error naming the variable, instead of arriving as
+  a string where a boolean was meant. Loose parsing stays the default.
+- `Builder<T>`: runtime-chosen sources with the attribute's semantics —
+  `Builder::new("db").file(path).env("APP_").load()`, no macro required. On
+  a `#[dynamic_config]` type the generated `builder()` adds `init()`, which
+  installs into the same snapshot `current()` reads. The builder reaches
+  source-side parity with the attribute: `discover(name, paths)`,
+  `cache(path, mode)` with last-known-good recovery (redaction-dependent
+  modes are refused unless the generated `builder()` supplies the secret
+  fields), `watch(debounce)` through the same one-watcher-per-type registry,
+  and `load_async`/`init_async` under the `async` feature. The attribute's
+  arguments are unchanged; their deprecation is scheduled, not begun.
+- Reload observability: under `tracing`, every watcher reload is a
+  `config_reload` span with outcome and duration; the stderr lines carry
+  the duration without it. `changed_paths(old, new)` names what moved
+  between two configuration values — paths only, never values — for audit
+  logging inside `on_reload`.
+- The book gains [The Reload Lifecycle](book/src/reload-lifecycle.md):
+  where the crate's half of a reload ends, and the surface for yours — and
+  [The Builder, Feature by Feature](book/src/builder-tour.md): every
+  capability with a minimal example, files to callbacks to hot reload.
+
+### Changed
+
+- `changes()` before `init()` is now contract: the handle has seen nothing,
+  so the initial install is its first change — "wake me when configuration
+  exists". The behaviour is unchanged; it is now documented and tested.
+
+### Fixed
+
+- `Snapshot`'s `Debug` printed the resolved values — secrets included — and
+  so did `Recovery`'s through it. Both now describe keys and shape only,
+  with a test that plants a secret and greps the output.
+- The `strict_env` refusal does not echo the offending value; it names the
+  variable and the ambiguous family. No diagnostic prints a value, without
+  exception.
+
 ## [0.1.0] — 2026-08-10
 
 A full-workspace hardening release, driven by a three-way external review.

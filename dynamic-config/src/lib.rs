@@ -1,14 +1,15 @@
 //! Hot-reloadable, lock-free application configuration, built on
 //! [figment](https://docs.rs/figment).
 //!
-//! Annotate a struct, call `init()` once, and read it from anywhere:
+//! Declare a struct, configure it with the builder, and read it from
+//! anywhere:
 //!
 //! ```
 //! # #[cfg(feature = "json")] {
 //! use dynamic_config::dynamic_config;
 //! use serde::Deserialize;
 //!
-//! #[dynamic_config(files = ["config.json"], key = "server", env = "APP_")]
+//! #[dynamic_config]
 //! #[derive(Debug, Deserialize)]
 //! struct ServerConfig {
 //!     #[serde(default = "default_host")]
@@ -21,12 +22,20 @@
 //! # fn default_port() -> u16 { 8080 }
 //! // `config.json` does not exist here, so every field falls back to its
 //! // default — a missing file is skipped, not an error.
-//! ServerConfig::init().expect("defaults cover every field");
+//! ServerConfig::builder("server")
+//!     .file("config.json")
+//!     .env("APP_")
+//!     .init()
+//!     .expect("defaults cover every field");
 //!
 //! let config = ServerConfig::current();
 //! println!("{}:{}", config.host, config.port);
 //! # }
 //! ```
+//!
+//! The attribute declares — *this type is a configuration* — and generates
+//! its storage and accessors. The [`Builder`] configures: where the
+//! sources are is runtime data, and it lives in runtime code.
 //!
 //! This page is the API reference. The guide — profiles, discovery, hot
 //! reload, remote stores, encryption, testing — is
@@ -34,28 +43,32 @@
 //!
 //! # What the attribute generates
 //!
-//! The everyday core:
+//! The attribute declares; the builder configures. What gets generated is
+//! the type-bound surface:
 //!
 //! | Method | Description |
 //! |---|---|
-//! | `load() -> Result<Self, Error>` | Read the sources and deserialize. Does not touch the snapshot. |
-//! | `init() -> Result<(), Error>` | `load()` plus install as the initial snapshot. Call once at startup. |
+//! | `builder(key) -> Builder<Self>` | Where everything starts: state the sources, `init()`. |
+//! | `current() -> Arc<Self>` | The current snapshot. Panics before an install. |
+//! | `try_current() -> Option<Arc<Self>>` | The current snapshot, or `None`. |
 //! | `replace(Self)` | Atomically swap in a new snapshot. |
-//! | `current() -> Arc<Self>` | The current snapshot. Panics before `init()`. |
-//! | `try_current() -> Option<Arc<Self>>` | The current snapshot, or `None` before `init()`. |
-//! | `start_watch() -> io::Result<WatchHandle>` | With `watch`: reload on file changes until the handle is dropped. A second watch while one runs is `AlreadyExists`. |
 //! | `on_reload(f)` | Run a callback on every later reload, for the life of the process. |
 //! | `on_reload_scoped(f) -> HookGuard` | The same, until the guard is dropped. |
 //! | `set_default(path, value)` | A fallback used only when nothing else supplies the key. |
 //! | `set_override(path, value)` | A value that wins over every file and variable. |
 //! | `clear_defaults()` / `clear_overrides()` | Drop them again. |
-//! | `load_async()` / `init_async()` | With `async`: the same, off the async executor. |
 //! | `changes()` | With `async`: a handle woken by every later reload. |
 //!
-//! The rest of the surface — introspection (`snapshot`, `source_of`, `is_set`,
-//! `check`), persistence (`save`, `save_new`, `save_encrypted`), remote stores
-//! (`set_remote`, `refresh_remote`, `apply_remote`), aliases, environment
-//! bindings, flags, `bind_clap`, `schema` — is in [the book's attribute
+//! Everything about *sources* lives on the [`Builder`] the generated
+//! `builder(key)` returns: `.file(..)`, `.discover(name, paths)`,
+//! `.env(prefix)`, `.strict_env()`, `.env_file(..)`, `.profile_env(..)`,
+//! `.cache(path, mode)`, `.validate(f)` — then `.load()`, `.init()`,
+//! `.watch(debounce)`, `.explain(path)`, `.check()`, and with `async`,
+//! `.load_async()` / `.init_async()`. A successful `init` also *remembers*
+//! the builder, so `source_of`, `is_set`, `snapshot`, `check`, `explain`,
+//! `prepare` and the remote reload on the type answer for the running
+//! configuration. The rest — remote stores, aliases, bindings, flags,
+//! `bind_clap` — is in [the book's
 //! reference](https://ctolon.github.io/dynamic-config/attribute-reference.html).
 //!
 //! # Precedence
@@ -122,19 +135,19 @@
 //!
 //! # Async
 //!
-//! With the `async` feature and the `async` argument, configuration loads
-//! without blocking the executor, and tasks can await reloads instead of
-//! polling. No runtime is named anywhere: `changes()` is a `Future`, so any
-//! executor drives it.
+//! With the `async` feature, configuration loads without blocking the
+//! executor, and tasks can await reloads instead of polling. No runtime is
+//! named anywhere: `changes()` is a `Future`, so any executor drives it.
 //!
 //! ```ignore
-//! #[dynamic_config(files = ["config.json"], key = "db", watch, async)]
+//! #[dynamic_config]
 //! #[derive(Debug, Deserialize)]
 //! struct DbConfig { pool_size: u32 }
 //!
-//! DbConfig::init_async().await?;
+//! let builder = DbConfig::builder("db").file("config.json");
+//! builder.init_async().await?;
 //! // Keep the handle: dropping it stops the watch.
-//! let _watch = DbConfig::start_watch()?;
+//! let _watch = builder.watch(Duration::from_millis(250))?;
 //!
 //! let mut reloads = DbConfig::changes();
 //!
@@ -208,6 +221,7 @@ mod aliases;
 #[cfg(feature = "async")]
 mod asynchronous;
 mod bindings;
+mod builder;
 mod cache;
 mod cell;
 mod check;
@@ -217,6 +231,7 @@ mod discovery;
 #[cfg(feature = "dotenv")]
 mod dotenv;
 mod error;
+mod explain;
 mod group;
 mod layer;
 mod loader;
@@ -250,6 +265,9 @@ pub use figment;
 
 pub use aliases::Aliases;
 pub use bindings::EnvBindings;
+pub use builder::Builder;
+#[doc(hidden)]
+pub use builder::Configured;
 pub use cache::{CacheMode, Recovery};
 pub use cell::{ConfigCell, HookGuard};
 pub use check::{check, Report, Resolved, UnknownKey};
@@ -258,6 +276,7 @@ pub use check::{check, Report, Resolved, UnknownKey};
 pub use decrypt::{has_decryptor, set_decryptor, Decryptor, Encryptor};
 pub use discovery::Search;
 pub use error::{Error, ErrorKind, Origin};
+pub use explain::{Contribution, Explanation};
 pub use group::{Commit, ReloadGroup, Reloadable};
 pub use layer::Layer;
 pub use registry::Registry;
@@ -265,7 +284,7 @@ pub use registry::Registry;
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
 pub use remote::{Fetched, Remote, RemoteSource, RemoteWatch, Watching};
-pub use snapshot::{Change, ChangeKind, Snapshot};
+pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};
 #[cfg(feature = "decrypt")]
@@ -277,36 +296,19 @@ pub use write::{save, save_new};
 ///
 /// See the [crate documentation](crate) for the full guide.
 ///
-/// # Arguments
-///
-/// | Argument | Form | Requires | Default |
-/// |---|---|---|---|
-/// | `files` | `files = ["a.toml"]` | one of `files` / `name`+`paths` | — |
-/// | `name` | `name = "config"` | `paths` | — |
-/// | `paths` | `paths = ["/etc/app", "."]` | `name` | — |
-/// | `key` | `key = "db"` | always | — |
-/// | `env` | `env = "APP_"` | | no environment layer |
-/// | `nest` | `nest = "__"` | `env` | `"__"` |
-/// | `allow_empty_env` | flag | `env` | off — `FOO=` is unset |
-/// | `profile_env` | `profile_env = "APP_ENV"` | | no profile overlay |
-/// | `watch` | flag | `watch` feature | off |
-/// | `debounce` | `debounce = 250` | `watch` | 250 ms |
-/// | `poll` / `poll_interval` | flag / `= 2000` | `watch` | native backend |
-/// | `diff` | flag | | off |
-/// | `validate` | flag | a `validate()` on the type | off |
-/// | `save` | flag | `Self: Serialize` | off |
-/// | `cache` | `cache = "last.json"` | | no cache — a bad start fails |
-/// | `cache_mode` | `cache_mode = "redacted"` | `cache` | `"full"` |
-/// | `env_files` | `env_files = [".env"]` | `dotenv` feature + `env` | none |
-/// | `schema` | flag | `schema` feature + `Self: JsonSchema` | off |
-/// | `async` | flag | `async` feature | off |
+/// The attribute takes **no arguments**: it declares that the type *is* a
+/// configuration, and generates its storage and surface. Where the
+/// configuration comes from is stated on the [`Builder`] the generated
+/// `builder(key)` returns — see the front page for the shape, and [the
+/// book's
+/// reference](https://ctolon.github.io/dynamic-config/attribute-reference.html)
+/// for every method. An argument between the parentheses is a compile
+/// error whose message maps each old argument to its builder method.
 ///
 /// One field attribute: `#[config(secret)]` generates a `Debug` that prints
-/// `***` for the marked fields, and forbids `#[derive(Debug)]` alongside it.
-///
-/// [The book's attribute reference](https://ctolon.github.io/dynamic-config/attribute-reference.html)
-/// carries a section per argument, with an example and the reasoning behind
-/// each default.
+/// `***` for the marked fields, forbids `#[derive(Debug)]` alongside it,
+/// keeps the field out of the redacted cache, and marks it `writeOnly` in
+/// the schema.
 ///
 /// # Requirements
 ///
@@ -392,6 +394,36 @@ pub fn source_of(spec: &LoadSpec<'_>, path: &str) -> Result<Option<Origin>, Erro
     loader::source_of(spec, path)
 }
 
+/// Explains `path`: every configured layer's answer, not just the winner's.
+///
+/// The rendered [`Explanation`] **contains values** — that is its point; you
+/// asked. It is the one diagnostic in this crate that does, so treat its
+/// output accordingly. A path the caller knows to be sensitive goes through
+/// [`Explanation::redacted`]; the generated `explain()` does that for
+/// `#[config(secret)]` fields automatically.
+///
+/// # Errors
+///
+/// Whatever reading the sources reports — the same failures a load would hit.
+///
+/// # Example
+///
+/// ```
+/// # #[cfg(feature = "json")] {
+/// use dynamic_config::{explain, Format, LoadSpec, Source};
+///
+/// let sources = [Source::inline(r#"{"db": {"port": 5432}}"#, Format::Json)];
+/// let explanation = explain(&LoadSpec::new("db", &sources), "port")
+///     .expect("the inline document is well formed");
+///
+/// assert_eq!(explanation.winner().unwrap().layer, "file");
+/// println!("{explanation}");
+/// # }
+/// ```
+pub fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Error> {
+    explain::explain(spec, path)
+}
+
 /// Whether anything supplies `path`.
 ///
 /// Distinguishes "absent" from "present but falsy", which
@@ -452,7 +484,6 @@ where
 // feature-gated `__*!` wall — live in `redirects`; the functions stay here
 // because they are reached by path, and a path names the module it lives in.
 // ---------------------------------------------------------------------------
-
 /// Not public API. Lets the generated code name `serde` without the caller
 /// having to depend on it under that exact name.
 #[doc(hidden)]
@@ -464,98 +495,6 @@ pub mod __private {
     pub use serde;
     #[cfg(feature = "schema")]
     pub use serde_json;
-}
-
-/// Not public API.
-///
-/// Writes the last configuration that worked, if one is configured. A failure
-/// here is reported and swallowed: a cache that cannot be written is a worse
-/// tomorrow, not a broken today.
-#[doc(hidden)]
-pub fn __write_cache(
-    snapshot: &Snapshot,
-    cache: Option<(&'static str, &'static str, &'static [&'static str])>,
-) {
-    let Some((path, mode, secrets)) = cache else {
-        return;
-    };
-
-    let mode = CacheMode::parse(mode).unwrap_or_default();
-
-    if let Err(error) = cache::write(snapshot, std::path::Path::new(path), mode, secrets) {
-        crate::log::warning!("could not write the configuration cache to {path}: {error}");
-    }
-}
-
-/// Not public API.
-///
-/// The last configuration that worked, when a cold start could not read the
-/// real one.
-///
-/// # Errors
-///
-/// If the cache exists but cannot be read. A missing cache is `Ok(None)`.
-#[doc(hidden)]
-pub fn recover<T: DeserializeOwned>(
-    name: &str,
-    spec: &LoadSpec<'_>,
-    cache: Option<(&'static str, &'static str, &'static [&'static str])>,
-    failure: &Error,
-) -> Result<Option<(T, Snapshot)>, Error> {
-    let Some((path, mode, _)) = cache else {
-        return Ok(None);
-    };
-
-    let mode = CacheMode::parse(mode).unwrap_or_default();
-    let path = std::path::Path::new(path);
-
-    // What the sources resolve to *now*, if they resolve at all — the drift
-    // report needs it, and a parse failure means there is nothing to compare.
-    let current = loader::snapshot(spec).ok();
-
-    match cache::read(path, current.as_ref())? {
-        Recovery::Absent => Ok(None),
-
-        Recovery::Drift(moved) => {
-            report(
-                name,
-                &format!(
-                    "cannot start: {failure}. Since the last good configuration: {}",
-                    match moved {
-                        // The sources did not resolve, so there was nothing to
-                        // compare against — said plainly, instead of the old
-                        // claim of a value-level diff that never ran.
-                        None => "could not compare — the sources do not resolve".to_owned(),
-                        Some(moved) => moved.join(", "),
-                    },
-                ),
-            );
-
-            Ok(None)
-        }
-
-        Recovery::Usable(cached) if mode.recovers() => {
-            let recovered = loader::recover::<T>(spec, &cached).map_err(|error| {
-                Error::new(
-                    ErrorKind::Backend,
-                    format!("the cached configuration did not load either: {error}"),
-                )
-            })?;
-
-            report(
-                name,
-                &format!("starting from the last configuration that worked, because: {failure}"),
-            );
-
-            Ok(Some(recovered))
-        }
-
-        Recovery::Usable(_) => Ok(None),
-    }
-}
-
-fn report(name: &str, message: &str) {
-    crate::log::warning!("{name}: {message}");
 }
 
 /// Not public API.
@@ -582,29 +521,4 @@ pub fn __log_remote_failure(name: &str, error: &Error) {
         "{name}: the remote store's document did not apply, keeping the previous \
          snapshot: {error}"
     );
-}
-
-/// Not public API.
-///
-/// Renders the keys a reload changed, for the watcher to log. Returning a
-/// string rather than logging keeps this out of the generated code's way and
-/// leaves one log line per reload instead of two.
-///
-/// Always a string — "nothing to say" is not this function's case. The
-/// caller's `Option` means "there was no previous snapshot to compare", and
-/// that decision is made where the previous snapshot lives.
-#[doc(hidden)]
-#[must_use]
-pub fn __summarize_changes(previous: &Snapshot, current: &Snapshot) -> String {
-    let changes = previous.diff(current);
-
-    if changes.is_empty() {
-        return "no keys changed".to_owned();
-    }
-
-    changes
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
 }

@@ -14,12 +14,17 @@ use std::task::{Context, Poll, Wake, Waker};
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "server", async)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     #[allow(dead_code)]
     host: String,
     port: u16,
+}
+
+/// The `server` section of the base fixture.
+fn server_builder() -> dynamic_config::Builder<ServerConfig> {
+    ServerConfig::builder("server").file("tests/fixtures/base.json")
 }
 
 /// A whole executor: park until woken, poll again.
@@ -60,14 +65,14 @@ fn block_on<F: Future>(future: F) -> F::Output {
 
 #[test]
 fn loading_off_thread_needs_no_runtime() {
-    let config = block_on(ServerConfig::load_async()).expect("the fixture is complete");
+    let config = block_on(server_builder().load_async()).expect("the fixture is complete");
 
     assert_eq!(config.port, 8080);
 }
 
 #[test]
 fn a_change_handle_is_woken_by_a_reload() {
-    block_on(ServerConfig::init_async()).expect("the fixture is complete");
+    block_on(server_builder().init_async()).expect("the fixture is complete");
 
     let mut changes = ServerConfig::changes();
 
@@ -87,15 +92,52 @@ fn a_change_handle_is_woken_by_a_reload() {
 }
 
 #[test]
+fn a_handle_created_before_init_sees_the_install_as_the_first_change() {
+    use serde::Deserialize;
+
+    // Its own type: the contract under test is about the moment of `init`,
+    // and sharing a type another test initializes would race it away.
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct LateInit {
+        #[allow(dead_code)]
+        port: u16,
+    }
+
+    // Before `init`: the handle has seen nothing, so the initial install is
+    // its first change — `changes()` doubles as "wake me when configuration
+    // exists". Contract, not accident; see `Changes`' docs.
+    let mut changes = LateInit::changes();
+
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        LateInit::builder("server")
+            .file("tests/fixtures/base.json")
+            .init()
+            .expect("the fixture is complete");
+    });
+
+    let config = block_on(changes.changed());
+
+    assert_eq!(config.port, 8080);
+}
+
+#[test]
 fn an_error_from_the_load_still_reaches_the_waiter() {
-    #[dynamic_config(files = ["tests/fixtures/absent.json"], key = "nothing", async)]
+    #[dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Missing {
         #[allow(dead_code)]
         value: u32,
     }
 
-    let error = block_on(Missing::load_async()).expect_err("nothing supplies `value`");
+    let error = block_on(
+        Missing::builder("nothing")
+            .file("tests/fixtures/absent.json")
+            .load_async(),
+    )
+    .expect_err("nothing supplies `value`");
 
     assert_eq!(error.path(), "value");
 }

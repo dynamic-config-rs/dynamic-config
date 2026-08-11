@@ -5,7 +5,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, Builder, CacheMode};
 use serde::Deserialize;
 
 /// A directory per test: these write real files and run in parallel.
@@ -20,26 +20,25 @@ fn scratch(test: &str) -> PathBuf {
     directory
 }
 
-// The three modes each point at a *fixed* path, because the macro takes a
-// literal. Each test owns its own.
-#[dynamic_config(
-    files = ["tests/scratch/cache-full.json"],
-    key = "db",
-    cache = "tests/scratch/last-good-full.json",
-)]
+// The three modes each keep a *fixed* path under `tests/scratch`. The builder
+// would accept any runtime value, but each test still owns its own file so
+// parallel tests never trample each other's.
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Full {
     host: String,
     port: u16,
 }
 
-#[dynamic_config(
-    files = ["tests/scratch/cache-redacted.json"],
-    key = "db",
-    env = "DCCACHE_",
-    cache = "tests/scratch/last-good-redacted.json",
-    cache_mode = "redacted",
-)]
+/// One source file with a cache beside it, in the mode the old attribute
+/// defaulted to when none was named.
+fn full_builder() -> Builder<Full> {
+    Full::builder("db")
+        .file("tests/scratch/cache-full.json")
+        .cache("tests/scratch/last-good-full.json", CacheMode::Redacted)
+}
+
+#[dynamic_config]
 #[derive(Deserialize)]
 struct Redacted {
     host: String,
@@ -47,29 +46,46 @@ struct Redacted {
     password: String,
 }
 
+/// The environment can supply what the redacted cache withholds.
+fn redacted_builder() -> Builder<Redacted> {
+    Redacted::builder("db")
+        .file("tests/scratch/cache-redacted.json")
+        .env("DCCACHE_")
+        .cache("tests/scratch/last-good-redacted.json", CacheMode::Redacted)
+}
+
 /// Its own type and its own files: this one deliberately starts from a broken
 /// file, and sharing `Full`'s would race the test that starts from a good one.
-#[dynamic_config(
-    files = ["tests/scratch/cache-first-start.json"],
-    key = "db",
-    cache = "tests/scratch/last-good-first-start.json",
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct FirstStart {
     #[allow(dead_code)]
     host: String,
 }
 
-#[dynamic_config(
-    files = ["tests/scratch/cache-fingerprint.json"],
-    key = "db",
-    cache = "tests/scratch/last-good-fingerprint.json",
-    cache_mode = "fingerprint",
-)]
+fn first_start_builder() -> Builder<FirstStart> {
+    FirstStart::builder("db")
+        .file("tests/scratch/cache-first-start.json")
+        .cache(
+            "tests/scratch/last-good-first-start.json",
+            CacheMode::Redacted,
+        )
+}
+
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Fingerprint {
     #[allow(dead_code)]
     host: String,
+}
+
+fn fingerprint_builder() -> Builder<Fingerprint> {
+    Fingerprint::builder("db")
+        .file("tests/scratch/cache-fingerprint.json")
+        .cache(
+            "tests/scratch/last-good-fingerprint.json",
+            CacheMode::Fingerprint,
+        )
 }
 
 fn prepare(name: &str, contents: &str) {
@@ -86,17 +102,21 @@ fn break_file(name: &str) {
 fn a_full_cache_carries_a_cold_start_over_a_broken_file() {
     prepare("full", r#"{"db": {"host": "localhost", "port": 5432}}"#);
 
-    Full::init().expect("the file is fine to begin with");
+    full_builder()
+        .init()
+        .expect("the file is fine to begin with");
     assert_eq!(Full::current().port, 5432);
 
     // Somebody saves a broken file, and the machine reboots.
     break_file("full");
 
     // A fresh load fails, as it should...
-    assert!(Full::load().is_err());
+    assert!(full_builder().load().is_err());
 
     // ...but a start recovers, loudly, rather than refusing to come up.
-    Full::init().expect("the cache stands in for the broken file");
+    full_builder()
+        .init()
+        .expect("the cache stands in for the broken file");
     assert_eq!(Full::current().host, "localhost");
     assert_eq!(Full::current().port, 5432);
 }
@@ -108,7 +128,7 @@ fn a_redacted_cache_keeps_the_secret_off_disk_and_takes_it_from_the_environment(
         r#"{"db": {"host": "localhost", "password": "hunter2"}}"#,
     );
 
-    Redacted::init().expect("the file is complete");
+    redacted_builder().init().expect("the file is complete");
 
     let written = fs::read_to_string("tests/scratch/last-good-redacted.json").unwrap();
     assert!(written.contains("localhost"), "{written}");
@@ -121,14 +141,16 @@ fn a_redacted_cache_keeps_the_secret_off_disk_and_takes_it_from_the_environment(
 
     // Without the secret from somewhere live, recovery cannot complete.
     assert!(
-        Redacted::init().is_err(),
+        redacted_builder().init().is_err(),
         "a redacted cache alone is not a whole configuration"
     );
 
     // With it, the cache supplies the rest.
     std::env::set_var("DCCACHE_DB_PASSWORD", "from-the-environment");
 
-    Redacted::init().expect("the environment closes the gap the cache left");
+    redacted_builder()
+        .init()
+        .expect("the environment closes the gap the cache left");
     assert_eq!(Redacted::current().host, "localhost");
     assert_eq!(Redacted::current().password, "from-the-environment");
 
@@ -139,7 +161,7 @@ fn a_redacted_cache_keeps_the_secret_off_disk_and_takes_it_from_the_environment(
 fn a_fingerprint_cache_refuses_to_recover_and_says_what_moved() {
     prepare("fingerprint", r#"{"db": {"host": "localhost"}}"#);
 
-    Fingerprint::init().expect("the file is complete");
+    fingerprint_builder().init().expect("the file is complete");
 
     let written = fs::read_to_string("tests/scratch/last-good-fingerprint.json").unwrap();
     assert!(
@@ -155,7 +177,7 @@ fn a_fingerprint_cache_refuses_to_recover_and_says_what_moved() {
     .unwrap();
 
     assert!(
-        Fingerprint::init().is_err(),
+        fingerprint_builder().init().is_err(),
         "a fingerprint cache does not pretend it can recover"
     );
 }
@@ -170,9 +192,12 @@ fn a_first_start_with_no_cache_still_fails_on_a_broken_file() {
 
     prepare("first-start", "{ not json");
 
-    assert!(FirstStart::load().is_err(), "the file does not parse");
     assert!(
-        FirstStart::init().is_err(),
+        first_start_builder().load().is_err(),
+        "the file does not parse"
+    );
+    assert!(
+        first_start_builder().init().is_err(),
         "and there is no cache to fall back on"
     );
 }
@@ -185,17 +210,22 @@ fn a_first_start_with_no_cache_still_fails_on_a_broken_file() {
 fn recovery_keeps_the_environment_above_env_files() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/scratch/cache-envorder.json"],
-        key = "db",
-        env = "DCCACHEENV_",
-        env_files = ["tests/scratch/cache-envorder.env"],
-        cache = "tests/scratch/cache-envorder-cache.json",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Ordered {
         host: String,
     }
+
+    // A file, the real environment, and an `.env` file, cached — the three
+    // layers whose ordering the recovery has to keep.
+    let builder = Ordered::builder("db")
+        .file("tests/scratch/cache-envorder.json")
+        .env("DCCACHEENV_")
+        .env_file("tests/scratch/cache-envorder.env")
+        .cache(
+            "tests/scratch/cache-envorder-cache.json",
+            CacheMode::Redacted,
+        );
 
     std::fs::create_dir_all("tests/scratch").unwrap();
     std::fs::write(
@@ -210,14 +240,14 @@ fn recovery_keeps_the_environment_above_env_files() {
     .unwrap();
 
     // A clean start writes the cache.
-    Ordered::init().expect("the first load succeeds");
+    builder.init().expect("the first load succeeds");
 
     // The file breaks; the exported variable is the human's override.
     std::fs::write("tests/scratch/cache-envorder.json", "{ not json").unwrap();
     std::env::set_var("DCCACHEENV_DB_HOST", "from-the-real-environment");
 
     // `init()` walks the recovery path when the sources fail.
-    let initialized = Ordered::init();
+    let initialized = builder.init();
 
     std::env::remove_var("DCCACHEENV_DB_HOST");
     initialized.expect("the cache recovers");
@@ -234,12 +264,7 @@ fn recovery_keeps_the_environment_above_env_files() {
 fn recovery_respects_validate() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/scratch/cache-validated.json"],
-        key = "db",
-        cache = "tests/scratch/cache-validated-cache.json",
-        validate,
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Validated {
         connections: u16,
@@ -255,6 +280,16 @@ fn recovery_respects_validate() {
         }
     }
 
+    // The validator rides along on the builder, so the recovery path runs the
+    // same check a normal load does.
+    let builder = Validated::builder("db")
+        .file("tests/scratch/cache-validated.json")
+        .cache(
+            "tests/scratch/cache-validated-cache.json",
+            CacheMode::Redacted,
+        )
+        .validate(|config| dynamic_config::Error::ok_or_invalid(config.validate()));
+
     std::fs::create_dir_all("tests/scratch").unwrap();
 
     // A configuration that passes validation, cached on a clean start.
@@ -263,7 +298,7 @@ fn recovery_respects_validate() {
         r#"{"db": {"connections": 4}}"#,
     )
     .unwrap();
-    Validated::init().expect("the clean start succeeds");
+    builder.init().expect("the clean start succeeds");
 
     // The cache is then tampered into something the type rejects, and the
     // source breaks — the recovery must NOT install the invalid cache.
@@ -274,7 +309,9 @@ fn recovery_respects_validate() {
     .unwrap();
     std::fs::write("tests/scratch/cache-validated.json", "{ not json").unwrap();
 
-    let error = Validated::init().expect_err("an invalid cache must not be installed");
+    let error = builder
+        .init()
+        .expect_err("an invalid cache must not be installed");
 
     assert!(
         error.to_string().contains("serve nobody"),
@@ -289,12 +326,7 @@ fn recovery_respects_validate() {
 fn a_renamed_secret_stays_out_of_the_redacted_cache() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/scratch/cache-renamed.json"],
-        key = "db",
-        cache = "tests/scratch/cache-renamed-cache.json",
-        cache_mode = "redacted",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Deserialize)]
     struct Renamed {
         #[allow(dead_code)]
@@ -312,7 +344,14 @@ fn a_renamed_secret_stays_out_of_the_redacted_cache() {
     )
     .unwrap();
 
-    Renamed::init().expect("the load succeeds");
+    Renamed::builder("db")
+        .file("tests/scratch/cache-renamed.json")
+        .cache(
+            "tests/scratch/cache-renamed-cache.json",
+            CacheMode::Redacted,
+        )
+        .init()
+        .expect("the load succeeds");
 
     let written = std::fs::read_to_string("tests/scratch/cache-renamed-cache.json")
         .expect("the cache was written");
@@ -329,12 +368,7 @@ fn a_renamed_secret_stays_out_of_the_redacted_cache() {
 fn a_rename_all_secret_stays_out_of_the_redacted_cache() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/scratch/cache-renameall.json"],
-        key = "db",
-        cache = "tests/scratch/cache-renameall-cache.json",
-        cache_mode = "redacted",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct CamelCased {
@@ -352,7 +386,14 @@ fn a_rename_all_secret_stays_out_of_the_redacted_cache() {
     )
     .unwrap();
 
-    CamelCased::init().expect("the load succeeds");
+    CamelCased::builder("db")
+        .file("tests/scratch/cache-renameall.json")
+        .cache(
+            "tests/scratch/cache-renameall-cache.json",
+            CacheMode::Redacted,
+        )
+        .init()
+        .expect("the load succeeds");
 
     let written = std::fs::read_to_string("tests/scratch/cache-renameall-cache.json")
         .expect("the cache was written");
@@ -363,18 +404,56 @@ fn a_rename_all_secret_stays_out_of_the_redacted_cache() {
     );
 }
 
+/// `CacheMode::Redacted` is the mode the old attribute defaulted to when none
+/// was named, and it must actually redact — secrets on disk are a decision,
+/// not a side effect of adding a cache.
+#[test]
+fn the_default_cache_mode_redacts() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Deserialize)]
+    struct DefaultMode {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        api_token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-default-mode.json",
+        r#"{"db": {"host": "localhost", "api_token": "hunter2-default"}}"#,
+    )
+    .unwrap();
+
+    DefaultMode::builder("db")
+        .file("tests/scratch/cache-default-mode.json")
+        .cache(
+            "tests/scratch/cache-default-mode-cache.json",
+            CacheMode::Redacted,
+        )
+        .init()
+        .expect("the load succeeds");
+
+    let written = std::fs::read_to_string("tests/scratch/cache-default-mode-cache.json")
+        .expect("the cache was written");
+
+    assert!(
+        !written.contains("hunter2-default"),
+        "the default cache must not contain the secret: {written}"
+    );
+    assert!(written.contains("localhost"), "{written}");
+}
+
 /// `UPPERCASE` keeps its underscores: serde renames `api_token` to
 /// `API_TOKEN`, not `APITOKEN` — redaction has to follow serde, not a guess.
 #[test]
 fn an_uppercase_secret_stays_out_of_the_redacted_cache() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/scratch/cache-uppercase.json"],
-        key = "db",
-        cache = "tests/scratch/cache-uppercase-cache.json",
-        cache_mode = "redacted",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Deserialize)]
     #[serde(rename_all = "UPPERCASE")]
     struct UpperCased {
@@ -392,7 +471,14 @@ fn an_uppercase_secret_stays_out_of_the_redacted_cache() {
     )
     .unwrap();
 
-    UpperCased::init().expect("the load succeeds");
+    UpperCased::builder("db")
+        .file("tests/scratch/cache-uppercase.json")
+        .cache(
+            "tests/scratch/cache-uppercase-cache.json",
+            CacheMode::Redacted,
+        )
+        .init()
+        .expect("the load succeeds");
 
     let written = std::fs::read_to_string("tests/scratch/cache-uppercase-cache.json")
         .expect("the cache was written");

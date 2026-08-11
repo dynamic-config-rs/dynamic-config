@@ -17,7 +17,7 @@
 //! use schemars::JsonSchema;
 //! use serde::Deserialize;
 //!
-//! #[dynamic_config::dynamic_config(files = ["config.json"], key = "db", schema)]
+//! #[dynamic_config::dynamic_config]
 //! #[derive(Deserialize, JsonSchema)]
 //! struct DbConfig {
 //!     host: String,
@@ -25,7 +25,7 @@
 //!     password: String,
 //! }
 //!
-//! let schema = DbConfig::schema();
+//! let schema = DbConfig::builder("db").schema();
 //!
 //! // A file-level schema: `{"db": {...}}`, not `{...}`.
 //! assert!(schema["properties"]["db"].is_object());
@@ -104,13 +104,13 @@ pub fn section(key: &str, schema: Value, secrets: &[&str]) -> Value {
 /// # #[cfg(feature = "schema")] {
 /// # use serde::Deserialize;
 /// # use schemars::JsonSchema;
-/// # #[dynamic_config::dynamic_config(files = ["app.json"], key = "db", schema)]
+/// # #[dynamic_config::dynamic_config]
 /// # #[derive(Deserialize, JsonSchema)] struct DbConfig { host: String }
-/// # #[dynamic_config::dynamic_config(files = ["app.json"], key = "server", schema)]
+/// # #[dynamic_config::dynamic_config]
 /// # #[derive(Deserialize, JsonSchema)] struct ServerConfig { port: u16 }
 /// let whole_file = dynamic_config::schema::merge([
-///     DbConfig::schema(),
-///     ServerConfig::schema(),
+///     DbConfig::builder("db").schema(),
+///     ServerConfig::builder("server").schema(),
 /// ]);
 ///
 /// assert!(whole_file["properties"]["db"].is_object());

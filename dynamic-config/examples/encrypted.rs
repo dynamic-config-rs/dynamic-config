@@ -22,14 +22,7 @@ use serde::Deserialize;
 
 const DIRECTORY: &str = "/tmp/dynamic-config-encrypted-example";
 
-#[dynamic_config(
-    files = [
-        "/tmp/dynamic-config-encrypted-example/config.json",
-        "/tmp/dynamic-config-encrypted-example/secrets.json.age",
-    ],
-    key = "db",
-    env = "APP_",
-)]
+#[dynamic_config]
 #[derive(Deserialize)]
 struct DbConfig {
     host: String,
@@ -87,7 +80,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dynamic_config::set_decryptor(Age::from_environment()?)
         .map_err(|_| "a decryptor was already installed")?;
 
-    DbConfig::init()?;
+    // The `.age` file sits in the list like any other; the extension under it
+    // says what format the plaintext is in.
+    let sources = DbConfig::builder("db")
+        .file("/tmp/dynamic-config-encrypted-example/config.json")
+        .file("/tmp/dynamic-config-encrypted-example/secrets.json.age")
+        .env("APP_");
+
+    sources.init()?;
 
     let config = DbConfig::current();
 
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // And the environment still wins over both.
     std::env::set_var("APP_DB_PASSWORD", "from-the-machine");
-    DbConfig::init()?;
+    sources.init()?;
     println!(
         "\nwith APP_DB_PASSWORD set, password came {}",
         DbConfig::source_of("password")?.expect("something supplies it")
@@ -125,7 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let unreadable = age::encrypt(&stranger.to_public(), br#"{"db": {}}"#)?;
     std::fs::write(directory.join("secrets.json.age"), unreadable)?;
 
-    match DbConfig::load() {
+    match sources.load() {
         Ok(_) => println!("\nunexpectedly readable"),
         Err(error) => println!("\nwith a file this key cannot open:\n  {error}"),
     }

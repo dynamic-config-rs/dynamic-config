@@ -5,7 +5,7 @@
 use dynamic_config::{dynamic_config, ReloadGroup};
 use serde::Deserialize;
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "server")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     #[allow(dead_code)]
@@ -13,7 +13,7 @@ struct ServerConfig {
     port: u16,
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct DbConfig {
     #[allow(dead_code)]
@@ -23,12 +23,34 @@ struct DbConfig {
 
 #[test]
 fn a_group_installs_every_member() {
+    // A group reloads through the builder each member was configured with,
+    // so every member has to be configured before the group can move it.
+    ServerConfig::builder("server")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
+    DbConfig::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
+
     let group = ReloadGroup::new().with::<ServerConfig>().with::<DbConfig>();
 
     assert_eq!(
         group.members().collect::<Vec<_>>(),
         ["ServerConfig", "DbConfig"]
     );
+
+    // Plant snapshots the sources never held, so the reload proving anything
+    // requires the group to have installed every member from its sources.
+    ServerConfig::replace(ServerConfig {
+        host: "planted".to_owned(),
+        port: 1,
+    });
+    DbConfig::replace(DbConfig {
+        host: "planted".to_owned(),
+        port: 1,
+    });
 
     group.reload().expect("the fixture is complete");
 
@@ -38,13 +60,13 @@ fn a_group_installs_every_member() {
 
 /// The property the group exists for: one member failing leaves *every*
 /// member on its previous snapshot, including the ones that loaded cleanly.
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "server")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Healthy {
     port: u16,
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "server")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Fragile {
     port: u16,
@@ -53,6 +75,17 @@ struct Fragile {
 #[test]
 fn one_failure_leaves_every_member_where_it_was() {
     let group = ReloadGroup::new().with::<Healthy>().with::<Fragile>();
+
+    // Configuring the members is what lets the group's `prepare` answer for
+    // them later.
+    Healthy::builder("server")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("both start out loadable");
+    Fragile::builder("server")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("both start out loadable");
 
     group.reload().expect("both start out loadable");
     assert_eq!(Healthy::current().port, 8080);

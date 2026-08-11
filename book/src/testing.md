@@ -22,15 +22,15 @@ layer sits.
 
 ## Scope the watcher to the test
 
-`start_watch()` returns a handle, and dropping it stops the watcher. A server
-calls `.detach()` to watch for the rest of the process; anything with a
-lifecycle — a test, a library, a subcommand — binds the handle so watching
+`builder.watch(debounce)` returns a handle, and dropping it stops the watcher.
+A server calls `.detach()` to watch for the rest of the process; anything with
+a lifecycle — a test, a library, a subcommand — binds the handle so watching
 stops when the thing being configured goes away:
 
 ```rust
-let _watch = Config::start_watch()?;   // a test, a subcommand: stop with the scope
+let _watch = builder.watch(debounce)?;   // a test, a subcommand: stop with the scope
 ```
 
-A second `start_watch()` while one runs is `AlreadyExists`, so tests that share
-a config type should share a watcher or scope each one. See
+A second `watch()` while one runs is `AlreadyExists`, so tests that share a
+config type should share a watcher or scope each one. See
 [Hot Reload & Watching](hot-reload.md).

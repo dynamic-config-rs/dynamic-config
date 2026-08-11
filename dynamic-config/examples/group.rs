@@ -12,7 +12,7 @@
 use dynamic_config::{dynamic_config, ReloadGroup};
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "server")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     #[allow(dead_code)]
@@ -20,7 +20,7 @@ struct ServerConfig {
     port: u16,
 }
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "features")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct FeatureFlags {
     metrics: bool,
@@ -29,6 +29,15 @@ struct FeatureFlags {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // A group reloads through each member's remembered configuration, so
+    // every member is initialized through its builder first.
+    ServerConfig::builder("server")
+        .file("dynamic-config/examples/app.json")
+        .init()?;
+    FeatureFlags::builder("features")
+        .file("dynamic-config/examples/app.json")
+        .init()?;
+
     let group = ReloadGroup::new()
         .with::<ServerConfig>()
         .with::<FeatureFlags>();

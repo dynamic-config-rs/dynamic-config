@@ -5,7 +5,7 @@
 
 #![cfg(feature = "json")]
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, Builder};
 use serde::Deserialize;
 
 /// A type per test, and variables per test. These write to the process
@@ -13,13 +13,22 @@ use serde::Deserialize;
 /// would race — and would pass on their own, which is worse.
 macro_rules! db_config {
     ($name:ident, $prefix:literal) => {
-        #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = $prefix)]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             #[allow(dead_code)]
             host: String,
             #[allow(dead_code)]
             port: u16,
+        }
+
+        impl $name {
+            /// The base fixture plus this test's own environment prefix.
+            fn sources() -> Builder<$name> {
+                $name::builder("db")
+                    .file("tests/fixtures/base.json")
+                    .env($prefix)
+            }
         }
     };
 }
@@ -35,11 +44,15 @@ fn a_bound_variable_supplies_the_field() {
 
     // Not set yet: a binding contributes nothing until the variable exists,
     // which is the whole point — the platform may or may not have set it.
-    assert_eq!(Supplies::load().unwrap().port, 5432, "the file still wins");
+    assert_eq!(
+        Supplies::sources().load().unwrap().port,
+        5432,
+        "the file still wins"
+    );
 
     std::env::set_var("DCB1_LEGACY_PORT", "9001");
 
-    let config = Supplies::load().expect("the binding resolves");
+    let config = Supplies::sources().load().expect("the binding resolves");
 
     assert_eq!(config.port, 9001);
     assert_eq!(config.host, "localhost", "and nothing else moved");
@@ -52,11 +65,11 @@ fn a_binding_is_read_at_load_time_so_a_reload_sees_a_change() {
     Reread::bind_env("host", "DCB2_RELOAD_HOST").unwrap();
 
     std::env::set_var("DCB2_RELOAD_HOST", "first");
-    assert_eq!(Reread::load().unwrap().host, "first");
+    assert_eq!(Reread::sources().load().unwrap().host, "first");
 
     std::env::set_var("DCB2_RELOAD_HOST", "second");
     assert_eq!(
-        Reread::load().unwrap().host,
+        Reread::sources().load().unwrap().host,
         "second",
         "the variable is looked up per load, not captured when bound"
     );
@@ -71,7 +84,7 @@ fn an_empty_variable_is_treated_as_unset() {
     std::env::set_var("DCB3_EMPTY_HOST", "");
 
     assert_eq!(
-        Empty::load().unwrap().host,
+        Empty::sources().load().unwrap().host,
         "localhost",
         "a deployment template rendering `HOST=` must not blank out a good value"
     );
@@ -90,12 +103,12 @@ fn clearing_removes_the_binding() {
     Refused::bind_env("host", "DCB4_CLEARED_HOST").unwrap();
     std::env::set_var("DCB4_CLEARED_HOST", "bound");
 
-    assert_eq!(Refused::load().unwrap().host, "bound");
+    assert_eq!(Refused::sources().load().unwrap().host, "bound");
 
     Refused::clear_env_bindings();
 
     assert_eq!(
-        Refused::load().unwrap().host,
+        Refused::sources().load().unwrap().host,
         "localhost",
         "the file is back in charge"
     );
@@ -103,12 +116,19 @@ fn clearing_removes_the_binding() {
     std::env::remove_var("DCB4_CLEARED_HOST");
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = "DCBINDPREC_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Precedence {
     host: String,
     #[allow(dead_code)]
     port: u16,
+}
+
+/// The base fixture plus the prefix the precedence test competes against.
+fn precedence_builder() -> Builder<Precedence> {
+    Precedence::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCBINDPREC_")
 }
 
 #[test]
@@ -119,7 +139,7 @@ fn a_binding_beats_the_prefixed_layer_and_loses_to_a_flag() {
     Precedence::bind_env("host", "DCBINDPREC_EXPLICIT_HOST").unwrap();
 
     assert_eq!(
-        Precedence::load().unwrap().host,
+        precedence_builder().load().unwrap().host,
         "from-the-binding",
         "a name somebody chose on purpose beats a convention"
     );
@@ -127,7 +147,7 @@ fn a_binding_beats_the_prefixed_layer_and_loses_to_a_flag() {
     Precedence::set_flag("host", Some("from-the-flag")).unwrap();
 
     assert_eq!(
-        Precedence::load().unwrap().host,
+        precedence_builder().load().unwrap().host,
         "from-the-flag",
         "and a flag typed for this one run beats both"
     );
@@ -137,7 +157,7 @@ fn a_binding_beats_the_prefixed_layer_and_loses_to_a_flag() {
     Precedence::clear_flags();
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Traced {
     #[allow(dead_code)]
@@ -152,7 +172,10 @@ fn a_bound_value_is_traced_to_the_binding_not_to_a_file() {
 
     std::env::set_var("DCBIND_TRACED_HOST", "bound");
 
-    let origin = Traced::source_of("host")
+    // No init has happened, so the question goes to the builder directly.
+    let origin = Traced::builder("db")
+        .file("tests/fixtures/base.json")
+        .source_of("host")
         .unwrap()
         .expect("something supplies it");
 
@@ -165,7 +188,7 @@ fn a_bound_value_is_traced_to_the_binding_not_to_a_file() {
     std::env::remove_var("DCBIND_TRACED_HOST");
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Nested {
     #[allow(dead_code)]
@@ -186,7 +209,15 @@ fn a_binding_can_reach_a_nested_field() {
 
     std::env::set_var("DCBIND_POOL_MAX", "64");
 
-    assert_eq!(Nested::load().unwrap().pool.max_size, 64);
+    assert_eq!(
+        Nested::builder("db")
+            .file("tests/fixtures/base.json")
+            .load()
+            .unwrap()
+            .pool
+            .max_size,
+        64
+    );
 
     std::env::remove_var("DCBIND_POOL_MAX");
 }
@@ -198,12 +229,7 @@ fn a_binding_can_reach_a_nested_field() {
 fn bindings_honor_allow_empty_env_with_the_shared_rule() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/fixtures/base.json"],
-        key = "db",
-        env = "DCBINDEMPTY_",
-        allow_empty_env,
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct EmptyAllowed {
         host: String,
@@ -212,7 +238,11 @@ fn bindings_honor_allow_empty_env_with_the_shared_rule() {
     EmptyAllowed::bind_env("host", "DCBINDEMPTY_HOST_SOURCE").unwrap();
     std::env::set_var("DCBINDEMPTY_HOST_SOURCE", "   ");
 
-    let loaded = EmptyAllowed::load();
+    let loaded = EmptyAllowed::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCBINDEMPTY_")
+        .allow_empty_env()
+        .load();
 
     std::env::remove_var("DCBINDEMPTY_HOST_SOURCE");
     EmptyAllowed::clear_env_bindings();
@@ -229,11 +259,7 @@ fn bindings_honor_allow_empty_env_with_the_shared_rule() {
 fn a_whitespace_only_bound_variable_is_unset_by_default() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/fixtures/base.json"],
-        key = "db",
-        env = "DCBINDBLANK_",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct BlankDefault {
         host: String,
@@ -242,7 +268,10 @@ fn a_whitespace_only_bound_variable_is_unset_by_default() {
     BlankDefault::bind_env("host", "DCBINDBLANK_HOST_SOURCE").unwrap();
     std::env::set_var("DCBINDBLANK_HOST_SOURCE", "   ");
 
-    let loaded = BlankDefault::load();
+    let loaded = BlankDefault::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCBINDBLANK_")
+        .load();
 
     std::env::remove_var("DCBINDBLANK_HOST_SOURCE");
     BlankDefault::clear_env_bindings();
@@ -263,12 +292,7 @@ fn a_custom_nest_separator_reaches_nested_fields() {
         max_size: u16,
     }
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/fixtures/base.json"],
-        key = "db",
-        env = "DCNEST_",
-        nest = "__",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Nested {
         #[allow(dead_code)]
@@ -278,7 +302,11 @@ fn a_custom_nest_separator_reaches_nested_fields() {
 
     std::env::set_var("DCNEST_DB_POOL__MAX_SIZE", "32");
 
-    let loaded = Nested::load();
+    let loaded = Nested::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCNEST_")
+        .nest("__")
+        .load();
 
     std::env::remove_var("DCNEST_DB_POOL__MAX_SIZE");
 

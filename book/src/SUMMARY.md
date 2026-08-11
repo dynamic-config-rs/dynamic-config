@@ -5,10 +5,12 @@
 # Guide
 
 - [Quick Start](quick-start.md)
+- [The Builder, Feature by Feature](builder-tour.md)
 - [Attribute Reference](attribute-reference.md)
 - [Sources & Precedence](sources-and-precedence.md)
 - [Profiles & Discovery](profiles-and-discovery.md)
 - [Hot Reload & Watching](hot-reload.md)
+- [The Reload Lifecycle](reload-lifecycle.md)
 - [Async & Runtimes](async-runtimes.md)
 - [Remote Stores](remote-stores.md)
   - [Store Crates at a Glance](remote-stores/store-crates.md)

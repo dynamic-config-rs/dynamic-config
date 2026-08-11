@@ -19,7 +19,7 @@
 //! )
 //! .ok();
 //!
-//! #[dynamic_config::dynamic_config(files = ["config.toml", "secrets.json.age"], key = "db")]
+//! #[dynamic_config::dynamic_config]
 //! #[derive(Deserialize)]
 //! struct DbConfig {
 //!     host: String,
@@ -27,7 +27,10 @@
 //!     password: String,
 //! }
 //!
-//! DbConfig::init()?;
+//! DbConfig::builder("db")
+//!     .file("config.toml")
+//!     .encrypted_file("secrets.json.age")
+//!     .init()?;
 //! # }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```

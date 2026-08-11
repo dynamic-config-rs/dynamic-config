@@ -49,12 +49,13 @@ pub fn dynamic_config(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let args = match syn::parse(attr) {
-        Ok(args) => args,
-        Err(error) => return with_original(error),
-    };
+    // The attribute takes no arguments; anything present gets the
+    // migration map, next to the untouched struct.
+    if let Err(error) = syn::parse::<args::Args>(attr) {
+        return with_original(error);
+    }
 
-    match expand::expand(args, input) {
+    match expand::expand(input) {
         Ok(tokens) => tokens.into(),
         Err(error) => with_original(error),
     }

@@ -3,14 +3,13 @@
 ## `name` + `paths`
 
 ```rust
-#[dynamic_config(
-    name  = "config",
-    paths = ["/etc/myapp", "~/.config/myapp", "."],
-    key   = "db",
-)]
+DbConfig::builder("db")
+    .discover("config", ["/etc/myapp", "~/.config/myapp", "."])
+    .init()?;
 ```
 
-Looks for `{name}.{ext}` in each directory, in order. **Every** directory with a
+`.discover(name, paths)` looks for `{name}.{ext}` in each directory, in
+order. **Every** directory with a
 match contributes one file, layered in search order — so `/etc` defaults,
 `~/.config` overrides and a local `./config.toml` all apply, in that order.
 (Go's Viper stops at the first hit; the reason to list `/etc` *and* `~` is to
@@ -24,13 +23,15 @@ skipping any whose feature is off, and the first hit wins — so a stray
 load, so a file that appears later is picked up by the next reload rather than
 requiring a restart.
 
-Neither half works alone: `name` without `paths` would search nowhere, `paths`
-without `name` would search for nothing. Both are compile errors.
+Neither half works alone — a name without directories would search nowhere,
+directories without a name would search for nothing — which is why
+`.discover` takes both in one call rather than as two options that could be
+stated separately.
 
 ## `profile_env`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", profile_env = "APP_ENV")]
+DbConfig::builder("db").file("config.toml").profile_env("APP_ENV")
 ```
 
 Names the variable holding the active profile. With `APP_ENV=production`, every

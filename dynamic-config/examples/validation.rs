@@ -7,7 +7,7 @@
 use dynamic_config::{dynamic_config, ErrorKind};
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/pool.json"], key = "pool", validate)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct PoolConfig {
     min_size: u16,
@@ -16,7 +16,7 @@ struct PoolConfig {
 }
 
 impl PoolConfig {
-    /// Resolved at this call site by the generated `load`, so it can be an
+    /// Hooked in below through `Error::ok_or_invalid`, so it can be an
     /// inherent method, a `validator::Validate` impl, a `garde` one — anything
     /// with a `validate(&self) -> Result<_, impl Display>`.
     fn validate(&self) -> Result<(), String> {
@@ -36,14 +36,20 @@ impl PoolConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    PoolConfig::init()?;
+    // The whole-value check runs after deserializing and before anything
+    // installs — on `init`, and again on every reload.
+    let sources = PoolConfig::builder("pool")
+        .file("dynamic-config/examples/pool.json")
+        .validate(|config| dynamic_config::Error::ok_or_invalid(config.validate()));
+
+    sources.init()?;
     println!("loaded: {:?}", PoolConfig::current());
 
     // Every field below still parses as a `u16`. Only the relationship between
     // them is wrong, which no `Deserialize` impl can see.
     PoolConfig::set_override("min_size", 100u16)?;
 
-    match PoolConfig::load() {
+    match sources.load() {
         Ok(config) => println!("unexpectedly loaded {config:?}"),
         Err(error) => {
             assert_eq!(error.kind(), ErrorKind::Invalid);

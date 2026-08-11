@@ -48,10 +48,13 @@ pub(crate) const CACHED_NAME: &str = "the last configuration that worked";
 const REMOTE_PREFIX: &str = "the remote store ";
 
 pub(crate) fn load<T: DeserializeOwned>(spec: &LoadSpec<'_>) -> Result<T, Error> {
-    apply_aliases(build(spec)?, spec)
-        .select(spec.key)
-        .extract()
-        .map_err(convert)
+    merged(spec)?.extract().map_err(convert)
+}
+
+/// The composed figment: every layer merged, aliases applied, the section
+/// selected. What every question below starts from.
+pub(crate) fn merged(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    Ok(apply_aliases(build(spec)?, spec).select(spec.key))
 }
 
 /// Resolves the section without deserializing it.
@@ -66,11 +69,26 @@ pub(crate) fn snapshot(spec: &LoadSpec<'_>) -> Result<Snapshot, Error> {
 /// re-read and re-parse every source once per key — O(keys × sources) file
 /// I/O for one report. `extract` takes `&self`, so the figment survives it.
 pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<(Snapshot, Figment), Error> {
-    let figment = apply_aliases(build(spec)?, spec).select(spec.key);
-    let snapshot = figment
+    let figment = merged(spec)?;
+    let mut snapshot = figment
         .extract::<Dict>()
         .map(Snapshot::new)
         .map_err(convert)?;
+
+    // The one moment the figment that knows where every value came from is
+    // still alive — asked for every leaf before it is dropped, so the
+    // snapshot can answer `source_of` for itself later.
+    let provenance = snapshot
+        .leaf_paths()
+        .into_iter()
+        .filter_map(|path| match origin_in(&figment, &path) {
+            // An `Unknown` row answers the question with a shrug; absence
+            // says the same without taking up a slot.
+            Origin::Unknown => None,
+            origin => Some((path, origin)),
+        })
+        .collect();
+    snapshot.attach_provenance(provenance);
 
     Ok((snapshot, figment))
 }
@@ -84,37 +102,153 @@ pub(crate) fn origin_in(figment: &Figment, path: &str) -> Origin {
 
 /// Where the value at `path` would come from, if anywhere.
 pub(crate) fn source_of(spec: &LoadSpec<'_>, path: &str) -> Result<Option<Origin>, Error> {
-    let figment = apply_aliases(build(spec)?, spec).select(spec.key);
-
-    Ok(figment.find_metadata(path).map(origin::origin_of))
+    Ok(merged(spec)?.find_metadata(path).map(origin::origin_of))
 }
 
 /// Whether anything supplies `path`.
 pub(crate) fn is_set(spec: &LoadSpec<'_>, path: &str) -> Result<bool, Error> {
-    Ok(apply_aliases(build(spec)?, spec)
-        .select(spec.key)
-        .contains(path))
+    Ok(merged(spec)?.contains(path))
 }
+
+/// One layer of the precedence order.
+///
+/// A layer knows three things: what it is called in diagnostics, whether the
+/// spec configures it at all, and how it merges itself into a figment. Both
+/// [`build`] and [`explain`](crate::explain) walk the same table, so the
+/// composed load and the per-layer explanation cannot disagree about what the
+/// layers are or which order they come in.
+pub(crate) struct LayerDef {
+    name: &'static str,
+    active: fn(&LoadSpec<'_>) -> bool,
+    merge: fn(Figment, &LoadSpec<'_>) -> Result<Figment, Error>,
+}
+
+/// **The precedence order lives here and nowhere else.** Adding a layer means
+/// adding a row, and the position needs an argument in a comment.
+const LAYERS: &[LayerDef] = &[
+    // Merged first, so anything at all displaces them.
+    LayerDef {
+        name: "default",
+        active: |spec| spec.defaults.is_some_and(|layer| !layer.is_empty()),
+        merge: merge_defaults,
+    },
+    // Discovered files sit below the explicitly listed ones: `files = [..]`
+    // is a deliberate statement, a search result is a guess about the
+    // machine.
+    LayerDef {
+        name: "discovered",
+        active: |spec| spec.search.is_some(),
+        merge: merge_discovered,
+    },
+    LayerDef {
+        name: "file",
+        active: |spec| !spec.sources.is_empty(),
+        merge: merge_listed,
+    },
+    // Above the files: what a central store distributes should beat what a
+    // package shipped. Below the environment, which comes next.
+    LayerDef {
+        name: "remote",
+        active: |spec| {
+            spec.remote
+                .is_some_and(|remote| remote.document().is_some())
+        },
+        merge: merge_remote,
+    },
+    // A `.env` is the environment layer sourced from disk, so it goes just
+    // below the real thing: a variable somebody exported for this run beats
+    // a file in the repository.
+    LayerDef {
+        name: ".env",
+        active: |spec| !spec.env_files.is_empty(),
+        merge: merge_env_files,
+    },
+    // Filed under the same profile the files use, so one `select` sees both.
+    // Merged after every file, so the environment wins over all of them.
+    LayerDef {
+        name: "environment",
+        active: |spec| spec.full_env_prefix().is_some(),
+        merge: merge_environment,
+    },
+    // Above the environment: a binding, like a flag, is a deliberate act of
+    // wiring rather than whatever the deployment happens to export.
+    LayerDef {
+        name: "binding",
+        active: |spec| {
+            spec.env_bindings
+                .is_some_and(|bindings| !bindings.is_empty())
+        },
+        merge: merge_bindings,
+    },
+    // A flag is typed by a person for this one run.
+    LayerDef {
+        name: "flag",
+        active: |spec| spec.flags.is_some_and(|layer| !layer.is_empty()),
+        merge: merge_flags,
+    },
+    // Merged last, so nothing displaces them. This is what makes a test
+    // authoritative without editing anything on disk.
+    LayerDef {
+        name: "override",
+        active: |spec| spec.overrides.is_some_and(|layer| !layer.is_empty()),
+        merge: merge_overrides,
+    },
+];
 
 /// Assembles the providers for `spec`, in precedence order.
 fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     let mut figment = Figment::new();
 
-    // Merged first, so anything at all displaces them.
-    if let Some(defaults) = spec.defaults {
-        figment = figment.merge(defaults.provider(spec.key, DEFAULTS_NAME));
+    for layer in LAYERS {
+        if (layer.active)(spec) {
+            figment = (layer.merge)(figment, spec)?;
+        }
     }
 
+    Ok(figment)
+}
+
+/// Every active layer's name next to a figment holding only that layer —
+/// what [`crate::explain`] walks to answer "who had what to say".
+///
+/// "Active" means the layer has something to say at all: the generated code
+/// wires every runtime layer unconditionally, so `Some` alone would put an
+/// empty `flag` row in every table. Content decides, not wiring.
+pub(crate) fn layer_figments(spec: &LoadSpec<'_>) -> Result<Vec<(&'static str, Figment)>, Error> {
+    LAYERS
+        .iter()
+        .filter(|layer| (layer.active)(spec))
+        .map(|layer| {
+            Ok((
+                layer.name,
+                (layer.merge)(Figment::new(), spec)?.select(spec.key),
+            ))
+        })
+        .collect()
+}
+
+fn merge_defaults(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    match spec.defaults {
+        Some(defaults) => Ok(figment.merge(defaults.provider(spec.key, DEFAULTS_NAME))),
+        None => Ok(figment),
+    }
+}
+
+fn merge_discovered(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     let profile = sections::validated_profile(spec)?;
 
-    // Discovered files sit below the explicitly listed ones: `files = [..]` is
-    // a deliberate statement, a search result is a guess about the machine.
     if let Some(search) = &spec.search {
         for (path, format) in search.resolve() {
             figment = sections::merge_file(figment, &path, format)?;
             figment = sections::merge_profile_variant(figment, &path, format, profile.as_deref())?;
         }
     }
+
+    Ok(figment)
+}
+
+fn merge_listed(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    let profile = sections::validated_profile(spec)?;
 
     for source in spec.sources {
         figment = sections::merge(figment, source)?;
@@ -129,8 +263,10 @@ fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
         }
     }
 
-    // Above the files: what a central store distributes should beat what a
-    // package shipped. Below the environment, which comes next.
+    Ok(figment)
+}
+
+fn merge_remote(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     if let Some(remote) = spec.remote {
         if let Some(document) = remote.document() {
             let name = format!(
@@ -138,45 +274,57 @@ fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
                 remote.describe().unwrap_or_else(|| "(unnamed)".to_owned())
             );
 
-            figment =
-                sections::merge_named_text(figment, &document.text, document.format, &name, None)?;
+            return sections::merge_named_text(
+                figment,
+                &document.text,
+                document.format,
+                &name,
+                None,
+            );
         }
     }
 
-    // A `.env` is the environment layer sourced from disk, so it goes just
-    // below the real thing: a variable somebody exported for this run beats a
-    // file in the repository.
-    figment = merge_env_files(figment, spec)?;
+    Ok(figment)
+}
 
-    // Filed under the same profile the files use, so one `select` sees both.
-    // Merged after every file, so the environment wins over all of them.
-    if let Some(prefix) = spec.full_env_prefix() {
-        figment = figment.merge(environment(
+fn merge_environment(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    if spec.strict_env {
+        if let Some(prefix) = spec.full_env_prefix() {
+            environment::reject_ambiguous(&prefix)?;
+        }
+    }
+
+    match spec.full_env_prefix() {
+        Some(prefix) => Ok(figment.merge(environment(
             &prefix,
             spec.key,
             spec.nest,
             spec.allow_empty_env,
-        ));
+        ))),
+        None => Ok(figment),
     }
+}
 
-    // Above the environment: a flag is typed by a person for this one run, and
-    // should win over whatever the deployment happens to export.
-
+fn merge_bindings(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     if let Some(bindings) = spec.env_bindings {
         for binding in bindings.providers(spec.key, spec.allow_empty_env) {
             figment = figment.merge(binding);
         }
     }
 
-    if let Some(flags) = spec.flags {
-        figment = figment.merge(flags.provider(spec.key, FLAGS_NAME));
-    }
-
-    // Merged last, so nothing displaces them. This is what makes a test
-    // authoritative without editing anything on disk.
-    if let Some(overrides) = spec.overrides {
-        figment = figment.merge(overrides.provider(spec.key, OVERRIDES_NAME));
-    }
-
     Ok(figment)
+}
+
+fn merge_flags(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    match spec.flags {
+        Some(flags) => Ok(figment.merge(flags.provider(spec.key, FLAGS_NAME))),
+        None => Ok(figment),
+    }
+}
+
+fn merge_overrides(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
+    match spec.overrides {
+        Some(overrides) => Ok(figment.merge(overrides.provider(spec.key, OVERRIDES_NAME))),
+        None => Ok(figment),
+    }
 }

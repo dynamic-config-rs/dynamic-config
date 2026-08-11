@@ -21,7 +21,7 @@
 //! | Mode | On disk | Recovers |
 //! |---|---|---|
 //! | [`Full`](CacheMode::Full) | everything, secrets included | completely |
-//! | [`Redacted`](CacheMode::Redacted) | everything except `#[config(secret)]` fields | only if the secrets come from somewhere live |
+//! | [`Redacted`](CacheMode::Redacted) *(the attribute's default)* | everything except `#[config(secret)]` fields | only if the secrets come from somewhere live |
 //! | [`Fingerprint`](CacheMode::Fingerprint) | a hash and the key names | never — it reports what changed and still fails |
 //!
 //! On Unix the file is written `0600`. That is the most that can be done
@@ -78,8 +78,8 @@ const KEYS: &str = "keys";
 ///
 /// | Mode | On disk | Recovers |
 /// |---|---|---|
-/// | [`Full`](Self::Full) *(default)* | everything, secrets included | completely |
-/// | [`Redacted`](Self::Redacted) | everything except `#[config(secret)]` fields | only if the secrets come from somewhere live |
+/// | [`Full`](Self::Full) | everything, secrets included | completely |
+/// | [`Redacted`](Self::Redacted) *(the attribute's default)* | everything except `#[config(secret)]` fields | only if the secrets come from somewhere live |
 /// | [`Fingerprint`](Self::Fingerprint) | a hash and the key names | never — it reports what changed and still fails |
 ///
 /// On Unix the file is written `0600`. That is the most that can be done
@@ -123,17 +123,6 @@ impl fmt::Display for CacheMode {
 }
 
 impl CacheMode {
-    /// Parses the `cache_mode` argument. Unknown names are a compile error, so
-    /// this is only reached with something the macro already accepted.
-    pub(crate) fn parse(name: &str) -> Option<Self> {
-        match name {
-            "full" => Some(Self::Full),
-            "redacted" => Some(Self::Redacted),
-            "fingerprint" => Some(Self::Fingerprint),
-            _ => None,
-        }
-    }
-
     /// Whether a cache in this mode can stand in for the real thing.
     #[must_use]
     pub fn recovers(self) -> bool {

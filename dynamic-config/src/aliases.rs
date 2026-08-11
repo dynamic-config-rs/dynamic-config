@@ -8,7 +8,7 @@
 //! ```rust,no_run
 //! # #[cfg(feature = "toml")] {
 //! # use serde::Deserialize;
-//! # #[dynamic_config::dynamic_config(files = ["config.toml"], key = "db")]
+//! # #[dynamic_config::dynamic_config]
 //! # #[derive(Deserialize)] struct DbConfig { pool: Pool }
 //! # #[derive(Deserialize)] struct Pool { max_size: u16 }
 //! // Files written before the rename keep working.

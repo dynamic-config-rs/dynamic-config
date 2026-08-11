@@ -2,6 +2,7 @@
 members = [
     "dynamic-config",
     "dynamic-config-macros",
+    "dynamic-config-cli",
     "dynamic-config-vault",
     "dynamic-config-consul",
     "dynamic-config-etcd",

@@ -3,9 +3,9 @@
 #![cfg(feature = "json")]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use dynamic_config::{dynamic_config, ErrorKind};
+use dynamic_config::{dynamic_config, Builder, ErrorKind, Format};
 use serde::{Deserialize, Serialize};
 
 /// A directory per test: they run in parallel and write real files.
@@ -20,12 +20,24 @@ fn scratch(test: &str) -> PathBuf {
     directory
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", save)]
+#[dynamic_config]
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 struct Db {
     host: String,
     port: u16,
     pool: Pool,
+}
+
+/// The `db` section of the base fixture.
+fn db_builder() -> Builder<Db> {
+    Db::builder("db").file("tests/fixtures/base.json")
+}
+
+/// Saves under the `db` key, taking the format from the extension the way the
+/// old generated `save` method did — which is what lets an extension that
+/// names no format be refused rather than guessed at.
+fn save_db(value: &Db, path: &Path) -> Result<(), dynamic_config::Error> {
+    dynamic_config::save(value, path, Format::from_path(path)?, "db")
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -37,8 +49,8 @@ struct Pool {
 fn what_is_saved_is_shaped_the_way_the_loader_expects() {
     let path = scratch("round-trip").join("config.json");
 
-    let original = Db::load().expect("the fixture is complete");
-    original.save(&path).expect("the directory is writable");
+    let original = db_builder().load().expect("the fixture is complete");
+    save_db(&original, &path).expect("the directory is writable");
 
     // Nested under the section key, so a loader pointed at this file finds it.
     let written: serde_json::Value =
@@ -52,7 +64,7 @@ fn what_is_saved_is_shaped_the_way_the_loader_expects() {
 fn an_extension_that_names_no_format_is_refused() {
     let path = scratch("bad-extension").join("config.ini");
 
-    let error = Db::load().unwrap().save(&path).unwrap_err();
+    let error = save_db(&db_builder().load().unwrap(), &path).unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::Backend);
     assert!(error.to_string().contains("`.json`"), "{error}");
@@ -64,7 +76,7 @@ fn an_extension_that_names_no_format_is_refused() {
 
 #[test]
 fn a_value_can_be_read_by_path() {
-    let snapshot = Db::snapshot().expect("the fixture is complete");
+    let snapshot = db_builder().snapshot().expect("the fixture is complete");
 
     assert_eq!(snapshot.get::<String>("host").unwrap(), "localhost");
     assert_eq!(snapshot.get::<u16>("pool.max_size").unwrap(), 10);
@@ -74,7 +86,8 @@ fn a_value_can_be_read_by_path() {
 
 #[test]
 fn a_sub_snapshot_carries_only_its_own_table() {
-    let pool = Db::snapshot()
+    let pool = db_builder()
+        .snapshot()
         .unwrap()
         .sub("pool")
         .expect("`pool` is a table");
@@ -88,19 +101,28 @@ fn a_sub_snapshot_carries_only_its_own_table() {
 // ─────────────────────────────────────────────
 
 /// The file uses the old name; the struct has renamed the field.
-#[dynamic_config(files = ["tests/fixtures/aliased.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Renamed {
     #[serde(alias = "hostname")]
     host: String,
 }
 
+/// The `db` section of the fixture that still spells it `hostname`.
+fn renamed_builder() -> Builder<Renamed> {
+    Renamed::builder("db").file("tests/fixtures/aliased.json")
+}
+
 #[test]
 fn an_alias_loads_and_is_not_reported_as_a_typo() {
-    let config = Renamed::load().expect("`hostname` is an accepted name for `host`");
+    let config = renamed_builder()
+        .load()
+        .expect("`hostname` is an accepted name for `host`");
     assert_eq!(config.host, "localhost");
 
-    let report = Renamed::check().expect("the fixture reads cleanly");
+    let report = renamed_builder()
+        .check()
+        .expect("the fixture reads cleanly");
     assert!(
         report.unknown.is_empty(),
         "an alias is a name the file may use: {report}"

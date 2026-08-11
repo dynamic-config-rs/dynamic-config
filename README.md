@@ -30,13 +30,9 @@ dynamic-config = { version = "0.1.0", features = ["toml", "watch"] }
 ```rust
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
+use std::time::Duration;
 
-#[dynamic_config(
-    files = ["config.toml", "secrets.json"],
-    key   = "db",
-    env   = "APP_",
-    watch,
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
     pub host: String,
@@ -44,15 +40,24 @@ pub struct DatabaseConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    DatabaseConfig::init()?;                  // load once, fail fast on a bad config
-    DatabaseConfig::start_watch()?.detach();  // reload in the background from now on
+    let builder = DatabaseConfig::builder("db")
+        .file("config.toml")
+        .file("secrets.json")
+        .env("APP_");
 
-    let config = DatabaseConfig::current();   // one atomic load, on any thread
+    builder.init()?;                                     // load once, fail fast on a bad config
+    builder.watch(Duration::from_millis(250))?.detach(); // reload in the background from now on
+
+    let config = DatabaseConfig::current();              // one atomic load, on any thread
     println!("{}:{}", config.host, config.port);
 
     Ok(())
 }
 ```
+
+The attribute declares — *this type is a configuration* — and generates its
+storage and accessors. The builder configures: where the sources are is
+runtime data, and it lives in runtime code.
 
 ## Why this one
 
@@ -91,6 +96,7 @@ schema export, units, the last-known-good cache, testing patterns — lives in
 | [`dynamic-config-s3`](dynamic-config-s3) | S3 & compatibles, ETag polling — needs tokio | Experimental |
 | [`dynamic-config-firestore`](dynamic-config-firestore) | Firestore REST, `updateTime` polling | Experimental |
 | [`dynamic-config-embedded`](dynamic-config-embedded) | the same shape for `no_std` targets | Experimental |
+| [`dynamic-config-cli`](dynamic-config-cli) | `explain` and `diff` on the command line — in-repo, not yet published | Experimental |
 
 **Beta**: breaking changes bump the minor pre-1.0 and are announced in the
 changelog. **Experimental**: may change shape without ceremony — pin an

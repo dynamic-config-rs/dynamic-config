@@ -9,12 +9,13 @@
 //! to prevent. Code that needs the values already has both sides in an
 //! `on_reload` callback.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use figment::value::{Dict, Value};
 use serde::de::DeserializeOwned;
 
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind, Origin};
 
 /// What happened to one key between two snapshots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -58,14 +59,42 @@ impl fmt::Display for Change {
 /// Obtained from [`snapshot`](crate::snapshot), compared with
 /// [`diff`](Self::diff), and turned into a struct with
 /// [`extract`](Self::extract).
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct Snapshot {
     values: Dict,
+    /// Where each leaf came from, captured while the figment that knew was
+    /// still alive. Empty for a snapshot that was not produced by a live
+    /// resolution — one read back from the cache, for instance.
+    provenance: BTreeMap<String, Origin>,
 }
 
 impl Snapshot {
     pub(crate) fn new(values: Dict) -> Self {
-        Self { values }
+        Self {
+            values,
+            provenance: BTreeMap::new(),
+        }
+    }
+
+    /// Attaches where each leaf came from, at resolution time.
+    pub(crate) fn attach_provenance(&mut self, provenance: BTreeMap<String, Origin>) {
+        self.provenance = provenance;
+    }
+
+    /// Where the value at `path` in **this snapshot** came from.
+    ///
+    /// This answers for the snapshot in hand — the values that were actually
+    /// resolved together. The free-standing
+    /// [`source_of`](crate::source_of) answers a different question: what the
+    /// *next* load would see, re-reading the sources now.
+    ///
+    /// `None` when nothing supplies `path`, and for snapshots that did not
+    /// come from a live resolution (a cache read, a [`sub`](Self::sub) of
+    /// one of those): provenance is captured at resolution time and cannot
+    /// be reconstructed later.
+    #[must_use]
+    pub fn source_of(&self, path: &str) -> Option<&Origin> {
+        self.provenance.get(path)
     }
 
     /// Deserializes the section into `T`.
@@ -131,7 +160,15 @@ impl Snapshot {
         let mut values = self.values().clone();
         values.remove(key);
 
-        Self::new(values)
+        let prefix = format!("{key}.");
+        let provenance = self
+            .provenance
+            .iter()
+            .filter(|(path, _)| *path != key && !path.starts_with(&prefix))
+            .map(|(path, origin)| (path.clone(), origin.clone()))
+            .collect();
+
+        Self { values, provenance }
     }
 
     /// Whether anything supplies `path`.
@@ -143,11 +180,28 @@ impl Snapshot {
     /// The table at `path`, as a snapshot of its own.
     ///
     /// The analogue of Viper's `Sub`: hand a subsystem the part of the
-    /// configuration it owns and nothing else.
+    /// configuration it owns and nothing else. Provenance follows: the sub-
+    /// snapshot's [`source_of`](Self::source_of) answers for its own,
+    /// re-rooted paths.
     #[must_use]
     pub fn sub(&self, path: &str) -> Option<Self> {
         match self.at(path)? {
-            Value::Dict(_, nested) => Some(Self::new(nested.clone())),
+            Value::Dict(_, nested) => {
+                let prefix = format!("{path}.");
+                let provenance = self
+                    .provenance
+                    .iter()
+                    .filter_map(|(leaf, origin)| {
+                        leaf.strip_prefix(&prefix)
+                            .map(|rest| (rest.to_owned(), origin.clone()))
+                    })
+                    .collect();
+
+                Some(Self {
+                    values: nested.clone(),
+                    provenance,
+                })
+            }
             _ => None,
         }
     }
@@ -193,6 +247,58 @@ impl Snapshot {
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
+}
+
+/// Keys and shape only, never values: a snapshot holds the *resolved*
+/// configuration, secrets included, and `{:?}` in a log line is exactly how
+/// resolved secrets leak. The dropped `#[derive(Debug)]` is the mistake
+/// AGENTS.md warns about, made by this crate itself.
+impl fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Snapshot")
+            .field("keys", &self.top_level_keys())
+            .field("leaves", &self.leaf_paths().len())
+            .field("provenance", &self.provenance.len())
+            .finish_non_exhaustive()
+    }
+}
+
+/// The dotted paths that differ between two configuration values.
+///
+/// The audit half of a reload hook: `on_reload` hands over both structs, and
+/// this names what moved — paths only, never values, same as every other
+/// diagnostic here.
+///
+/// ```
+/// # use serde::Serialize;
+/// #[derive(Serialize)]
+/// struct Db { host: String, port: u16 }
+///
+/// let before = Db { host: "a".into(), port: 1 };
+/// let after = Db { host: "a".into(), port: 2 };
+///
+/// let changes = dynamic_config::changed_paths(&before, &after).unwrap();
+/// assert_eq!(changes.len(), 1);
+/// assert_eq!(changes[0].path, "port");
+/// ```
+///
+/// # Errors
+///
+/// If either value does not serialize to a table — a bare scalar has no
+/// paths to compare.
+pub fn changed_paths<T: serde::Serialize>(previous: &T, current: &T) -> Result<Vec<Change>, Error> {
+    let as_snapshot = |value: &T| -> Result<Snapshot, Error> {
+        match Value::serialize(value) {
+            Ok(Value::Dict(_, dict)) => Ok(Snapshot::new(dict)),
+            Ok(_) => Err(Error::new(
+                ErrorKind::Type,
+                "only a table has paths to compare; this serializes to a scalar",
+            )),
+            Err(error) => Err(Error::new(ErrorKind::Type, error.to_string())),
+        }
+    };
+
+    Ok(as_snapshot(previous)?.diff(&as_snapshot(current)?))
 }
 
 /// Records the dotted path of every leaf, treating an empty table as one.

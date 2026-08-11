@@ -1,8 +1,6 @@
 //! Schema and field-attribute handling: the `#[config(..)]` options, serde
 //! rename resolution, and the opt-in JSON schema surface.
 
-use proc_macro2::TokenStream;
-use quote::quote;
 use syn::{Fields, Ident, ItemStruct, LitStr, Result};
 
 /// Field attribute this macro consumes, e.g. `#[config(secret)]`.
@@ -14,16 +12,6 @@ const FIELD_ATTRIBUTE: &str = "config";
 /// user has to derive. A `where Self: JsonSchema` clause cannot express that
 /// — rustc rejects an inherent method whose bound a concrete `Self` does not
 /// meet, at the definition rather than at the call.
-pub(super) fn schema_methods(schema: bool, key: &LitStr, secret_names: &[String]) -> TokenStream {
-    if schema {
-        quote! {
-            ::dynamic_config::__schema_methods!(#key, &[#(#secret_names),*]);
-        }
-    } else {
-        quote! {}
-    }
-}
-
 /// The field names a configuration section may legitimately carry.
 ///
 /// Follows `#[serde(rename = "..")]`, since that is the name the file uses.

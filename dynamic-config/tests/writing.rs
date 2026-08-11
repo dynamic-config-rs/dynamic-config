@@ -2,16 +2,30 @@
 
 #![cfg(feature = "json")]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use dynamic_config::{dynamic_config, ErrorKind};
+use dynamic_config::{dynamic_config, ErrorKind, Format};
 use serde::{Deserialize, Serialize};
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", save)]
+#[dynamic_config]
 #[derive(Deserialize, Serialize)]
 struct Written {
     host: String,
     port: u16,
+}
+
+/// The `db` section of the base fixture, loaded fresh for each test.
+fn written() -> Written {
+    Written::builder("db")
+        .file("tests/fixtures/base.json")
+        .load()
+        .expect("the fixture is complete")
+}
+
+/// Saves under the `db` key, taking the format from the extension the way
+/// the old generated `save_new` method did.
+fn save_new_written(value: &Written, path: &Path) -> Result<(), dynamic_config::Error> {
+    dynamic_config::save_new(value, path, Format::from_path(path)?, "db")
 }
 
 fn scratch(test: &str) -> PathBuf {
@@ -29,10 +43,7 @@ fn scratch(test: &str) -> PathBuf {
 fn save_new_writes_when_there_is_nothing_there() {
     let path = scratch("fresh").join("config.json");
 
-    Written::load()
-        .unwrap()
-        .save_new(&path)
-        .expect("nothing is there");
+    save_new_written(&written(), &path).expect("nothing is there");
 
     assert!(std::fs::read_to_string(&path)
         .unwrap()
@@ -45,10 +56,7 @@ fn save_new_refuses_rather_than_replacing() {
 
     std::fs::write(&path, "written by hand").unwrap();
 
-    let error = Written::load()
-        .unwrap()
-        .save_new(&path)
-        .expect_err("the file is already there");
+    let error = save_new_written(&written(), &path).expect_err("the file is already there");
 
     assert_eq!(error.kind(), ErrorKind::Io);
     assert_eq!(
@@ -64,10 +72,7 @@ fn save_still_replaces_because_that_is_what_it_is_for() {
 
     std::fs::write(&path, "stale").unwrap();
 
-    Written::load()
-        .unwrap()
-        .save(&path)
-        .expect("save overwrites");
+    dynamic_config::save(&written(), &path, Format::Json, "db").expect("save overwrites");
 
     assert!(std::fs::read_to_string(&path)
         .unwrap()
@@ -81,7 +86,7 @@ fn a_file_from_save_new_is_created_private() {
 
     let path = scratch("mode").join("config.json");
 
-    Written::load().unwrap().save_new(&path).unwrap();
+    save_new_written(&written(), &path).unwrap();
 
     let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
 
@@ -104,10 +109,14 @@ mod encrypted {
 
         let recipients = Recipients::from_public_keys([public]).expect("a real recipient");
 
-        Written::load()
-            .unwrap()
-            .save_encrypted(&path, &recipients)
-            .expect("encrypting works");
+        dynamic_config::save_encrypted(
+            &written(),
+            &path,
+            dynamic_config::Format::Json,
+            "db",
+            &recipients,
+        )
+        .expect("encrypting works");
 
         let ciphertext = std::fs::read(&path).unwrap();
 
@@ -129,10 +138,14 @@ mod encrypted {
     fn a_passphrase_round_trips_too() {
         let path = scratch("passphrase").join("secrets.json.age");
 
-        Written::load()
-            .unwrap()
-            .save_encrypted(&path, &Recipients::from_passphrase("hunter2"))
-            .expect("encrypting works");
+        dynamic_config::save_encrypted(
+            &written(),
+            &path,
+            dynamic_config::Format::Json,
+            "db",
+            &Recipients::from_passphrase("hunter2"),
+        )
+        .expect("encrypting works");
 
         let ciphertext = std::fs::read(&path).unwrap();
         let plaintext =

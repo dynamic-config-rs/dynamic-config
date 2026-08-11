@@ -15,23 +15,43 @@
 //!
 //! # What an embedded program would actually do
 //!
-//! Not this. `#[dynamic_config]` reads files and the environment, and a
+//! Not this. The builder reads files and the environment, and a
 //! microcontroller has neither. What it *does* have is a remote store or a
 //! serial link, and both arrive through the same door: hand a document to
 //! `apply_remote`, and every reader wakes up. That path is `std`-only today —
 //! see the roadmap — but the async half is already runtime-free, and this
 //! example is the part that can be shown now.
 
-use dynamic_config::{dynamic_config, Fetched, Format};
+use dynamic_config::{dynamic_config, Error, Fetched, Format, RemoteSource};
 use embassy_executor::{Executor, Spawner};
 use serde::Deserialize;
 use static_cell::StaticCell;
 
-#[dynamic_config(files = [], key = "server", env = "APP_", async)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     greeting: String,
     workers: usize,
+}
+
+/// The document the device boots with — where a real one would read flash.
+///
+/// It exists because `apply_remote` reloads through the configuration that
+/// `init` remembered, and an `init` with nothing to load would fail: the boot
+/// document is what there is to load.
+struct BootDocument;
+
+impl RemoteSource for BootDocument {
+    fn fetch(&self) -> Result<Fetched, Error> {
+        Ok(Fetched::new(
+            r#"{"server": {"greeting": "boot", "workers": 0}}"#.to_owned(),
+            Format::Json,
+        ))
+    }
+
+    fn describe(&self) -> String {
+        "boot-document://in-process".to_owned()
+    }
 }
 
 /// A task that waits for configuration to change and does something about it.
@@ -113,6 +133,15 @@ async fn start(spawner: Spawner) {
 static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 fn main() {
+    // No files, no environment prefix: the fetched boot document is the whole
+    // configuration, and initializing through the builder is what later lets
+    // `apply_remote` reload.
+    ServerConfig::set_remote(BootDocument);
+    ServerConfig::refresh_remote().expect("the boot document is well-formed");
+    ServerConfig::builder("server")
+        .init()
+        .expect("the boot document supplies every field");
+
     let executor = EXECUTOR.init(Executor::new());
 
     executor.run(|spawner| spawner.spawn(start(spawner).expect("the task pool has room")));

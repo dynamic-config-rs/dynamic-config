@@ -5,18 +5,27 @@
 
 #![cfg(feature = "json")]
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, Builder};
 use serde::Deserialize;
 
 macro_rules! db_config {
     ($name:ident, $file:literal) => {
-        #[dynamic_config(files = [$file], key = "db")]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             #[allow(dead_code)]
             host: String,
             #[allow(dead_code)]
             pool: Pool,
+        }
+
+        impl $name {
+            /// The `db` section of this test's own alias fixture.
+            // Not every generated type loads; refusing an alias needs no file.
+            #[allow(dead_code)]
+            fn sources() -> Builder<$name> {
+                $name::builder("db").file($file)
+            }
         }
     };
 }
@@ -37,14 +46,18 @@ db_config!(Nested, "tests/fixtures/alias-old.json");
 fn an_old_path_still_resolves() {
     // Without the alias the field is simply missing.
     assert!(
-        Renamed::load().is_err(),
+        Renamed::sources().load().is_err(),
         "`pool.max_size` is not in the file"
     );
 
     Renamed::alias("pool.size", "pool.max_size").unwrap();
 
     assert_eq!(
-        Renamed::load().expect("the alias fills it").pool.max_size,
+        Renamed::sources()
+            .load()
+            .expect("the alias fills it")
+            .pool
+            .max_size,
         32
     );
 }
@@ -54,7 +67,7 @@ fn an_alias_fills_a_gap_rather_than_overriding() {
     Filled::alias("pool.size", "pool.max_size").unwrap();
 
     assert_eq!(
-        Filled::load().unwrap().pool.max_size,
+        Filled::sources().load().unwrap().pool.max_size,
         64,
         "both spellings are present, and a file that has been updated wins"
     );
@@ -69,7 +82,8 @@ fn an_alias_fills_a_gap_rather_than_overriding() {
 fn an_aliased_value_traces_to_the_file_holding_the_old_spelling() {
     Traced::alias("pool.size", "pool.max_size").unwrap();
 
-    let origin = Traced::source_of("pool.max_size")
+    let origin = Traced::sources()
+        .source_of("pool.max_size")
         .unwrap()
         .expect("the alias supplies it");
 
@@ -82,24 +96,24 @@ fn an_aliased_value_traces_to_the_file_holding_the_old_spelling() {
 #[test]
 fn an_alias_can_move_a_value_between_names_at_the_top_level() {
     assert!(
-        Nested::load().is_err(),
+        Nested::sources().load().is_err(),
         "`pool.max_size` is not in the file"
     );
 
     Nested::alias("pool.size", "pool.max_size").unwrap();
 
-    assert_eq!(Nested::load().unwrap().pool.max_size, 32);
+    assert_eq!(Nested::sources().load().unwrap().pool.max_size, 32);
 }
 
 #[test]
 fn the_old_top_level_key_is_not_reported_as_a_typo() {
     // `legacy` is not a field, so without the alias `check` calls it unknown.
-    let before = Cleared::check().expect("checking resolves");
+    let before = Cleared::sources().check().expect("checking resolves");
     let unknown_before = before.unknown.len();
 
     Cleared::alias("legacy.size", "pool.max_size").unwrap();
 
-    let after = Cleared::check().expect("checking resolves");
+    let after = Cleared::sources().check().expect("checking resolves");
 
     assert!(
         after.unknown.len() <= unknown_before,
@@ -108,7 +122,10 @@ fn the_old_top_level_key_is_not_reported_as_a_typo() {
 
     Cleared::clear_aliases();
 
-    assert!(Cleared::load().is_err(), "and clearing puts it back");
+    assert!(
+        Cleared::sources().load().is_err(),
+        "and clearing puts it back"
+    );
 }
 
 #[test]
@@ -128,7 +145,7 @@ fn a_path_that_names_nothing_is_refused() {
 fn a_runtime_default_does_not_defeat_an_alias() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(files = ["tests/fixtures/alias-defaults.json"], key = "db")]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Defaulted {
         max_size: u16,
@@ -139,7 +156,9 @@ fn a_runtime_default_does_not_defeat_an_alias() {
     // A fallback for machines with nothing at all — it must stay a fallback.
     Defaulted::set_default("max_size", 8u16).unwrap();
 
-    let loaded = Defaulted::load();
+    let loaded = Defaulted::builder("db")
+        .file("tests/fixtures/alias-defaults.json")
+        .load();
 
     Defaulted::clear_aliases();
     Defaulted::clear_defaults();
@@ -156,7 +175,7 @@ fn a_runtime_default_does_not_defeat_an_alias() {
 fn chains_resolve_and_cycles_are_refused() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(files = ["tests/fixtures/alias-chain.json"], key = "db")]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Chained {
         renamed_twice: u16,
@@ -166,7 +185,9 @@ fn chains_resolve_and_cycles_are_refused() {
     Chained::alias("size", "mid").unwrap();
     Chained::alias("mid", "renamed_twice").unwrap();
 
-    let loaded = Chained::load();
+    let loaded = Chained::builder("db")
+        .file("tests/fixtures/alias-chain.json")
+        .load();
     Chained::clear_aliases();
 
     assert_eq!(

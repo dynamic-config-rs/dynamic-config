@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, Builder};
 use serde::Deserialize;
 
 fn scratch(test: &str) -> PathBuf {
@@ -18,20 +18,23 @@ fn scratch(test: &str) -> PathBuf {
     directory
 }
 
-// A type *and* a file per test. The macro takes literal paths, so two tests
-// sharing one write over each other — in parallel, intermittently, which is the
-// worst way to find out.
-#[dynamic_config(
-    files = ["tests/fixtures/base.json"],
-    key = "db",
-    env = "DCENV_",
-    env_files = ["tests/scratch/dotenv-basic.env"],
-)]
+// A type *and* a file per test. Each builder points at one fixed scratch path,
+// so two tests sharing one write over each other — in parallel, intermittently,
+// which is the worst way to find out.
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Basic {
     host: String,
     port: u16,
     pool: Pool,
+}
+
+/// The base fixture plus this test's own `.env` scratch file.
+fn basic_builder() -> Builder<Basic> {
+    Basic::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCENV_")
+        .env_file("tests/scratch/dotenv-basic.env")
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +54,7 @@ fn a_dotenv_file_supplies_the_environment_layer() {
         "# a note\nDCENV_DB_HOST=from-the-file\nDCENV_DB_POOL__MAX_SIZE=64\n",
     );
 
-    let config = Basic::load().expect("the file parses");
+    let config = basic_builder().load().expect("the file parses");
 
     assert_eq!(config.host, "from-the-file", "the prefix is stripped");
     assert_eq!(
@@ -64,18 +67,21 @@ fn a_dotenv_file_supplies_the_environment_layer() {
     );
 }
 
-#[dynamic_config(
-    files = ["tests/fixtures/base.json"],
-    key = "db",
-    env = "DCENVQ_",
-    env_files = ["tests/scratch/dotenv-quiet.env"],
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Quiet {
     #[allow(dead_code)]
     host: String,
     #[allow(dead_code)]
     port: u16,
+}
+
+/// The base fixture plus this test's own `.env` scratch file.
+fn quiet_builder() -> Builder<Quiet> {
+    Quiet::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCENVQ_")
+        .env_file("tests/scratch/dotenv-quiet.env")
 }
 
 #[test]
@@ -85,7 +91,7 @@ fn it_does_not_touch_the_process_environment() {
         "DCENVQ_DB_HOST=from-the-file\n",
     );
 
-    Quiet::load().expect("the file parses");
+    quiet_builder().load().expect("the file parses");
 
     assert!(
         std::env::var("DCENVQ_DB_HOST").is_err(),
@@ -93,17 +99,20 @@ fn it_does_not_touch_the_process_environment() {
     );
 }
 
-#[dynamic_config(
-    files = ["tests/fixtures/base.json"],
-    key = "db",
-    env = "DCENVP_",
-    env_files = ["tests/scratch/dotenv-precedence.env"],
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Precedence {
     host: String,
     #[allow(dead_code)]
     port: u16,
+}
+
+/// The base fixture plus this test's own `.env` scratch file.
+fn precedence_builder() -> Builder<Precedence> {
+    Precedence::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCENVP_")
+        .env_file("tests/scratch/dotenv-precedence.env")
 }
 
 #[test]
@@ -113,12 +122,12 @@ fn a_real_variable_beats_the_file() {
         "DCENVP_DB_HOST=from-the-file\n",
     );
 
-    assert_eq!(Precedence::load().unwrap().host, "from-the-file");
+    assert_eq!(precedence_builder().load().unwrap().host, "from-the-file");
 
     std::env::set_var("DCENVP_DB_HOST", "from-the-machine");
 
     assert_eq!(
-        Precedence::load().unwrap().host,
+        precedence_builder().load().unwrap().host,
         "from-the-machine",
         "a variable exported for this run beats a file in the repository"
     );
@@ -126,12 +135,7 @@ fn a_real_variable_beats_the_file() {
     std::env::remove_var("DCENVP_DB_HOST");
 }
 
-#[dynamic_config(
-    files = ["tests/fixtures/base.json"],
-    key = "db",
-    env = "DCENVT_",
-    env_files = ["tests/scratch/dotenv-traced.env"],
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Traced {
     #[allow(dead_code)]
@@ -147,7 +151,12 @@ fn a_value_from_a_dotenv_file_is_traced_to_that_file() {
         "DCENVT_DB_HOST=from-the-file\n",
     );
 
-    let origin = Traced::source_of("host")
+    // No init has happened, so the question goes to the builder directly.
+    let origin = Traced::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCENVT_")
+        .env_file("tests/scratch/dotenv-traced.env")
+        .source_of("host")
         .unwrap()
         .expect("something supplies it");
 
@@ -157,12 +166,7 @@ fn a_value_from_a_dotenv_file_is_traced_to_that_file() {
     );
 }
 
-#[dynamic_config(
-    files = ["tests/fixtures/base.json"],
-    key = "db",
-    env = "DCENVM_",
-    env_files = ["tests/scratch/dotenv-absent.env"],
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Missing {
     host: String,
@@ -170,12 +174,21 @@ struct Missing {
     port: u16,
 }
 
+/// The base fixture plus a `.env` path this test makes sure does not exist.
+fn missing_builder() -> Builder<Missing> {
+    Missing::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCENVM_")
+        .env_file("tests/scratch/dotenv-absent.env")
+}
+
 #[test]
 fn a_file_that_is_not_there_is_skipped_like_any_other() {
     let _ = std::fs::remove_file("tests/scratch/dotenv-absent.env");
 
     assert_eq!(
-        Missing::load()
+        missing_builder()
+            .load()
             .expect("an absent `.env` is not an error")
             .host,
         "localhost",

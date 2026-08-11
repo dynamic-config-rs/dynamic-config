@@ -16,7 +16,7 @@ use serde::Deserialize;
 
 macro_rules! server_config {
     ($name:ident) => {
-        #[dynamic_config(files = ["tests/fixtures/base.json"], key = "server", async)]
+        #[dynamic_config]
         #[derive(Debug, Deserialize, PartialEq)]
         struct $name {
             #[allow(dead_code)]
@@ -25,6 +25,13 @@ macro_rules! server_config {
         }
 
         impl $name {
+            /// Reads the `server` section of the base fixture.
+            // Not every generated type needs one.
+            #[allow(dead_code)]
+            fn server_builder() -> dynamic_config::Builder<Self> {
+                Self::builder("server").file("tests/fixtures/base.json")
+            }
+
             // Not every generated type needs one.
             #[allow(dead_code)]
             fn replacement(port: u16) -> Self {
@@ -44,10 +51,13 @@ server_config!(SnapshotTarget);
 
 #[tokio::test]
 async fn load_async_reads_the_same_configuration_as_load() {
-    let asynchronous = LoadTarget::load_async()
+    let asynchronous = LoadTarget::server_builder()
+        .load_async()
         .await
         .expect("the fixture should deserialize");
-    let synchronous = LoadTarget::load().expect("the fixture should deserialize");
+    let synchronous = LoadTarget::server_builder()
+        .load()
+        .expect("the fixture should deserialize");
 
     assert_eq!(asynchronous, synchronous);
     assert_eq!(asynchronous.port, 8080);
@@ -70,7 +80,8 @@ async fn a_handle_created_before_init_waits_rather_than_failing() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_subscriber_is_woken_by_a_reload() {
-    SubscribeTarget::init_async()
+    SubscribeTarget::server_builder()
+        .init_async()
         .await
         .expect("init should succeed");
 
@@ -101,7 +112,8 @@ async fn a_subscriber_is_woken_by_a_reload() {
 
 #[tokio::test]
 async fn a_reload_does_not_disturb_a_snapshot_already_taken() {
-    SnapshotTarget::init_async()
+    SnapshotTarget::server_builder()
+        .init_async()
         .await
         .expect("init should succeed");
 

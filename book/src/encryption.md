@@ -9,17 +9,22 @@ secrets.json.age       ciphertext, in the repository
 ```
 
 ```rust
-// Once, before anything loads. A key is a process-wide fact, so this is a
-// process-wide setting.
-dynamic_config::set_decryptor(dynamic_config::age::Age::from_environment()?)?;
-
-#[dynamic_config(files = ["config.toml", "secrets.json.age"], key = "db")]
+#[dynamic_config]
 #[derive(Deserialize)]
 struct DbConfig {
     host: String,
     #[config(secret)]
     password: String,
 }
+
+// Once, before anything loads. A key is a process-wide fact, so this is a
+// process-wide setting.
+dynamic_config::set_decryptor(dynamic_config::age::Age::from_environment()?)?;
+
+DbConfig::builder("db")
+    .file("config.toml")
+    .file("secrets.json.age")
+    .init()?;
 ```
 
 The `.age` suffix marks the file as encrypted; the extension **under** it says

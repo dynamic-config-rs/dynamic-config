@@ -25,6 +25,46 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+### Breaking
+
+- **The attribute declares; the builder configures.** `#[dynamic_config]`
+  takes no arguments; the `Builder` carries the whole source surface (plus
+  `validate`, `watch_with`, `prepare`, `reload`, `schema`, and per-type
+  memory of the configuration `init` installed). Generated
+  `load`/`init`/`start_watch`/`save*`/`schema` methods are gone; the
+  attribute error for any argument is the migration map.
+- `watch::spawn` / `spawn_with` take an owned `watch::Watched` instead of a
+  `LoadSpec<'static>`.
+- The cache moved to `Builder::cache(path, mode)`; the mode is always
+  spelled out, and redaction-dependent modes are refused without the
+  generated builder's secret knowledge.
+
+### Added
+
+- `explain(path)` / `Explanation` / `Contribution`: per-layer provenance
+  tables, secrets pre-redacted in the generated method.
+- `Snapshot` carries provenance; `Snapshot::source_of(path)` answers for the
+  snapshot in hand.
+- `strict_env` (`.strict_env()` on the builder, `with_strict_env` on
+  `LoadSpec`): ambiguous environment spellings are refused with the
+  variable named.
+- `Builder<T>` and the generated `builder()`: runtime-chosen sources that
+  load — or install — with the attribute's exact semantics; now with
+  `discover`, `cache` (+ recovery), `watch` and async `load`/`init`.
+- `changed_paths(old, new)` (audit, paths only); watcher reloads are
+  `config_reload` tracing spans with outcome and duration.
+
+### Changed
+
+- `changes()` before `init()` is contract: the initial install is the
+  handle's first change.
+
+### Fixed
+
+- `Snapshot::fmt` (and `Recovery` through it) printed resolved values,
+  secrets included; both now show keys and shape only.
+- The `strict_env` refusal does not echo the offending value.
+
 ## [0.1.0] — 2026-08-10
 
 ### Breaking

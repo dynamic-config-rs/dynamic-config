@@ -1,13 +1,11 @@
 # Async & Runtimes
 
-## The `async` attribute
+## The `async` feature
 
-```rust
-#[dynamic_config(files = ["config.toml"], key = "db", watch, async)]
-```
-
-Generates `load_async()`, `init_async()` and `changes()`. Requires the `async`
-feature — which pulls in **no runtime at all**. See [Async](#async).
+With the `async` feature, the attribute generates `load_async()`,
+`init_async()` and `changes()` — there is no argument to opt in with, and an
+unused `changes()` costs nothing. The feature pulls in **no runtime at all**.
+See [Async](#async).
 
 ## Async
 
@@ -15,12 +13,13 @@ The `async` feature brings in **no runtime**. `changes()` is a `Future`, so
 tokio, async-std, smol and a hand-written executor all drive it identically:
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", watch, async)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct DbConfig { pool_size: u32 }
 
-DbConfig::init_async().await?;
-DbConfig::start_watch()?.detach();
+let builder = DbConfig::builder("db").file("config.toml");
+builder.init_async().await?;
+builder.watch(Duration::from_millis(250))?.detach();
 
 let mut changes = DbConfig::changes();
 
@@ -33,7 +32,10 @@ spawn(async move {
 ```
 
 The snapshot current when `changes()` is called counts as already seen, so the
-first `changed().await` waits for the *next* reload. Reloads that land while
+first `changed().await` waits for the *next* reload. A handle created *before*
+`init()` has seen nothing, so the initial install is its first change —
+`changes()` doubles as "wake me when configuration exists", and that is
+contract, not accident. Reloads that land while
 nothing is awaiting are not queued — waking up to the latest configuration is
 what a reader wants, and a queue would hand it stale ones first.
 

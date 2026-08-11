@@ -105,6 +105,22 @@ pub(super) fn cell_slot(
     )
 }
 
+/// The slot remembering the builder this type was configured with.
+pub(super) fn configured_slot(
+    is_generic: bool,
+    name: &Ident,
+    type_generics: &TypeGenerics<'_>,
+) -> TokenStream {
+    slot(
+        is_generic,
+        quote!(dynamic_config_configured),
+        quote!(::dynamic_config::Configured<Self>),
+        quote!(::dynamic_config::Configured::<#name #type_generics>::new()),
+        quote!(::dynamic_config::Configured<#name #type_generics>),
+        "The builder this type was configured with, remembered at `init`.",
+    )
+}
+
 /// The slot holding the defaults layer.
 pub(super) fn defaults_slot(is_generic: bool) -> TokenStream {
     slot(
@@ -127,22 +143,6 @@ pub(super) fn overrides_slot(is_generic: bool) -> TokenStream {
         quote!(::dynamic_config::Layer),
         "Values that win over the files and the environment alike.",
     )
-}
-
-/// The slot holding the previous snapshot, present only with `diff`.
-pub(super) fn previous_slot(is_generic: bool, diff: bool) -> TokenStream {
-    if diff {
-        slot(
-            is_generic,
-            quote!(dynamic_config_previous),
-            quote!(::std::sync::Mutex<::core::option::Option<::dynamic_config::Snapshot>>),
-            quote!(::std::sync::Mutex::new(::core::option::Option::None)),
-            quote!(::std::sync::Mutex<::core::option::Option<::dynamic_config::Snapshot>>),
-            "The last resolved section, kept so a reload can say what moved.",
-        )
-    } else {
-        quote! {}
-    }
 }
 
 /// `set_default` and `set_override`: the two per-path layer setters.

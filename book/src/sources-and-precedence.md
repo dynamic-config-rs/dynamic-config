@@ -31,40 +31,42 @@ of a large `config.toml` without restating the rest. Arrays are replaced
 wholesale, never concatenated — there is no reading of `["a"] + ["b"]` that is
 right for every caller, and a silent append cannot be undone by a later file.
 
-## `files`
+## Files
 
 ```rust
-#[dynamic_config(files = ["config.toml", "secrets.json"], key = "db")]
+DbConfig::builder("db")
+    .file("config.toml")
+    .file("secrets.json")
+    .init()?;
 ```
 
-Sources merged **left to right** — later files win. The format comes from the
-extension (`.json`, `.toml`, `.yaml`, `.yml`); using one whose feature is off is
-a compile error naming the feature to add. A file that does not exist is
+Sources merged **in call order** — later files win. The format comes from the
+extension (`.json`, `.toml`, `.yaml`, `.yml`); using one whose feature is off
+is a load-time error naming the feature to add. A file that does not exist is
 skipped, which is what makes an optional `secrets.json` work.
 
 Paths resolve against the working directory. For a deployment, prefer
-[`name` + `paths`](profiles-and-discovery.md#name--paths).
+[discovery](profiles-and-discovery.md#name--paths).
 
-Either `files` or `name` + `paths` is required. Both together is fine: the
-explicitly listed files win, because a listed file is a deliberate statement and
-a search result is a guess about the machine.
+`.file(..)` and `.discover(..)` together is fine: the explicitly listed files
+win, because a listed file is a deliberate statement and a search result is a
+guess about the machine.
 
 A `.age` suffix marks a file as [encrypted](encryption.md):
 `secrets.json.age` is JSON that happens to be ciphertext.
 
-`files = []` says **no files, on purpose** — the shape of a container whose
-configuration comes from a [remote store](remote-stores.md) and the environment
-alone. Omitting `files` entirely is still an error, because that is a mistake
-rather than a decision.
+A builder with no `.file(..)` calls at all says **no files, on purpose** — the
+shape of a container whose configuration comes from a
+[remote store](remote-stores.md) and the environment alone.
 
 ## `key`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db")]
+DbConfig::builder("db")
 ```
 
-The section this struct maps to. Every file's **top-level** keys are sections,
-so several config types can share one file:
+The builder's one argument: the section this struct maps to. Every file's
+**top-level** keys are sections, so several config types can share one file:
 
 ```toml
 [db]      # -> DatabaseConfig
@@ -80,10 +82,11 @@ A consequence worth knowing: every top-level key must be a table. A stray
 ## `env`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", env = "APP_")]
+DbConfig::builder("db").file("config.toml").env("APP_")
 ```
 
-Combined with `key`, so `env = "APP_"` and `key = "db"` read `APP_DB_*`. The
+The prefix combines with the key, so `.env("APP_")` on a `"db"` builder reads
+`APP_DB_*`. The
 environment is merged after every file and wins over all of them.
 
 | Variable | Sets |
@@ -99,46 +102,60 @@ the field.
 ## `nest`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", env = "APP_", nest = "___")]
+DbConfig::builder("db").file("config.toml").env("APP_").nest("___")
 ```
 
 The separator that introduces nesting in a variable name. Defaults to `__`.
 
 A single separator cannot mean both "word break" and "nesting" — that is why the
 default is doubled — so whatever this is set to must be something a field name
-will not contain. Requires `env`.
+will not contain. Meaningful only alongside `.env(..)`.
 
 ## `allow_empty_env`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", env = "APP_", allow_empty_env)]
+DbConfig::builder("db").file("config.toml").env("APP_").allow_empty_env()
 ```
 
 By default `APP_DB_HOST=` counts as **unset** and the file's value survives. An
 unset value rendered into a deployment template leaves exactly `FOO=`, and
 letting that blank out a good configured value is a bad afternoon.
 
-Turn this on when empty really is a value you need to be able to send. Requires
-`env`.
+Turn this on when empty really is a value you need to be able to send.
 
-## `env_files`
+## `strict_env`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", env = "APP_", env_files = [".env"])]
+DbConfig::builder("db").file("config.toml").env("APP_").strict_env()
 ```
 
-`.env` files, merged in order just below the real environment. Requires the
-`dotenv` feature and an `env` prefix — a `.env` holds variable names, and
-without a prefix there is no rule for which of them belong to this section. See
-[`.env` files](#env-files).
+figment reads environment values loosely — ergonomic, and ambiguous at the
+edges. `APP_DB_TLS=off` reads like a boolean and arrives as the string
+`"off"`: silently correct into a `String` field, silently wrong everywhere
+else. With `strict_env`, the yes/no/on/off family (and `null`/`nil`/`none`)
+is an error naming the variable — write `true`, `false`, or the value you
+actually mean. `.env` files are held to the same standard. Loose stays the
+default; strictness is a choice about your deployment's discipline, not ours.
+
+
+## `env_file`
+
+```rust
+DbConfig::builder("db").file("config.toml").env("APP_").env_file(".env")
+```
+
+`.env` files, one call each, merged in call order just below the real
+environment. Requires the `dotenv` feature and an `.env(prefix)` — a `.env`
+holds variable names, and without a prefix there is no rule for which of them
+belong to this section. See [`.env` files](#env-files).
 
 ## `.env` files
 
-A `.env` holds *variable names*, not key paths, so it is not another format for
-[`files`](#files) — it is the environment layer sourced from disk:
+A `.env` holds *variable names*, not key paths, so it is not another format
+for [`.file(..)`](#files) — it is the environment layer sourced from disk:
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", env = "APP_", env_files = [".env"])]
+DbConfig::builder("db").file("config.toml").env("APP_").env_file(".env")
 ```
 
 ```text

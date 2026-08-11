@@ -14,7 +14,7 @@
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/config.json"], key = "worker", env = "APP_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 // Read through the `Debug` impl, which dead-code analysis ignores.
 #[allow(dead_code)]
@@ -35,7 +35,11 @@ struct RetryConfig {
 }
 
 fn main() {
-    match WorkerConfig::load() {
+    let sources = WorkerConfig::builder("worker")
+        .file("dynamic-config/examples/config.json")
+        .env("APP_");
+
+    match sources.load() {
         Ok(config) => println!("{config:#?}"),
         // The error names the field and the variable that should have set it.
         Err(error) => println!("could not load: {error}"),

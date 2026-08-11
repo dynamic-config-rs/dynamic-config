@@ -24,13 +24,13 @@ use serde::Deserialize;
 /// Rounds, chosen so a run takes a second or two rather than a moment.
 const ROUNDS: u32 = 5_000_000;
 
-#[dynamic_config(files = ["benches/bench.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Plain {
     port: u16,
 }
 
-#[dynamic_config(files = ["benches/bench.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Generic<T> {
     port: u16,
@@ -61,8 +61,14 @@ fn time(label: &str, mut work: impl FnMut()) -> f64 {
 }
 
 fn main() {
-    Plain::init().expect("benches/bench.json should load");
-    Generic::<Marker>::init().expect("benches/bench.json should load");
+    Plain::builder("db")
+        .file("benches/bench.json")
+        .init()
+        .expect("benches/bench.json should load");
+    Generic::<Marker>::builder("db")
+        .file("benches/bench.json")
+        .init()
+        .expect("benches/bench.json should load");
 
     println!("{ROUNDS} reads per measurement\n");
 

@@ -1,5 +1,5 @@
-error: unknown argument `wrong_argument`; expected one of: files, name, paths, key, env, watch, debounce, poll, poll_interval, profile_env, validate, diff, nest, env_files, save, schema, cache, cache_mode, async, allow_empty_env
- --> tests/ui/error_keeps_the_struct.rs:4:71
+error: #[dynamic_config] takes no arguments since 0.2: the attribute declares, the builder configures. Move the source arguments to the builder — `files`/`name`+`paths` become `.file(..)` / `.discover(name, paths)`, `key` moves to `builder("key")`, `env`/`nest`/`allow_empty_env`/`strict_env` become `.env(..)`, `.nest(..)`, `.allow_empty_env()`, `.strict_env()`, `env_files` becomes `.env_file(..)`, `profile_env` becomes `.profile_env(..)`, `cache`/`cache_mode` become `.cache(path, mode)`, `validate` becomes `.validate(f)`, and `watch`/`poll` become `.watch(debounce)` / `.watch_with(debounce, mode)` on the handle `init()` was called on. `save` and `schema` are the free functions `dynamic_config::save` and `dynamic_config::schema::document`.
+ --> tests/ui/error_keeps_the_struct.rs:4:34
   |
-4 | #[dynamic_config::dynamic_config(files = ["config.json"], key = "db", wrong_argument)]
-  |                                                                       ^^^^^^^^^^^^^^
+4 | #[dynamic_config::dynamic_config(key = "db")]
+  |                                  ^^^

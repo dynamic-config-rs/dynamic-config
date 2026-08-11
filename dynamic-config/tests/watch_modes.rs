@@ -18,15 +18,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use dynamic_config::dynamic_config;
+use dynamic_config::watch::WatchMode;
 use serde::Deserialize;
 
-#[dynamic_config(
-    files = ["tests/scratch/polled.json"],
-    key = "app",
-    watch,
-    debounce = 50,
-    poll_interval = 100
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Polled {
     value: u32,
@@ -36,7 +31,7 @@ struct Polled {
 // so everything only *it* uses is gated with it — Windows builds with
 // `-D warnings`, and dead code there is an error, not a footnote.
 #[cfg(unix)]
-#[dynamic_config(files = ["tests/scratch/k8s/config.json"], key = "app", watch, debounce = 50)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Mounted {
     value: u32,
@@ -64,9 +59,17 @@ fn the_poll_backend_notices_an_edit() {
     fs::create_dir_all("tests/scratch").unwrap();
     fs::write(path, r#"{"app": {"value": 1}}"#).unwrap();
 
-    Polled::init().expect("the initial load should succeed");
+    let builder = Polled::builder("app").file(path);
+    builder.init().expect("the initial load should succeed");
 
-    let _watch = Polled::start_watch().expect("the poll watcher should start");
+    let _watch = builder
+        .watch_with(
+            Duration::from_millis(50),
+            WatchMode::Poll {
+                interval: Duration::from_millis(100),
+            },
+        )
+        .expect("the poll watcher should start");
 
     // A poll watcher takes its baseline on its first tick, not when `watch()`
     // returns, so a single write can land inside the baseline and never look
@@ -127,10 +130,15 @@ fn a_configmap_symlink_swap_is_seen_as_a_change() {
 
     write_configmap(root, "..2026_08_09_00_00_00", 1);
 
-    Mounted::init().expect("the mounted file should load through the symlinks");
+    let builder = Mounted::builder("app").file("tests/scratch/k8s/config.json");
+    builder
+        .init()
+        .expect("the mounted file should load through the symlinks");
     assert_eq!(Mounted::current().value, 1);
 
-    let _watch = Mounted::start_watch().expect("the watcher should start");
+    let _watch = builder
+        .watch(Duration::from_millis(50))
+        .expect("the watcher should start");
 
     // The file's own inode never changes; only the directory does. A file-level
     // watch would see nothing at all here.
@@ -144,13 +152,7 @@ fn a_configmap_symlink_swap_is_seen_as_a_change() {
 
 /// A chatty neighbour in the config directory must not starve the reload:
 /// irrelevant events used to extend the debounce window indefinitely.
-#[dynamic_config(
-    files = ["tests/scratch/storm/config.json"],
-    key = "app",
-    watch,
-    debounce = 200,
-    poll_interval = 100
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Stormed {
     value: u32,
@@ -162,8 +164,16 @@ fn a_storm_of_unrelated_events_does_not_starve_the_reload() {
     fs::create_dir_all(root).unwrap();
     fs::write(root.join("config.json"), r#"{"app": {"value": 1}}"#).unwrap();
 
-    Stormed::init().expect("the initial load succeeds");
-    let _watch = Stormed::start_watch().expect("the watcher starts");
+    let builder = Stormed::builder("app").file("tests/scratch/storm/config.json");
+    builder.init().expect("the initial load succeeds");
+    let _watch = builder
+        .watch_with(
+            Duration::from_millis(200),
+            WatchMode::Poll {
+                interval: Duration::from_millis(100),
+            },
+        )
+        .expect("the watcher starts");
 
     // A neighbour that never shuts up: an unrelated file rewritten every
     // 50ms — well inside the 200ms debounce window, forever.

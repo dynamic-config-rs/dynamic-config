@@ -7,21 +7,24 @@
 | `json` | ✅ | `.json` sources |
 | `toml` | | `.toml` sources |
 | `yaml` | | `.yaml` / `.yml` sources |
-| `watch` | | `start_watch()` and the file watcher |
+| `watch` | | `builder.watch()` / `watch_with()` and the file watcher |
 | `async` | | `load_async`, `init_async`, `changes`, `AsyncRemoteSource` — no runtime dependency |
 | `tokio` | | `async`, plus tokio's blocking pool instead of a thread per load |
 | `clap` | | `bind_clap` |
-| `schema` | | `schema()` — a JSON Schema for the config files |
+| `schema` | | `builder.schema()` — a JSON Schema for the config files |
 | `decrypt` | | `Decryptor` and `set_decryptor`, for a scheme of your own |
 | `age` | | `decrypt`, plus transparent decryption and encryption of `age` files |
-| `dotenv` | | `env_files` — a `.env` read as the environment layer |
+| `dotenv` | | `.env_file(..)` — a `.env` read as the environment layer |
 | `figment` | | `Source::provider`, and figment re-exported |
 | `tracing` | | Watcher diagnostics via `tracing` instead of stderr |
 | `full` | | all of the above |
 
-Using a format, `watch` or `tokio` whose feature is off is a compile error
-naming the feature to add — not a runtime surprise on the one machine that
-reads YAML.
+Using `watch` or `async` surface whose feature is off is a compile error —
+the methods do not exist. A file whose *format* feature is off is a load-time
+error naming the feature to add, because the path is runtime data now; the
+message says exactly what to put in `features = [..]`, so it is a surprise
+that diagnoses itself rather than a mystery on the one machine that reads
+YAML.
 
 ## Minimum supported Rust version
 

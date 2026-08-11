@@ -149,7 +149,7 @@ fn the_documented_methods_are_the_generated_ones() {
     );
 
     assert!(
-        generated.contains("start_watch") && generated.len() > 30,
+        generated.contains("builder") && generated.len() > 30,
         "the extraction found {} names — the macro layout moved and this \
          test's paths need to follow it",
         generated.len()

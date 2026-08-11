@@ -3,28 +3,32 @@
 ## `save`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", save)]
-#[derive(Deserialize, Serialize)]
+use dynamic_config::{save, Format};
+
+save(&config, "config.toml", Format::Toml, "db")?;
 ```
 
-Generates `save(&self, path)`. The format comes from the extension and the output
-is nested under `key`, so what comes out can be read straight back in. Written
+`save` is a free function taking any `Serialize` value: writing a file is an
+operation on a value, not a property of a type, so nothing needs to be
+declared to use it. The output is nested under the given key, so what comes
+out can be read straight back in by a builder with the same key. Written
 through a temporary file and renamed, because the watcher is very likely
 watching that directory and a partial file would look like a broken edit.
 
-Requires `Self: Serialize`. **Secrets are written in the clear** —
-`#[config(secret)]` keeps a value out of logs, not out of a file the program was
-asked to write. On Unix the file is created `0600`.
+**Secrets are written in the clear** — `#[config(secret)]` keeps a value out
+of logs, not out of a file the program was asked to write. On Unix the file is
+created `0600`.
 
 ## `save_new` and `save_encrypted`
 
 Two companions to `save`, with the same atomic write:
 
-- `save_new(&self, path)` — the same, refusing if the file exists, for a setup
-  wizard that must not overwrite what somebody wrote.
-- `save_encrypted(&self, path, &encryptor)` — the same, encrypted to a recipient
-  list, the counterpart to reading a `secrets.json.age`. Requires the `save`
-  argument and the `decrypt` feature; see [Encryption](encryption.md).
+- `save_new(&value, path, format, key)` — the same, refusing if the file
+  exists, for a setup wizard that must not overwrite what somebody wrote.
+- `save_encrypted(&value, path, format, key, &encryptor)` — the same,
+  encrypted to a recipient list, the counterpart to reading a
+  `secrets.json.age`. Requires the `decrypt` feature; see
+  [Encryption](encryption.md).
 
 `save` and the cache *create* their file `0600` and refuse to follow a symlink
 planted at the temporary path.
@@ -32,11 +36,16 @@ planted at the temporary path.
 ## `cache`
 
 ```rust
-#[dynamic_config(files = ["config.toml"], key = "db", cache = "/var/lib/app/last.json")]
+use dynamic_config::CacheMode;
+
+DbConfig::builder("db")
+    .file("config.toml")
+    .cache("/var/lib/app/last.json", CacheMode::Redacted)
+    .init()?;
 ```
 
-Writes the resolved configuration to that path after every successful load, and
-reads it back if a *cold start* fails. A failed **reload** never touches it — a
+Writes the resolved configuration to that path after every clean `init()` and
+every clean reload, and reads it back if a *cold start* fails. A failed **reload** never touches it — a
 running process already has something better to fall back on, the snapshot it is
 currently serving.
 
@@ -44,19 +53,20 @@ Recovery is loud: it logs a warning naming what failed, because a service quietl
 running on yesterday's configuration is its own kind of outage. See
 [Last known good](#last-known-good) for what ends up on disk.
 
-## `cache_mode`
+## Cache modes
 
-```rust
-#[dynamic_config(
-    files = ["config.toml"],
-    key = "db",
-    cache = "/var/lib/app/last.json",
-    cache_mode = "redacted",
-)]
-```
+The second argument to `.cache(path, mode)` is a `CacheMode`:
+`CacheMode::Redacted`, `CacheMode::Full` or `CacheMode::Fingerprint`. An enum
+rather than a string, so a typo is a compile error rather than a refused load.
+`Redacted` is the choice to reach for first: the cache is written on every
+clean load, and secrets landing on disk should be a decision, not a side
+effect — writing them is what `Full` spells out. See
+[Last known good](#last-known-good).
 
-`"full"` (the default), `"redacted"` or `"fingerprint"`. Anything else is a
-compile error listing the three. See [Last known good](#last-known-good).
+`Redacted` and `Fingerprint` need to know which fields are secret, which only
+the generated `builder()` on a `#[dynamic_config]` type carries — on a bare
+`Builder::new`, those modes are refused at `init` rather than silently caching
+everything. `CacheMode::Full`, spelled out, still works there.
 
 ## Last known good
 
@@ -67,10 +77,13 @@ yet, and a service that would otherwise have come up sits dead until a person
 notices.
 
 ```rust
-#[dynamic_config(files = ["/etc/app/config.toml"], key = "db", cache = "/var/lib/app/last.json")]
+DbConfig::builder("db")
+    .file("/etc/app/config.toml")
+    .cache("/var/lib/app/last.json", CacheMode::Redacted)
+    .init()?;
 ```
 
-Every successful load writes the resolved configuration there. A cold start that
+Every clean `init()` and reload writes the resolved configuration there. A cold start that
 fails reads it back, logs a warning naming the failure, and runs. It is opt-in,
 and deliberately loud.
 
@@ -83,19 +96,18 @@ answer instead would be a poor thing to build anything else on.
 A resolved configuration holds every value, including the ones
 `#[config(secret)]` exists to keep out of logs. There is no way to make that not
 a trade-off, so it is a choice with three answers rather than a default nobody
-was told about — and the default is *write it anyway*, because a cache that
-cannot recover is a cache that will disappoint somebody at three in the morning.
+was told about.
 
-| `cache_mode` | On disk | Recovers | For |
+| `CacheMode` | On disk | Recovers | For |
 |---|---|---|---|
-| `"full"` *(default)* | everything, secrets included | completely | a host you already trust with the secrets — they were in memory anyway |
-| `"redacted"` | everything except `#[config(secret)]` fields | only if the secrets arrive from somewhere live | secrets injected through the environment, which is the shape most deployments already have |
-| `"fingerprint"` | a hash and the key names — no value anywhere | never | somewhere no value may be written, when the diagnosis is still worth having |
+| `Full` | everything, secrets included | completely | a host you already trust with the secrets — they were in memory anyway |
+| `Redacted` | everything except `#[config(secret)]` fields | only if the secrets arrive from somewhere live | secrets injected through the environment, which is the shape most deployments already have |
+| `Fingerprint` | a hash and the key names — no value anywhere | never | somewhere no value may be written, when the diagnosis is still worth having |
 
 On Unix the file is written `0600`. That is the most that can be done without
 refusing the request; the rest is documented rather than solved.
 
-`"fingerprint"` does not pretend it can recover — a failed start still fails.
+`Fingerprint` does not pretend it can recover — a failed start still fails.
 What it buys is *which keys have moved since the last time this worked*, which is
 usually the first thing anyone wants:
 
@@ -113,8 +125,9 @@ logs afterwards.
 The files are what broke. Recovery loads from the cache plus the environment,
 flags and runtime overrides — never from the sources whose failure caused it,
 because a malformed file fails to parse whatever sits underneath it. The
-environment still wins over the cache, so a `"redacted"` cache and
-`APP_DB_PASSWORD` recover between them.
+environment still wins over the cache, so a `Redacted` cache and
+`APP_DB_PASSWORD` recover between them. A configured `.validate(f)` still runs
+on the recovered value — yesterday's configuration has to meet today's rules.
 
 ### Only a cold start
 

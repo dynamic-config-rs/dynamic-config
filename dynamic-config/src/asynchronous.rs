@@ -91,6 +91,11 @@ impl Notify {
 /// first [`changed`](Self::changed) waits for the *next* reload. Read the value
 /// you start from with `current()`.
 ///
+/// A handle created **before** `init()` has seen nothing, so the initial
+/// install is its first change — which makes `changes()` double as "wake me
+/// when configuration exists". That is contract, not accident: a task can be
+/// spawned before the configuration loads and pick up the moment it does.
+///
 /// # Example
 ///
 /// ```ignore

@@ -1,0 +1,24 @@
+[package]
+name = "dynamic-config-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Command-line diagnostics for dynamic-config: explain a value, diff two documents"
+repository = "https://github.com/ctolon/dynamic-config"
+# Not on crates.io yet: Experimental, shipped in-repo. The release pipeline's
+# publish waves do not know it, and `cargo package --workspace` skips it.
+publish = false
+
+[[bin]]
+name = "dynamic-config"
+path = "src/main.rs"
+
+[dependencies]
+dynamic-config = { version = "=0.1.0", path = "../dynamic-config", features = [
+    "json",
+    "toml",
+    "yaml",
+    "dotenv",
+] }
+clap = { version = "4.5", features = ["derive"] }

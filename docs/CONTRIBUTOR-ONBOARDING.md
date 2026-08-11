@@ -68,8 +68,10 @@ Everything below is in service of one journey. Follow it once and the module
 list stops being a list.
 
 ```text
-#[dynamic_config(..)]              expand/ turns the attribute into a `LoadSpec`
-        ↓
+#[dynamic_config]                  expand/ generates the type's storage, accessors
+        ↓                          and `builder(key)` — the attribute takes no arguments
+Builder                            builder.rs — files, env, discovery, cache, validate,
+        ↓                          chosen at runtime; funnels into one `LoadSpec`
 LoadSpec                           source.rs — which sources, which section, which prefix
         ↓
 loader::build()                    assembles figment providers in precedence order
@@ -90,23 +92,32 @@ Config::current()                  an atomic load. No lock, no parse, no allocat
 Crate documentation, re-exports, and `load()`. The hidden `__`-prefixed
 `macro_rules!` the generated code calls live next door in `redirects.rs` —
 `#[macro_export]` roots them at the crate top regardless of module, so they
-could move out of the front page. Two kinds live there:
+could move out of the front page. Three remain, all item-level
+(`__async_methods!`, `__async_remote_methods!`, `__clap_methods!`), for
+methods whose *signatures* name a feature-gated type: a signature cannot
+hide behind an expression-level `compile_error!`, and a `cfg` emitted into
+generated code would be evaluated against the user's features instead of
+ours. The expression-level redirects the attribute's source arguments once
+needed are gone with the arguments — a format, `.env` file or encrypted
+source whose feature is off is a *load-time* error naming the feature now,
+because the path it arrives on is runtime data.
 
-- **Item-level redirects** (`__async_methods!`, `__clap_methods!`,
-  `__schema_methods!`, `__async_remote_methods!`) — for methods whose
-  *signatures* name a feature-gated type. A signature cannot hide behind an
-  expression-level `compile_error!`.
-- **Expression-level redirects** (`__format_json!`, `__source_encrypted!`,
-  `__require_dotenv!`) — for everything else.
+Still in `lib.rs` itself: the logging helpers `__log_remote_*` — those are
+*functions*, reached by path, so unlike an exported macro they must stay
+somewhere `pub`-reachable from the root.
 
-Both exist so that using a feature you have not enabled is a *compile* error
-naming it, rather than a runtime surprise on the one machine that reads YAML.
+#### `builder.rs` — where a configuration is stated
 
-Still in `lib.rs` itself: `recover()` (the last-known-good path),
-`__write_cache`, `__summarize_changes`, and the logging helpers
-`__log_remote_*` — those are *functions*, reached by path
-(`::dynamic_config::__write_cache`), so unlike an exported macro they must
-stay somewhere `pub`-reachable from the root.
+`Builder<T>`: the runtime half of the attribute split. Sources (`file`,
+`discover`, `env` and its knobs, `env_file`, `profile_env`), the cache, the
+`validate` hook — then `load`/`init`/`reload`/`prepare`, `watch`/
+`watch_with`, the async variants, and the diagnostics (`explain`,
+`source_of`, `is_set`, `snapshot`, `check`, `schema`). Everything funnels
+through one private `with_spec`, so the builder cannot drift from the
+`LoadSpec` semantics. `Configured<T>` remembers the builder at a successful
+`init`, which is how the generated type-level diagnostics answer for the
+running configuration. Recovery from the last-known-good cache lives here
+too (`recover`), in `init` rather than `load` — `load` stays pure.
 
 #### `source.rs` — what to read
 
@@ -259,27 +270,38 @@ real toolchain.
 
 ## 3. `dynamic-config-macros`
 
-`lib.rs` is the entry point, `args.rs` parses the attribute, and `expand/`
-generates the `impl` — `mod.rs` orchestrates and assembles the final
-`quote!`; `accessors`, `watch`, `persistence`, `remote`, `source`, `schema`,
-`diagnostics` and `async_api` each build their slice of the methods, spliced
+`lib.rs` is the entry point, and `expand/` generates the `impl` — `mod.rs`
+orchestrates and assembles the final `quote!`; `accessors`, `diagnostics`,
+`remote`, `schema` and `watch` each build their slice of the methods, spliced
 back in a fixed order so the emitted tokens do not depend on the layout.
+
+The attribute takes **no arguments**: it declares, the builder configures.
+`args.rs` exists to *reject* anything between the parentheses — its error
+message is a map from each old argument to the builder method that replaced
+it, because the migration is mechanical and the message is where people meet
+it. What gets generated is exactly the part a runtime value cannot provide:
+the storage slots, the accessors over them, `builder(key)` seeded with the
+type's statics, and the field-derived diagnostics (`#[config(secret)]`,
+unknown-key detection).
 
 **The generated code is deliberately thin.** Everything with behaviour lives in
 `dynamic-config` as an ordinary function that can be linted, stepped through and
 unit tested. Generated code can be none of those things.
 
-`slot(..)` in `expand/accessors.rs` handles the generic/non-generic split in
-one place: a non-generic type gets a `static`, a generic one gets a registry
-lookup.
+The slot helpers in `expand/accessors.rs` handle the generic/non-generic
+split in one place: a non-generic type gets a `static`, a generic one gets a
+registry lookup.
 
-Adding an argument is common enough to have its own guide:
+A new knob almost never touches this crate any more — it goes on `Builder`
+and `LoadSpec`, which is common enough to have its own guide:
 [`.claude/skills/add-macro-argument/SKILL.md`](../.claude/skills/add-macro-argument/SKILL.md).
 
 **The trap worth knowing now:** `where Self: SomeTrait` on an inherent method
 does not work. rustc rejects an inherent method whose bound a concrete `Self`
-does not meet, at the *definition*. That is why `save` and `schema` are opt-in
-arguments rather than methods everyone gets.
+does not meet, at the *definition*. That is why `schema()` lives on
+`Builder`'s own generic `impl` (which can state `T: JsonSchema`) and `save`
+is a free function over any `Serialize` value, rather than either being a
+method every generated type gets.
 
 ---
 
@@ -343,9 +365,10 @@ build cannot check `no_std`: `std` is in the sysroot and links itself in.
 
 ### The mistake this repository keeps making
 
-**Tests that share state.** The macro takes *literal* paths; layers, aliases and
-bindings live in `static`s. Two tests that share a config type, a fixture path
-or an environment variable will race — and pass alone, which is worse.
+**Tests that share state.** A config type's snapshot, layers, aliases and
+bindings live in `static`s keyed by the type. Two tests that share a config
+type, a fixture path or an environment variable will race — and pass alone,
+which is worse.
 
 **One type, one fixture, one variable per test.** A `macro_rules!` to declare
 them is normal here. This has been the cause of every intermittent failure the
@@ -374,10 +397,11 @@ nothing unless keyspace notifications are on.
 
 ### A new format
 
-`Format` in `source.rs`, a feature, an arm in `merge_file`/`merge_text`, and a
-`__format_*!` redirect so a build without the feature fails at compile time.
-Consider whether `Source::provider` is the better answer — a format nobody else
-wants belongs in the caller's crate.
+`Format` in `source.rs`, a feature, and an arm in `merge_file`/`merge_text` —
+with the feature off, the arm is compiled out and loading that format is a
+load-time error naming the feature to add. Consider whether
+`Source::provider` is the better answer — a format nobody else wants belongs
+in the caller's crate.
 
 ### A new layer
 

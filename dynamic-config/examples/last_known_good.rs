@@ -7,20 +7,15 @@
 //!
 //! The example plays out the scenario the feature exists for: a service starts
 //! cleanly, the machine reboots, and the file that was fine yesterday is
-//! truncated. Once with each `cache_mode`.
+//! truncated. Once with each `CacheMode`.
 
 use std::path::{Path, PathBuf};
 
-use dynamic_config::dynamic_config;
+use dynamic_config::{dynamic_config, CacheMode};
 use serde::Deserialize;
 
-/// `cache_mode = "full"` — the default, written even without the argument.
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-lkg/config.json"],
-    key = "db",
-    env = "FULL_",
-    cache = "/tmp/dynamic-config-lkg/full.json",
-)]
+/// Cached with `CacheMode::Full` — everything, secrets included.
+#[dynamic_config]
 #[derive(Deserialize)]
 struct Full {
     host: String,
@@ -28,15 +23,9 @@ struct Full {
     password: String,
 }
 
-/// `cache_mode = "redacted"` — the secret is not written, so recovery needs it
-/// from somewhere live.
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-lkg/config.json"],
-    key = "db",
-    env = "REDACTED_",
-    cache = "/tmp/dynamic-config-lkg/redacted.json",
-    cache_mode = "redacted",
-)]
+/// Cached with `CacheMode::Redacted` — the secret is not written, so recovery
+/// needs it from somewhere live.
+#[dynamic_config]
 #[derive(Deserialize)]
 struct Redacted {
     host: String,
@@ -44,15 +33,9 @@ struct Redacted {
     password: String,
 }
 
-/// `cache_mode = "fingerprint"` — no value is written, so nothing recovers.
-/// What survives is the diagnosis.
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-lkg/config.json"],
-    key = "db",
-    env = "FINGERPRINT_",
-    cache = "/tmp/dynamic-config-lkg/fingerprint.json",
-    cache_mode = "fingerprint",
-)]
+/// Cached with `CacheMode::Fingerprint` — no value is written, so nothing
+/// recovers. What survives is the diagnosis.
+#[dynamic_config]
 #[derive(Deserialize)]
 struct Fingerprint {
     host: String,
@@ -69,6 +52,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory)?;
 
+    // One set of sources, three caching policies. The mode is spelled out at
+    // the one place a cache is asked for.
+    let full = Full::builder("db")
+        .file("/tmp/dynamic-config-lkg/config.json")
+        .env("FULL_")
+        .cache("/tmp/dynamic-config-lkg/full.json", CacheMode::Full);
+    let redacted = Redacted::builder("db")
+        .file("/tmp/dynamic-config-lkg/config.json")
+        .env("REDACTED_")
+        .cache("/tmp/dynamic-config-lkg/redacted.json", CacheMode::Redacted);
+    let fingerprint = Fingerprint::builder("db")
+        .file("/tmp/dynamic-config-lkg/config.json")
+        .env("FINGERPRINT_")
+        .cache(
+            "/tmp/dynamic-config-lkg/fingerprint.json",
+            CacheMode::Fingerprint,
+        );
+
     // -----------------------------------------------------------------------
     // A clean start. Every load writes the cache, whichever mode it is in.
     // -----------------------------------------------------------------------
@@ -77,9 +78,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         r#"{"db": {"host": "db.internal", "password": "hunter2"}}"#,
     )?;
 
-    Full::init()?;
-    Redacted::init()?;
-    Fingerprint::init()?;
+    full.init()?;
+    redacted.init()?;
+    fingerprint.init()?;
 
     println!("a clean start: {}\n", Full::current().host);
 
@@ -99,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // returned yesterday's answer instead would be a poor thing to build on.
 
     // `full` recovers on its own: the secret was on disk too.
-    match Full::init() {
+    match full.init() {
         Ok(()) => {
             let config = Full::current();
 
@@ -118,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `redacted` needs the secret from somewhere live. Without it the field is
     // simply missing, which is a clearer failure than a silently empty string.
-    match Redacted::init() {
+    match redacted.init() {
         Ok(()) => println!(
             "redacted:    recovered — host = {}",
             Redacted::current().host
@@ -128,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::env::set_var("REDACTED_DB_PASSWORD", "hunter2");
 
-    match Redacted::init() {
+    match redacted.init() {
         Ok(()) => {
             let config = Redacted::current();
 
@@ -148,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `fingerprint` never recovers, and does not pretend to. What it adds is
     // the diagnosis attached to the failure.
-    match Fingerprint::init() {
+    match fingerprint.init() {
         Ok(()) => println!(
             "fingerprint: recovered — host = {}, password = {}",
             Fingerprint::current().host,

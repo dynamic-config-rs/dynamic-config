@@ -10,11 +10,7 @@
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(
-    files = ["dynamic-config/examples/config.json"],
-    key = "server",
-    env = "APP_"
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
@@ -23,7 +19,12 @@ struct ServerConfig {
 }
 
 fn main() -> Result<(), dynamic_config::Error> {
-    ServerConfig::init()?;
+    // The attribute declares the type; where the values come from is chosen
+    // here, at runtime.
+    ServerConfig::builder("server")
+        .file("dynamic-config/examples/config.json")
+        .env("APP_")
+        .init()?;
 
     // Take the snapshot once; every later read is this same generation.
     let config = ServerConfig::current();

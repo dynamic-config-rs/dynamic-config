@@ -11,7 +11,7 @@ use dynamic_config::dynamic_config;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "db", schema)]
+#[dynamic_config]
 #[derive(Deserialize, JsonSchema)]
 struct DbConfig {
     /// Where the database lives.
@@ -24,7 +24,7 @@ struct DbConfig {
     password: String,
 }
 
-#[dynamic_config(files = ["dynamic-config/examples/app.json"], key = "server", schema)]
+#[dynamic_config]
 #[derive(Deserialize, JsonSchema)]
 struct ServerConfig {
     host: String,
@@ -34,17 +34,22 @@ struct ServerConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // The schema needs the same two facts the loader does — the file and the
+    // section key — so it comes from the same builder.
+    let db_sources = DbConfig::builder("db").file("dynamic-config/examples/app.json");
+    let server_sources = ServerConfig::builder("server").file("dynamic-config/examples/app.json");
+
     // Loaded as well as described, so the example proves the schema belongs to
     // a file this crate can actually read.
-    let server = ServerConfig::load()?;
+    let server = server_sources.load()?;
     println!("loaded: {}:{}\n", server.host, server.port);
 
     // ---------------------------------------------------------------------
     // One type: its schema describes the file it sits in, not the struct.
     // ---------------------------------------------------------------------
-    let db = DbConfig::schema();
+    let db = db_sources.schema();
 
-    println!("DbConfig::schema() describes a file:");
+    println!("the db builder's schema() describes a file:");
     println!("  top-level type      = {}", db["type"]);
     println!("  its only section    = db");
     println!(
@@ -61,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------------------
     // Two types over one file: one schema for the file they share.
     // ---------------------------------------------------------------------
-    let whole_file = dynamic_config::schema::merge([DbConfig::schema(), ServerConfig::schema()]);
+    let whole_file = dynamic_config::schema::merge([db_sources.schema(), server_sources.schema()]);
 
     println!("\nmerged, both sections are there:");
     for section in whole_file["properties"]

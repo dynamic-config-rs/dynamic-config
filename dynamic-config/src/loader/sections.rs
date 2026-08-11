@@ -13,12 +13,11 @@ use figment::value::Dict;
 use figment::{Figment, Metadata};
 use std::path::{Path, PathBuf};
 
+use super::CACHED_NAME;
 #[cfg(feature = "decrypt")]
 use crate::error::Origin;
 use crate::error::{Error, ErrorKind};
 use crate::source::{Format, LoadSpec, Source};
-
-use super::CACHED_NAME;
 
 /// A provider that answers with someone else's data under its own name.
 ///

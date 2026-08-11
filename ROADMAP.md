@@ -80,12 +80,6 @@ and an eighth done casually would be worse than none.
 
 ## After 0.1.0
 
-The 0.1.0 campaign (a three-way external review, fully implemented) closed
-most of what used to live here: the remote race, watcher identity, panic
-safety, debounce starvation, rename-aware secrets, recovery validation, the
-big-file splits, the defaults struct, alias hardening, fsync, the book.
-What remains below is what was *deliberately* deferred — each has a decision
-in it, and is tracked as a GitHub issue.
 
 ### A real no-alloc wait queue for the embedded crate **[own]**
 `ConfigCell<T, const WAITERS>` sizes the parking lot, but N > WAITERS still

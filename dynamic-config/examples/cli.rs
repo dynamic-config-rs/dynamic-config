@@ -15,7 +15,7 @@ use clap::{Arg, ArgAction, Command};
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/config.json"], key = "server", env = "APP_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
@@ -49,10 +49,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ServerConfig::set_assignments(assignments)?;
     }
 
+    // Sources are chosen at runtime; the flags layer bound above sits over
+    // whatever these resolve to.
+    let sources = ServerConfig::builder("server")
+        .file("dynamic-config/examples/config.json")
+        .env("APP_");
+
     // `--check` has to work when the configuration is broken, which is exactly
     // when it is worth running — so it reports rather than loading.
     if matches.get_flag("check") {
-        let report = ServerConfig::check()?;
+        let report = sources.check()?;
 
         println!("{report}");
 
@@ -63,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
     }
 
-    ServerConfig::init()?;
+    sources.init()?;
 
     let config = ServerConfig::current();
     println!("listening on {}:{}", config.host, config.port);

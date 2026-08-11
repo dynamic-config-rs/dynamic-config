@@ -1,7 +1,7 @@
 [book]
 title = "dynamic-config"
 authors = ["Cevat Batuhan Tolon"]
-description = "Hot-reloadable, lock-free application configuration for Rust, behind one attribute."
+description = "Hot-reloadable, lock-free application configuration for Rust: one attribute declares the type, one builder states its sources."
 language = "en"
 src = "src"
 

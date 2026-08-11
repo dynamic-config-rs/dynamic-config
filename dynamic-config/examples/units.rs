@@ -14,7 +14,7 @@ use std::time::Duration;
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(files = ["dynamic-config/examples/limits.json"], key = "limits", env = "APP_")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Limits {
     /// `"30s"`, `"1h30m"`, `"500ms"` — or a bare number of seconds.
@@ -31,7 +31,11 @@ struct Limits {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let limits = Limits::load()?;
+    let sources = Limits::builder("limits")
+        .file("dynamic-config/examples/limits.json")
+        .env("APP_");
+
+    let limits = sources.load()?;
 
     println!("request_timeout = {:?}", limits.request_timeout);
     println!("shutdown_grace  = {:?}", limits.shutdown_grace);
@@ -45,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("APP_LIMITS_REQUEST_TIMEOUT", "1h30m");
     std::env::set_var("APP_LIMITS_MAX_BODY", "1GB");
 
-    let limits = Limits::load()?;
+    let limits = sources.load()?;
     println!("  request_timeout = {:?}", limits.request_timeout);
     println!("  max_body        = {} bytes", limits.max_body);
 

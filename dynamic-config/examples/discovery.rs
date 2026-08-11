@@ -11,15 +11,7 @@
 use dynamic_config::dynamic_config;
 use serde::Deserialize;
 
-#[dynamic_config(
-    name = "config",
-    paths = [
-        "dynamic-config/examples/deployment/etc",
-        "dynamic-config/examples/deployment/home",
-    ],
-    key = "server",
-    profile_env = "APP_ENV",
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     host: String,
@@ -28,7 +20,17 @@ struct ServerConfig {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = ServerConfig::load()?;
+    let sources = ServerConfig::builder("server")
+        .discover(
+            "config",
+            [
+                "dynamic-config/examples/deployment/etc",
+                "dynamic-config/examples/deployment/home",
+            ],
+        )
+        .profile_env("APP_ENV");
+
+    let config = sources.load()?;
 
     println!(
         "host = {}  port = {}  tls = {}",
@@ -37,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Every directory that had a match contributed one file, so the report
     // shows different origins for different keys.
-    println!("\n{}", ServerConfig::check()?);
+    println!("\n{}", sources.check()?);
 
     println!(
         "\n`host` comes from etc/, `port` from home/. With APP_ENV=production, \

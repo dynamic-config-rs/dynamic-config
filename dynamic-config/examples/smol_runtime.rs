@@ -21,14 +21,7 @@ use serde::Deserialize;
 
 const DIRECTORY: &str = "/tmp/dynamic-config-smol";
 
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-smol/config.json"],
-    key = "server",
-    env = "APP_",
-    watch,
-    async,
-    diff,
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct ServerConfig {
     greeting: String,
@@ -63,16 +56,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = dynamic_config::set_blocking_executor(Smol);
 
     smol::block_on(async {
+        let sources = ServerConfig::builder("server")
+            .file("/tmp/dynamic-config-smol/config.json")
+            .env("APP_");
+
         // The load runs on smol's blocking pool rather than on the executor
         // thread, so a slow disk does not stall every other task.
-        ServerConfig::init_async().await?;
+        sources.init_async().await?;
 
         println!("loaded: {}", ServerConfig::current().greeting);
         println!("workers: {}\n", ServerConfig::current().workers);
 
         // A watcher, and a task awaiting what it installs. Neither knows which
         // runtime it is on.
-        let handle = ServerConfig::start_watch()?;
+        let handle = sources.watch(Duration::from_millis(250))?;
         let mut changes = ServerConfig::changes();
 
         let editor = smol::spawn({

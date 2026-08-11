@@ -9,12 +9,12 @@
 
 #![cfg(feature = "json")]
 
-use dynamic_config::{dynamic_config, Origin};
+use dynamic_config::{dynamic_config, Builder, Origin};
 use serde::Deserialize;
 
 macro_rules! db_config {
     ($name:ident, $env:literal) => {
-        #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = $env)]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             host: String,
@@ -24,6 +24,15 @@ macro_rules! db_config {
             // Not every test reads it; it is here to prove nested writes work.
             #[allow(dead_code)]
             pool: Pool,
+        }
+
+        impl $name {
+            /// The base fixture plus this test's own environment prefix.
+            fn sources() -> Builder<$name> {
+                $name::builder("db")
+                    .file("tests/fixtures/base.json")
+                    .env($env)
+            }
         }
     };
 }
@@ -44,7 +53,9 @@ fn a_default_fills_only_what_nothing_else_supplies() {
     DefaultsOnly::set_default("host", "from-default").unwrap();
     DefaultsOnly::set_default("port", 1234u16).unwrap();
 
-    let config = DefaultsOnly::load().expect("the fixture plus defaults are complete");
+    let config = DefaultsOnly::sources()
+        .load()
+        .expect("the fixture plus defaults are complete");
 
     assert_eq!(
         config.host, "localhost",
@@ -54,23 +65,30 @@ fn a_default_fills_only_what_nothing_else_supplies() {
 }
 
 /// The fixture has no `db.timeout_secs`, so this type cannot load without one.
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct WithGap {
     host: String,
     timeout_secs: u64,
 }
 
+/// Reads the `db` section of the base fixture, which lacks `timeout_secs`.
+fn with_gap_builder() -> Builder<WithGap> {
+    WithGap::builder("db").file("tests/fixtures/base.json")
+}
+
 #[test]
 fn a_default_supplies_a_key_no_file_has() {
     assert!(
-        WithGap::load().is_err(),
+        with_gap_builder().load().is_err(),
         "nothing supplies `timeout_secs` yet"
     );
 
     WithGap::set_default("timeout_secs", 30u64).unwrap();
 
-    let config = WithGap::load().expect("the default closes the gap");
+    let config = with_gap_builder()
+        .load()
+        .expect("the default closes the gap");
     assert_eq!(config.timeout_secs, 30);
     assert_eq!(config.host, "localhost", "the file still owns `host`");
 
@@ -81,7 +99,9 @@ fn a_default_supplies_a_key_no_file_has() {
 fn an_override_beats_the_file() {
     OverrideWins::set_override("host", "from-override").unwrap();
 
-    let config = OverrideWins::load().expect("the fixture is complete");
+    let config = OverrideWins::sources()
+        .load()
+        .expect("the fixture is complete");
 
     assert_eq!(config.host, "from-override");
     assert_eq!(config.port, 5432, "untouched keys still come from the file");
@@ -93,7 +113,7 @@ fn an_override_beats_the_file() {
 fn a_dotted_path_reaches_a_nested_field() {
     Nested::set_override("pool.max_size", 77u16).unwrap();
 
-    let config = Nested::load().expect("the fixture is complete");
+    let config = Nested::sources().load().expect("the fixture is complete");
 
     assert_eq!(config.pool.max_size, 77);
     assert_eq!(
@@ -107,14 +127,14 @@ fn a_dotted_path_reaches_a_nested_field() {
 #[test]
 fn clearing_puts_the_file_back_in_charge() {
     Cleared::set_override("host", "temporary").unwrap();
-    assert_eq!(Cleared::load().unwrap().host, "temporary");
+    assert_eq!(Cleared::sources().load().unwrap().host, "temporary");
 
     Cleared::clear_overrides();
-    assert_eq!(Cleared::load().unwrap().host, "localhost");
+    assert_eq!(Cleared::sources().load().unwrap().host, "localhost");
 
     Cleared::set_default("host", "fallback").unwrap();
     assert_eq!(
-        Cleared::load().unwrap().host,
+        Cleared::sources().load().unwrap().host,
         "localhost",
         "a default cannot displace the file either"
     );
@@ -122,7 +142,7 @@ fn clearing_puts_the_file_back_in_charge() {
     Cleared::clear_defaults();
 }
 
-#[dynamic_config(files = ["tests/fixtures/absent.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Attributed {
     #[allow(dead_code)]
@@ -134,7 +154,11 @@ struct Attributed {
 fn a_bad_override_is_attributed_to_the_override_layer() {
     Attributed::set_override("port", "not-a-number").unwrap();
 
-    let error = Attributed::load().expect_err("`port` cannot be a string");
+    // The one listed file does not exist, so only the override layer speaks.
+    let error = Attributed::builder("db")
+        .file("tests/fixtures/absent.json")
+        .load()
+        .expect_err("`port` cannot be a string");
 
     assert_eq!(error.origin(), &Origin::Runtime("override"));
     assert!(error.to_string().contains("set as override"), "{error}");
@@ -148,7 +172,7 @@ fn a_bad_override_is_attributed_to_the_override_layer() {
 fn a_defaults_struct_seeds_the_bottom_layer() {
     use serde::{Deserialize, Serialize};
 
-    #[dynamic_config::dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize, Serialize)]
     struct StructDefaults {
         host: String,
@@ -162,7 +186,9 @@ fn a_defaults_struct_seeds_the_bottom_layer() {
     })
     .unwrap();
 
-    let loaded = StructDefaults::load();
+    let loaded = StructDefaults::builder("db")
+        .file("tests/fixtures/base.json")
+        .load();
     StructDefaults::clear_defaults();
 
     let loaded = loaded.expect("defaults fill what the file lacks");
@@ -182,7 +208,7 @@ fn a_defaults_struct_seeds_the_bottom_layer() {
 fn a_non_map_defaults_value_is_refused() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct BareDefaults {
         #[allow(dead_code)]

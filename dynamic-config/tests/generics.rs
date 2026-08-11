@@ -26,7 +26,7 @@ impl Driver for Mysql {
     const NAME: &'static str = "mysql";
 }
 
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Db<D: Driver> {
     host: String,
@@ -47,10 +47,19 @@ impl<D: Driver> Db<D> {
     }
 }
 
+/// The `db` section of the base fixture, for whichever instantiation asks.
+fn db_sources<D: Driver + 'static>() -> dynamic_config::Builder<Db<D>> {
+    Db::<D>::builder("db").file("tests/fixtures/base.json")
+}
+
 #[test]
 fn every_instantiation_loads_independently() {
-    let postgres = Db::<Postgres>::load().expect("the fixture is complete");
-    let mysql = Db::<Mysql>::load().expect("the fixture is complete");
+    let postgres = db_sources::<Postgres>()
+        .load()
+        .expect("the fixture is complete");
+    let mysql = db_sources::<Mysql>()
+        .load()
+        .expect("the fixture is complete");
 
     assert_eq!(postgres.host, "localhost");
     assert_eq!(mysql.port, 5432);
@@ -59,8 +68,12 @@ fn every_instantiation_loads_independently() {
 
 #[test]
 fn snapshots_do_not_leak_between_instantiations() {
-    Db::<Postgres>::init().expect("the fixture is complete");
-    Db::<Mysql>::init().expect("the fixture is complete");
+    db_sources::<Postgres>()
+        .init()
+        .expect("the fixture is complete");
+    db_sources::<Mysql>()
+        .init()
+        .expect("the fixture is complete");
 
     Db::<Postgres>::replace(Db::<Postgres>::replacement("only-postgres"));
 
@@ -76,9 +89,9 @@ fn snapshots_do_not_leak_between_instantiations() {
 fn the_runtime_layers_are_per_instantiation_too() {
     Db::<Postgres>::set_override("port", 9999u16).unwrap();
 
-    assert_eq!(Db::<Postgres>::load().unwrap().port, 9999);
+    assert_eq!(db_sources::<Postgres>().load().unwrap().port, 9999);
     assert_eq!(
-        Db::<Mysql>::load().unwrap().port,
+        db_sources::<Mysql>().load().unwrap().port,
         5432,
         "an override on one instantiation must not reach another"
     );
@@ -91,7 +104,7 @@ fn the_runtime_layers_are_per_instantiation_too() {
 /// `quote!` is not hygienic for generic parameters, so `set_override<T>` in the
 /// generated code would collide with a caller's `T`. This is the regression
 /// test for that.
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Awkward<T, F> {
     host: String,
@@ -105,14 +118,21 @@ struct Awkward<T, F> {
 fn a_parameter_named_t_does_not_collide_with_the_generated_methods() {
     Awkward::<u8, u16>::set_override("host", "overridden").unwrap();
 
-    assert_eq!(Awkward::<u8, u16>::load().unwrap().host, "overridden");
+    assert_eq!(
+        Awkward::<u8, u16>::builder("db")
+            .file("tests/fixtures/base.json")
+            .load()
+            .unwrap()
+            .host,
+        "overridden"
+    );
 
     Awkward::<u8, u16>::on_reload(|_, _| {});
     Awkward::<u8, u16>::clear_overrides();
 }
 
 /// Const generics key the registry just as well as types do.
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Sized_<const N: usize> {
     host: String,
@@ -122,8 +142,14 @@ struct Sized_<const N: usize> {
 
 #[test]
 fn const_parameters_get_their_own_slots() {
-    Sized_::<1>::init().expect("the fixture is complete");
-    Sized_::<2>::init().expect("the fixture is complete");
+    Sized_::<1>::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
+    Sized_::<2>::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
 
     Sized_::<1>::replace(Sized_::<1> {
         host: "one".to_owned(),
@@ -137,7 +163,7 @@ fn const_parameters_get_their_own_slots() {
 /// A generic type reaches its remote slot through the `TypeId` registry rather
 /// than through a `static`, so the watch sink has to work there too — and each
 /// instantiation must keep its own document.
-#[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Watched<T> {
     host: String,
@@ -155,8 +181,14 @@ struct Replica;
 fn a_pushed_document_lands_in_one_instantiation_only() {
     use dynamic_config::{Fetched, Format};
 
-    Watched::<Primary>::init().expect("the fixture is complete");
-    Watched::<Replica>::init().expect("the fixture is complete");
+    Watched::<Primary>::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
+    Watched::<Replica>::builder("db")
+        .file("tests/fixtures/base.json")
+        .init()
+        .expect("the fixture is complete");
 
     Watched::<Primary>::apply_remote(Fetched::new(
         r#"{"db": {"host": "primary.internal"}}"#,
@@ -174,13 +206,7 @@ fn a_pushed_document_lands_in_one_instantiation_only() {
 
 // Its own type and its own scratch files: watch tests share nothing.
 #[cfg(feature = "watch")]
-#[dynamic_config(
-    files = ["tests/scratch/generic-watch.json"],
-    key = "db",
-    watch,
-    debounce = 50,
-    poll_interval = 100
-)]
+#[dynamic_config]
 #[derive(Debug, serde::Deserialize)]
 struct PerInstance<T> {
     #[allow(dead_code)]
@@ -188,6 +214,22 @@ struct PerInstance<T> {
     #[serde(skip)]
     #[allow(dead_code)]
     marker: std::marker::PhantomData<T>,
+}
+
+/// A poll watcher over this test's scratch file, for one instantiation.
+#[cfg(feature = "watch")]
+fn per_instance_watch<T: Send + Sync + 'static>(
+) -> std::io::Result<dynamic_config::watch::WatchHandle> {
+    use std::time::Duration;
+
+    PerInstance::<T>::builder("db")
+        .file("tests/scratch/generic-watch.json")
+        .watch_with(
+            Duration::from_millis(50),
+            dynamic_config::watch::WatchMode::Poll {
+                interval: Duration::from_millis(100),
+            },
+        )
 }
 
 #[cfg(feature = "watch")]
@@ -210,20 +252,20 @@ fn each_instantiation_gets_its_own_watcher() {
     )
     .unwrap();
 
-    let alpha = PerInstance::<Alpha>::start_watch().expect("the first instantiation watches");
-    let beta = PerInstance::<Beta>::start_watch()
+    let alpha = per_instance_watch::<Alpha>().expect("the first instantiation watches");
+    let beta = per_instance_watch::<Beta>()
         .expect("a different instantiation is a different watcher, not a duplicate");
 
     // A genuine duplicate is refused loudly.
     let error =
-        PerInstance::<Alpha>::start_watch().expect_err("the same instantiation twice is an error");
+        per_instance_watch::<Alpha>().expect_err("the same instantiation twice is an error");
     assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
 
     drop(alpha);
     drop(beta);
 
     // And once dropped, both restart cleanly.
-    PerInstance::<Alpha>::start_watch()
+    per_instance_watch::<Alpha>()
         .expect("after the drop, watching can restart")
         .stop();
 }

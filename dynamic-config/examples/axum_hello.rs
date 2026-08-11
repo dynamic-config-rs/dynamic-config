@@ -12,6 +12,7 @@
 //! and the value it gets is whatever the last successful reload installed.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::State;
 use axum::routing::get;
@@ -21,14 +22,7 @@ use serde::{Deserialize, Serialize};
 
 const DIRECTORY: &str = "/tmp/dynamic-config-axum";
 
-#[dynamic_config(
-    files = ["/tmp/dynamic-config-axum/config.json"],
-    key = "server",
-    env = "APP_",
-    watch,
-    diff,
-    validate,
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize, Serialize)]
 struct ServerConfig {
     /// Shown by the handler, so an edit is visible in the response.
@@ -95,7 +89,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 "#,
     )?;
 
-    ServerConfig::init()?;
+    let sources = ServerConfig::builder("server")
+        .file("/tmp/dynamic-config-axum/config.json")
+        .env("APP_")
+        .validate(|config| dynamic_config::Error::ok_or_invalid(config.validate()));
+
+    sources.init()?;
 
     // Bound before the watcher starts, and never re-read: a listener cannot
     // move to a new port without dropping every connection on the old one, so
@@ -105,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `.detach()` because this watcher should outlive `main`'s body. Without it
     // the handle drops here and the watcher stops immediately.
-    ServerConfig::start_watch()?.detach();
+    sources.watch(Duration::from_millis(250))?.detach();
 
     ServerConfig::on_reload(|previous, current| {
         if previous.port != current.port {

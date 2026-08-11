@@ -29,7 +29,7 @@ impl Driver for Mysql {
     const SCHEME: &'static str = "mysql";
 }
 
-#[dynamic_config(files = ["dynamic-config/examples/databases.json"], key = "db")]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Db<D: Driver> {
     host: String,
@@ -47,8 +47,13 @@ impl<D: Driver> Db<D> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    Db::<Postgres>::init()?;
-    Db::<Mysql>::init()?;
+    // The same sources twice: each instantiation is its own configuration,
+    // so each gets its own builder.
+    let postgres = Db::<Postgres>::builder("db").file("dynamic-config/examples/databases.json");
+    let mysql = Db::<Mysql>::builder("db").file("dynamic-config/examples/databases.json");
+
+    postgres.init()?;
+    mysql.init()?;
 
     println!("postgres: {}", Db::<Postgres>::current().url());
     println!("mysql:    {}", Db::<Mysql>::current().url());
@@ -57,8 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Db::<Mysql>::set_override("port", 3306u16)?;
 
     println!("\nafter overriding only the mysql port:");
-    println!("  postgres: {}", Db::<Postgres>::load()?.url());
-    println!("  mysql:    {}", Db::<Mysql>::load()?.url());
+    println!("  postgres: {}", postgres.load()?.url());
+    println!("  mysql:    {}", mysql.load()?.url());
 
     Db::<Mysql>::clear_overrides();
 

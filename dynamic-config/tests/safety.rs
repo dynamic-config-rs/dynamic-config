@@ -15,7 +15,7 @@ use serde::Deserialize;
 /// would let these two race each other through it.
 macro_rules! pool {
     ($name:ident) => {
-        #[dynamic_config(files = ["tests/fixtures/pool.json"], key = "pool", validate)]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             min_size: u16,
@@ -23,8 +23,8 @@ macro_rules! pool {
         }
 
         impl $name {
-            /// Resolved at the call site by the generated `load`. An inherent
-            /// method here; `validator::Validate` would work the same way.
+            /// An inherent method here; `validator::Validate` would work the
+            /// same way.
             fn validate(&self) -> Result<(), String> {
                 if self.min_size > self.max_size {
                     return Err(format!(
@@ -34,6 +34,14 @@ macro_rules! pool {
                 }
 
                 Ok(())
+            }
+
+            /// The `pool` section of the fixture, with the validation hook
+            /// the attribute's `validate` used to wire in.
+            fn sources() -> dynamic_config::Builder<$name> {
+                $name::builder("pool")
+                    .file("tests/fixtures/pool.json")
+                    .validate(|pool| dynamic_config::Error::ok_or_invalid(pool.validate()))
             }
         }
     };
@@ -45,13 +53,15 @@ pool!(HeldPool);
 #[test]
 fn a_configuration_that_parses_can_still_be_rejected() {
     // The fixture is coherent, so this is the baseline.
-    let pool = Pool::load().expect("the fixture is coherent");
+    let pool = Pool::sources().load().expect("the fixture is coherent");
     assert_eq!(pool.min_size, 2);
 
     // Every field still parses; only the relationship between them is wrong.
     Pool::set_override("min_size", 99u16).unwrap();
 
-    let error = Pool::load().expect_err("`min_size` is now above `max_size`");
+    let error = Pool::sources()
+        .load()
+        .expect_err("`min_size` is now above `max_size`");
 
     assert_eq!(error.kind(), ErrorKind::Invalid);
     assert!(error.to_string().contains("min_size (99)"), "{error}");
@@ -61,11 +71,11 @@ fn a_configuration_that_parses_can_still_be_rejected() {
 
 #[test]
 fn a_rejected_reload_leaves_the_snapshot_alone() {
-    HeldPool::init().expect("the fixture is coherent");
+    HeldPool::sources().init().expect("the fixture is coherent");
     assert_eq!(HeldPool::current().max_size, 8);
 
     HeldPool::set_override("min_size", 99u16).unwrap();
-    assert!(HeldPool::load().is_err());
+    assert!(HeldPool::sources().load().is_err());
 
     assert_eq!(
         HeldPool::current().max_size,
@@ -133,27 +143,35 @@ fn a_diff_never_carries_a_value() {
 // profile_env
 // ─────────────────────────────────────────────
 
-#[dynamic_config(
-    files = ["tests/fixtures/profiled.json"],
-    key = "db",
-    profile_env = "DCSAFE_PROFILE"
-)]
+#[dynamic_config]
 #[derive(Debug, Deserialize)]
 struct Profiled {
     host: String,
     port: u16,
 }
 
+/// The `db` section of the profiled fixture, with the profile chosen by
+/// `DCSAFE_PROFILE`.
+fn profiled_builder() -> dynamic_config::Builder<Profiled> {
+    Profiled::builder("db")
+        .file("tests/fixtures/profiled.json")
+        .profile_env("DCSAFE_PROFILE")
+}
+
 /// The only test in this binary that touches the environment.
 #[test]
 fn a_profile_layers_a_sibling_file_over_the_base() {
-    let base = Profiled::load().expect("the base fixture is complete");
+    let base = profiled_builder()
+        .load()
+        .expect("the base fixture is complete");
     assert_eq!(base.host, "base-host");
     assert_eq!(base.port, 5432);
 
     std::env::set_var("DCSAFE_PROFILE", "production");
 
-    let production = Profiled::load().expect("the production variant is a valid overlay");
+    let production = profiled_builder()
+        .load()
+        .expect("the production variant is a valid overlay");
     assert_eq!(
         production.port, 6432,
         "`profiled.production.json` overrides the port"
@@ -165,7 +183,7 @@ fn a_profile_layers_a_sibling_file_over_the_base() {
 
     // A profile with no file of its own is not an error, just no overlay.
     std::env::set_var("DCSAFE_PROFILE", "staging");
-    assert_eq!(Profiled::load().unwrap().port, 5432);
+    assert_eq!(profiled_builder().load().unwrap().port, 5432);
 
     std::env::remove_var("DCSAFE_PROFILE");
 }

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 const SECRET: &str = "hunter2-do-not-print-me";
 
-#[dynamic_config(files = [], key = "db", env = "DCSEC_", save)]
+#[dynamic_config]
 #[derive(Deserialize, Serialize)]
 struct Secretive {
     host: String,
@@ -161,7 +161,7 @@ fn a_written_file_is_private_from_the_moment_it_exists() {
 
     let path = directory.join("written.json");
 
-    loaded().save(&path).expect("saving works");
+    dynamic_config::save(&loaded(), &path, Format::Json, "db").expect("saving works");
 
     let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
 
@@ -196,11 +196,7 @@ fn a_fetched_remote_document_never_prints_its_contents() {
 fn a_profile_that_looks_like_a_path_is_refused() {
     use serde::Deserialize;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/fixtures/base.json"],
-        key = "db",
-        profile_env = "DCSEC_PROFILE_TRAVERSAL",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Profiled {
         #[allow(dead_code)]
@@ -210,7 +206,11 @@ fn a_profile_that_looks_like_a_path_is_refused() {
     for hostile in ["../secrets", "a/b", "a\\b", ".."] {
         std::env::set_var("DCSEC_PROFILE_TRAVERSAL", hostile);
 
-        let error = Profiled::load().expect_err("a path-shaped profile must be refused");
+        let error = Profiled::builder("db")
+            .file("tests/fixtures/base.json")
+            .profile_env("DCSEC_PROFILE_TRAVERSAL")
+            .load()
+            .expect_err("a path-shaped profile must be refused");
 
         assert_eq!(error.kind(), dynamic_config::ErrorKind::Env, "{hostile}");
         assert!(
@@ -230,11 +230,7 @@ fn a_foreign_non_utf8_variable_does_not_panic_the_load() {
     use serde::Deserialize;
     use std::os::unix::ffi::OsStrExt;
 
-    #[dynamic_config::dynamic_config(
-        files = ["tests/fixtures/base.json"],
-        key = "db",
-        env = "DCSECUTF_",
-    )]
+    #[dynamic_config::dynamic_config]
     #[derive(Debug, Deserialize)]
     struct EnvironmentUser {
         #[allow(dead_code)]
@@ -248,8 +244,128 @@ fn a_foreign_non_utf8_variable_does_not_panic_the_load() {
         std::ffi::OsStr::from_bytes(&[0x66, 0xff, 0x66]),
     );
 
-    let loaded = EnvironmentUser::load();
+    let loaded = EnvironmentUser::builder("db")
+        .file("tests/fixtures/base.json")
+        .env("DCSECUTF_")
+        .load();
 
     std::env::remove_var("DCSEC_UNRELATED_GARBAGE");
     loaded.expect("a foreign variable must not break the load");
+}
+
+/// A snapshot holds the *resolved* configuration, secrets included; its
+/// `{:?}` must describe the shape and never the values.
+#[test]
+fn a_snapshot_debug_shows_keys_and_never_values() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Deserialize)]
+    struct SnapshotDebug {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        password: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/security-snapshot.json",
+        r#"{"db": {"host": "db.internal", "password": "hunter2-snapshot"}}"#,
+    )
+    .unwrap();
+
+    let snapshot = SnapshotDebug::builder("db")
+        .file("tests/scratch/security-snapshot.json")
+        .snapshot()
+        .expect("the source reads cleanly");
+    let rendered = format!("{snapshot:?}");
+
+    assert!(
+        !rendered.contains("hunter2-snapshot") && !rendered.contains("db.internal"),
+        "a snapshot's Debug must not print values: {rendered}"
+    );
+    assert!(
+        rendered.contains("password"),
+        "keys are the safe half: {rendered}"
+    );
+}
+
+/// The strict_env refusal names the variable — and not its value, even
+/// though the ambiguous family is seven known words. No diagnostic prints a
+/// value; a bounded exception is how unbounded ones start.
+#[test]
+fn the_strict_env_refusal_echoes_no_value() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct StrictMessage {
+        #[allow(dead_code)]
+        #[serde(default)]
+        mode: String,
+    }
+
+    std::env::set_var("DCSECSTRICT_SVC_MODE", "off");
+
+    let error = StrictMessage::builder("svc")
+        .env("DCSECSTRICT_")
+        .strict_env()
+        .load()
+        .expect_err("`off` is refused under strict_env");
+    let message = error.to_string();
+
+    std::env::remove_var("DCSECSTRICT_SVC_MODE");
+
+    assert!(message.contains("DCSECSTRICT_SVC_MODE"), "{message}");
+    assert!(
+        !message.contains("=off") && !message.contains("\"off\""),
+        "the value must not be echoed back: {message}"
+    );
+}
+
+/// A redacted explanation stays redacted through every door: Display, Debug,
+/// and the public rows.
+#[test]
+fn a_redacted_explanation_leaks_through_no_surface() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Deserialize)]
+    struct ExplainDebug {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        token: String,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/security-explain.json",
+        r#"{"db": {"host": "localhost", "token": "hunter2-doors"}}"#,
+    )
+    .unwrap();
+
+    // The redaction under test lives on the type-level `explain`, which
+    // answers through the builder the type was configured with — so
+    // configure it first.
+    ExplainDebug::builder("db")
+        .file("tests/scratch/security-explain.json")
+        .init()
+        .expect("the source reads cleanly");
+
+    let explanation = ExplainDebug::explain("token").expect("the source reads cleanly");
+
+    for rendered in [format!("{explanation}"), format!("{explanation:?}")] {
+        assert!(
+            !rendered.contains("hunter2-doors"),
+            "a redacted explanation must stay redacted: {rendered}"
+        );
+    }
+    assert!(explanation
+        .rows()
+        .iter()
+        .all(|row| row.value.as_deref() != Some("hunter2-doors")));
 }

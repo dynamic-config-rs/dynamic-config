@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 macro_rules! db_config {
     ($name:ident) => {
-        #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", env = "DCREMOTE_")]
+        #[dynamic_config]
         #[derive(Debug, Deserialize)]
         struct $name {
             // Read through `load()`'s success rather than by name: these
@@ -23,6 +23,18 @@ macro_rules! db_config {
             host: String,
             #[allow(dead_code)]
             port: u16,
+        }
+
+        impl $name {
+            /// The `db` section of the base fixture, overridable through
+            /// `DCREMOTE_DB_*`.
+            // Not every generated type loads; a refusal needs no sources.
+            #[allow(dead_code)]
+            fn sources() -> dynamic_config::Builder<$name> {
+                $name::builder("db")
+                    .file("tests/fixtures/base.json")
+                    .env("DCREMOTE_")
+            }
         }
     };
 }
@@ -80,7 +92,7 @@ fn loading_never_touches_the_network() {
     );
 
     // Loads before the first refresh see no remote layer at all.
-    assert_eq!(Lazy::load().unwrap().port, 5432);
+    assert_eq!(Lazy::sources().load().unwrap().port, 5432);
     assert_eq!(LAZY_CALLS.load(Ordering::SeqCst), 0);
 
     Lazy::refresh_remote().unwrap();
@@ -88,7 +100,7 @@ fn loading_never_touches_the_network() {
 
     // ...and every load after it reads the kept document, not the store.
     for _ in 0..5 {
-        assert_eq!(Lazy::load().unwrap().port, 9000);
+        assert_eq!(Lazy::sources().load().unwrap().port, 9000);
     }
 
     assert_eq!(
@@ -108,10 +120,10 @@ fn a_remote_document_beats_a_file_and_loses_to_the_environment() {
     });
     Layered::refresh_remote().unwrap();
 
-    let config = Layered::load().unwrap();
+    let config = Layered::sources().load().unwrap();
     assert_eq!(config.host, "from-remote", "the remote beats the file");
     assert_eq!(
-        Layered::source_of("host").unwrap(),
+        Layered::sources().source_of("host").unwrap(),
         Some(Origin::Remote("a counting store".to_owned())),
         "the store's own `describe` is what a traced value names — not \
          \"an inline source\", which is what figment sees and is the wrong \
@@ -121,7 +133,7 @@ fn a_remote_document_beats_a_file_and_loses_to_the_environment() {
     // The machine's own environment still wins.
     std::env::set_var("DCREMOTE_DB_HOST", "from-the-machine");
 
-    assert_eq!(Layered::load().unwrap().host, "from-the-machine");
+    assert_eq!(Layered::sources().load().unwrap().host, "from-the-machine");
 
     std::env::remove_var("DCREMOTE_DB_HOST");
     Layered::clear_remote();
@@ -136,7 +148,7 @@ fn an_unreachable_store_reports_and_leaves_the_files_serving() {
 
     // The failure is in the refresh, not the load: a store that is down does
     // not stop a program that has files.
-    assert_eq!(Failing::load().unwrap().port, 5432);
+    assert_eq!(Failing::sources().load().unwrap().port, 5432);
 
     Failing::clear_remote();
 }
@@ -166,7 +178,7 @@ mod asynchronous {
         Streamed::set_remote_async(Streaming);
         Streamed::refresh_remote_async().await.unwrap();
 
-        assert_eq!(Streamed::load().unwrap().port, 7000);
+        assert_eq!(Streamed::sources().load().unwrap().port, 7000);
 
         Streamed::clear_remote();
     }
@@ -199,7 +211,7 @@ mod watching {
     use dynamic_config::{dynamic_config, Fetched, Format, Origin, RemoteWatch, Watching};
     use serde::Deserialize;
 
-    #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db", diff)]
+    #[dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Pushed {
         #[allow(dead_code)]
@@ -216,7 +228,12 @@ mod watching {
             RELOADS.fetch_add(1, Ordering::SeqCst);
         });
 
-        Pushed::init().expect("the file alone is a whole configuration");
+        // `apply_remote` reloads through the builder the type was configured
+        // with, so the `init` below is what gives the push somewhere to land.
+        Pushed::builder("db")
+            .file("tests/fixtures/base.json")
+            .init()
+            .expect("the file alone is a whole configuration");
         assert_eq!(
             Pushed::current().port,
             5432,
@@ -246,7 +263,7 @@ mod watching {
         );
     }
 
-    #[dynamic_config(files = ["tests/fixtures/base.json"], key = "db")]
+    #[dynamic_config]
     #[derive(Debug, Deserialize)]
     struct Rejecting {
         #[allow(dead_code)]
@@ -255,9 +272,14 @@ mod watching {
         port: u16,
     }
 
+    /// The `db` section of the base fixture.
+    fn rejecting_builder() -> dynamic_config::Builder<Rejecting> {
+        Rejecting::builder("db").file("tests/fixtures/base.json")
+    }
+
     #[test]
     fn a_document_that_does_not_fit_leaves_the_snapshot_alone() {
-        Rejecting::init().expect("the file is fine");
+        rejecting_builder().init().expect("the file is fine");
 
         let failure = Rejecting::apply_remote(Fetched::new(
             r#"{"db": {"port": "not a number"}}"#,
@@ -275,7 +297,10 @@ mod watching {
         // The bad document stays installed on purpose: it is what the store
         // currently says. Replacing it is a decision for the caller.
         Rejecting::clear_remote();
-        assert!(Rejecting::load().is_ok(), "and clearing it recovers");
+        assert!(
+            rejecting_builder().load().is_ok(),
+            "and clearing it recovers"
+        );
     }
 
     #[test]
@@ -352,13 +377,13 @@ mod watching {
 }
 
 /// A container whose configuration comes from a store and the environment has
-/// no config file to name, and `files = []` is how it says so — as opposed to
-/// forgetting, which is still an error.
+/// no config file to name, and a builder with no `.file(..)` is how it says so
+/// — as opposed to forgetting, which is still an error.
 mod fileless {
-    use dynamic_config::{dynamic_config, Fetched, Format};
+    use dynamic_config::{dynamic_config, Error, Fetched, Format, RemoteSource};
     use serde::Deserialize;
 
-    #[dynamic_config(files = [], key = "db", env = "DCFILELESS_")]
+    #[dynamic_config]
     #[derive(Debug, Deserialize)]
     struct NoFiles {
         #[allow(dead_code)]
@@ -367,27 +392,49 @@ mod fileless {
         port: u16,
     }
 
+    /// No files at all: the store and `DCFILELESS_DB_*` are the sources.
+    fn no_files_builder() -> dynamic_config::Builder<NoFiles> {
+        NoFiles::builder("db").env("DCFILELESS_")
+    }
+
+    /// A store with one fixed document.
+    struct Store;
+
+    impl RemoteSource for Store {
+        fn fetch(&self) -> Result<Fetched, Error> {
+            Ok(Fetched::new(
+                r#"{"db": {"host": "from-the-store", "port": 5432}}"#,
+                Format::Json,
+            ))
+        }
+
+        fn describe(&self) -> String {
+            "a fileless store".to_owned()
+        }
+    }
+
     #[test]
     fn a_store_and_the_environment_are_a_whole_configuration() {
         // Nothing on disk, and nothing in the environment yet.
         assert!(
-            NoFiles::load().is_err(),
+            no_files_builder().load().is_err(),
             "with no source at all there is nothing to load"
         );
 
-        NoFiles::apply_remote(Fetched::new(
-            r#"{"db": {"host": "from-the-store", "port": 5432}}"#,
-            Format::Json,
-        ))
-        .expect("the store alone is enough");
+        NoFiles::set_remote(Store);
+        NoFiles::refresh_remote().expect("the store answers");
 
+        no_files_builder()
+            .init()
+            .expect("the store alone is enough");
         assert_eq!(NoFiles::current().host, "from-the-store");
 
         std::env::set_var("DCFILELESS_DB_HOST", "from-the-machine");
 
-        NoFiles::init().expect("and the environment still layers over it");
-        assert_eq!(NoFiles::current().host, "from-the-machine");
-
+        let initialized = no_files_builder().init();
         std::env::remove_var("DCFILELESS_DB_HOST");
+
+        initialized.expect("and the environment still layers over it");
+        assert_eq!(NoFiles::current().host, "from-the-machine");
     }
 }

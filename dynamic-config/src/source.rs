@@ -368,6 +368,9 @@ pub struct LoadSpec<'a> {
     /// out a perfectly good configured value is a bad afternoon. Turn it on
     /// when empty really is a value you need to be able to send.
     pub allow_empty_env: bool,
+    /// Rejects environment values from the yes/no/on/off family instead of
+    /// letting them arrive as strings where a boolean was meant.
+    pub strict_env: bool,
 }
 
 impl std::fmt::Debug for LoadSpec<'_> {
@@ -384,6 +387,7 @@ impl std::fmt::Debug for LoadSpec<'_> {
             .field("overrides", &self.overrides.is_some())
             .field("nest", &self.nest)
             .field("allow_empty_env", &self.allow_empty_env)
+            .field("strict_env", &self.strict_env)
             .finish()
     }
 }
@@ -407,6 +411,7 @@ impl<'a> LoadSpec<'a> {
             overrides: None,
             nest: DEFAULT_NEST,
             allow_empty_env: false,
+            strict_env: false,
         }
     }
 
@@ -501,6 +506,19 @@ impl<'a> LoadSpec<'a> {
     #[must_use]
     pub const fn with_empty_env(mut self, allow: bool) -> Self {
         self.allow_empty_env = allow;
+        self
+    }
+
+    /// Rejects ambiguous environment spellings instead of guessing.
+    ///
+    /// `APP_DB_TLS=off` reads like a boolean and arrives as the string
+    /// `"off"` — silently correct into a `String` field, silently wrong
+    /// everywhere else. Strict mode makes the yes/no/on/off family (and
+    /// `null`/`nil`/`none`) an error naming the variable; write `true`,
+    /// `false`, or the value you actually mean.
+    #[must_use]
+    pub const fn with_strict_env(mut self, strict: bool) -> Self {
+        self.strict_env = strict;
         self
     }
 
