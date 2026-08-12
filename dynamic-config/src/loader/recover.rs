@@ -53,7 +53,9 @@ pub(crate) fn recover<T: DeserializeOwned>(
     }
 
     if let Some(bindings) = spec.env_bindings {
-        for binding in bindings.providers(spec.key, spec.allow_empty_env) {
+        let fallback = super::env_file_entries(spec)?;
+
+        for binding in bindings.providers(spec.key, spec.allow_empty_env, fallback) {
             figment = figment.merge(binding);
         }
     }

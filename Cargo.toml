@@ -11,18 +11,19 @@ members = [
     "dynamic-config-redis",
     "dynamic-config-s3",
     "dynamic-config-firestore",
+    "dynamic-config-python",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.71"
 license = "MIT"
 repository = "https://github.com/ctolon/dynamic-config"
 homepage = "https://github.com/ctolon/dynamic-config"
 documentation = "https://docs.rs/dynamic-config"
-authors = ["Cevat Batuhan Tolon <tallon1997r@gmail.com>"]
+authors = ["Cevat Batuhan Tolon <cevatbatuhan.tolon@gmail.com>"]
 categories = ["config", "development-tools"]
 keywords = ["config", "hot-reload", "settings", "watch", "serde"]
 # Everything a build needs and nothing else. Tests and benches are excluded
@@ -34,8 +35,8 @@ exclude = [
 ]
 
 [workspace.dependencies]
-dynamic-config-macros = { version = "=0.4.0", path = "dynamic-config-macros" }
-dynamic-config = { version = "=0.4.0", path = "dynamic-config", default-features = false }
+dynamic-config-macros = { version = "=0.5.0", path = "dynamic-config-macros" }
+dynamic-config = { version = "=0.5.0", path = "dynamic-config", default-features = false }
 
 # One profile for the benchmark to be worth reading.
 [profile.bench]

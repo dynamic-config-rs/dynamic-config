@@ -32,6 +32,14 @@
 - [Without the Macro](without-the-macro.md)
 - [Testing Your Config](testing.md)
 - [The CLI](cli.md)
+- [Python Bindings](python.md)
+  - [API Reference](python/reference.md)
+  - [Callbacks](python/callbacks.md)
+  - [Async & asyncio](python/async.md)
+  - [Data Types](python/types.md)
+  - [Web Frameworks](python/frameworks.md)
+  - [Implementation Details](python/internals.md)
+  - [Limitations](python/limitations.md)
 - [Examples](examples.md)
 
 # Reference

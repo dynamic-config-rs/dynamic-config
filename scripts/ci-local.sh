@@ -28,6 +28,67 @@ else
   echo "actionlint not installed — CI still runs it (cargo install actionlint, or your package manager)"
 fi
 
+step "documentation links and anchors resolve"
+# CI runs lychee, which also checks the web. This is the half that breaks
+# most often and needs nothing installed: relative links between our own
+# files, and the heading each `#fragment` claims to point at. A renamed
+# heading is the failure this catches — twice now, both times after the
+# push rather than before it.
+python3 - <<'LINKS'
+import re
+import sys
+from pathlib import Path
+
+
+def slug(title):
+    """mdbook's rule: lowercase, drop punctuation, spaces to dashes."""
+    text = re.sub(r"[`*\[\]()<>.,:;!?\"'/\\]", "", title.lower())
+
+    return re.sub(r"[^a-z0-9_-]", "", re.sub(r"\s+", "-", text.strip()))
+
+
+pages = [
+    path
+    for path in Path(".").rglob("*.md")
+    if "book/book" not in str(path) and "target" not in str(path)
+]
+anchors = {
+    path.resolve(): {
+        slug(match.group(1))
+        for match in re.finditer(r"^#{1,6}\s+(.*?)\s*$", path.read_text(errors="replace"), re.M)
+    }
+    for path in pages
+}
+broken = []
+
+for page in pages:
+    for match in re.finditer(r"\[[^\]]*\]\(([^)\s]+)\)", page.read_text(errors="replace")):
+        link = match.group(1)
+
+        if link.startswith(("http", "mailto:")):
+            continue
+
+        path, _, fragment = link.partition("#")
+        target = (page.parent / path).resolve() if path else page.resolve()
+
+        # A crate README is a symlink to the root one, so its relative
+        # links resolve from there rather than from the crate directory.
+        if not target.exists():
+            if "README.md" not in str(page):
+                broken.append(f"{page}: {link}  (no such file)")
+
+            continue
+
+        if fragment and target in anchors and fragment not in anchors[target]:
+            broken.append(f"{page}: {link}  (no such heading)")
+
+if broken:
+    print("\n".join(broken))
+    sys.exit(1)
+
+print(f"{len(pages)} pages, every relative link and anchor resolves")
+LINKS
+
 step "the workspace suite (container crates excluded)"
 just test
 

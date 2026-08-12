@@ -203,6 +203,13 @@ Nested paths work: `bind_env("pool.max_size", "DB_POOL_MAX")`. Binding the same
 path twice replaces the first binding rather than layering it — two variables
 for one field would have no defensible order between them.
 
+A binding also reads the `.env` files, below the real environment. A deployment
+that writes `DATABASE_URL` into a `.env` file rather than exporting it means the
+same thing by it, and the prefixed `.env` layer cannot serve that case: it
+recognises only names built from the prefix and the key, and it is skipped
+altogether when there is no prefix — which is the shape a program that binds by
+name tends to have.
+
 ## Command line
 
 Flags sit above the environment and below overrides — a flag is typed by a

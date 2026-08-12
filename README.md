@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.4.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.5.0", features = ["toml", "watch"] }
 ```
 
 ```rust
@@ -97,6 +97,7 @@ schema export, units, the last-known-good cache, testing patterns — lives in
 | [`dynamic-config-firestore`](dynamic-config-firestore) | Firestore REST, `updateTime` polling | Experimental |
 | [`dynamic-config-embedded`](dynamic-config-embedded) | the same shape for `no_std` targets | Experimental |
 | [`dynamic-config-cli`](dynamic-config-cli) | `explain` and `diff` on the command line — `cargo install dynamic-config-cli` | Experimental |
+| [`dynamic-config-python`](dynamic-config-python) | Python bindings — `pip install dynamic-config-py`, Pydantic validates | Experimental |
 
 **Beta**: breaking changes bump the minor pre-1.0 and are announced in the
 changelog. **Experimental**: may change shape without ceremony — pin an
@@ -118,6 +119,7 @@ stop latency and change-detection rule side by side in
 | `watch` / `age` / `full` features | 1.85 (measured, not declared) |
 | store crates | 1.85 — nats/redis/s3: 1.88 (their clients) |
 | `dynamic-config-cli` | 1.85 |
+| `dynamic-config-python` | 1.85 — and CPython 3.9+, one abi3 wheel per platform |
 | `dynamic-config-embedded` | 1.83 |
 
 MSRV changes are breaking. Every floor has a CI row against a real

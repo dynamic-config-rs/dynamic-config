@@ -296,6 +296,40 @@ pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};
 pub use value::Value;
+
+/// This crate's version, for anything that embeds it and has to say so.
+///
+/// A language binding versions on its own schedule — its users read a
+/// different changelog — so "which engine is inside this wheel" stops
+/// being answerable from the outside. This answers it.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Whether `path` touches a secret, given the secret list a type or a
+/// binding declared.
+///
+/// Three ways it can, and all three have to redact or the diagnostic
+/// leaks: the path *is* a secret, the path is *under* one (every path
+/// below a secret field is the secret's), or the path is an *ancestor* of
+/// one — asking to explain `credentials` must not render the password
+/// nested inside it. Secrets are named by a plain field for a
+/// `#[config(secret)]` field, and by a dotted path when they live inside
+/// a nested structure, which is what a language binding derives from a
+/// nested model.
+#[doc(hidden)]
+#[must_use]
+pub fn touches_secret(path: &str, secrets: &[impl AsRef<str>]) -> bool {
+    secrets.iter().any(|secret| {
+        let secret = secret.as_ref();
+
+        secret == path
+            || path
+                .strip_prefix(secret)
+                .is_some_and(|rest| rest.starts_with('.'))
+            || secret
+                .strip_prefix(path)
+                .is_some_and(|rest| rest.starts_with('.'))
+    })
+}
 #[cfg(feature = "decrypt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
 pub use write::save_encrypted;

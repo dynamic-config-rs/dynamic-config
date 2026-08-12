@@ -49,7 +49,13 @@ use crate::error::Error;
 use crate::source::{Format, LoadSpec, Source};
 
 /// An application-level validation hook: deserialized, not yet installed.
-type Validator<T> = fn(&T) -> Result<(), Error>;
+///
+/// A closure rather than a bare `fn`, because a validator that needs
+/// *context* — a policy object, a schema, a foreign runtime's validator —
+/// cannot be written as a function pointer, and that is the shape a
+/// language binding needs. The `Arc` is what keeps `Builder` cloneable;
+/// a plain `fn` still coerces, so every existing call site is unchanged.
+type Validator<T> = std::sync::Arc<dyn Fn(&T) -> Result<(), Error> + Send + Sync>;
 
 /// Where a successful load goes.
 ///
@@ -142,7 +148,7 @@ impl<T> Clone for Builder<T> {
             #[cfg(feature = "decrypt")]
             cache_encryptor: self.cache_encryptor.clone(),
             secrets: self.secrets.clone(),
-            validate: self.validate,
+            validate: self.validate.clone(),
             fields: self.fields,
             install: self.install.clone(),
             register: self.register,
@@ -260,8 +266,11 @@ impl<T: DeserializeOwned> Builder<T> {
     /// recovery from the cache. The reload path keeps the previous snapshot
     /// when this refuses, exactly like a parse failure.
     #[must_use]
-    pub fn validate(mut self, check: Validator<T>) -> Self {
-        self.validate = Some(check);
+    pub fn validate(
+        mut self,
+        check: impl Fn(&T) -> Result<(), Error> + Send + Sync + 'static,
+    ) -> Self {
+        self.validate = Some(std::sync::Arc::new(check));
         self
     }
 

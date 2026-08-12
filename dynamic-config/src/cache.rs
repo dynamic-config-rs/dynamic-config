@@ -357,12 +357,35 @@ fn fingerprint_of(snapshot: &Snapshot) -> String {
 /// ARE the section's top-level keys. The names arrive serde-resolved — a
 /// `#[serde(rename = "pass")]` secret is redacted under `pass`, the key the
 /// resolved tree actually uses.
+/// The document, minus every secret the type declared.
+///
+/// A secret is named by a plain field — what `#[config(secret)]` on a
+/// struct field produces — or by a dotted path into a nested table, which
+/// is what a language binding derives from a nested model. Both mean the
+/// same thing here: the value at that path does not reach the disk, and
+/// neither does anything under it.
 fn without(values: &Dict, secrets: &[&str]) -> Dict {
-    values
-        .iter()
-        .filter(|(key, _)| !secrets.contains(&key.as_str()))
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect()
+    let mut document = values.clone();
+
+    for secret in secrets {
+        remove_path(&mut document, secret);
+    }
+
+    document
+}
+
+/// Removes the value at a dotted `path`, if the path leads anywhere.
+fn remove_path(document: &mut Dict, path: &str) {
+    match path.split_once('.') {
+        None => {
+            document.remove(path);
+        }
+        Some((head, rest)) => {
+            if let Some(Value::Dict(_, nested)) = document.get_mut(head) {
+                remove_path(nested, rest);
+            }
+        }
+    }
 }
 
 /// A hash of the values, plus the key names — and no value anywhere.

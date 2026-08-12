@@ -6,7 +6,8 @@
 default: check
 
 # fmt, clippy, tests, docs — the whole gate, locally. No Docker needed:
-# `test` excludes the container-backed crates, which live in `containers`.
+# `test` excludes the container-backed crates, which live in `containers`,
+# and the Python extension, whose suite is `python` (it needs a venv).
 check: fmt lint test docs embedded
 
 # Formatting, as CI checks it.
@@ -15,8 +16,14 @@ fmt:
 
 # Clippy with warnings denied, at both ends of the feature range.
 lint:
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
-    cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+    cargo clippy --workspace --all-targets --all-features \
+        --exclude dynamic-config-python -- -D warnings
+    cargo clippy --workspace --all-targets --no-default-features \
+        --exclude dynamic-config-python -- -D warnings
+    # Its own line, lib only: an extension module links no libpython, so
+    # it has no test target to build — and clippy over `--all-targets`
+    # would try.
+    cargo clippy -p dynamic-config-python --lib -- -D warnings
 
 # The whole suite, plus the two configurations that only exist with features
 # off. The container crates are excluded — their tests drive real servers and
@@ -26,7 +33,8 @@ test:
         --exclude dynamic-config-etcd --exclude dynamic-config-consul \
         --exclude dynamic-config-nats --exclude dynamic-config-vault \
         --exclude dynamic-config-redis --exclude dynamic-config-s3 \
-        --exclude dynamic-config-firestore --exclude dynamic-config-embedded
+        --exclude dynamic-config-firestore --exclude dynamic-config-embedded \
+        --exclude dynamic-config-python
     cargo test -p dynamic-config --no-default-features --lib --tests
     cargo test -p dynamic-config --no-default-features --features json --test ui
     cargo test -p dynamic-config --no-default-features --features async,json
@@ -37,6 +45,25 @@ mocks:
     cargo test -p dynamic-config-consul --test mock_agent
     cargo test -p dynamic-config-vault --test mock_vault
     cargo test -p dynamic-config-firestore --test mock_firestore
+
+# The Python bindings: build the extension into a virtualenv, then run
+# the suite, the type checker and the linter against it. Needs a venv
+# (`python -m venv .venv && . .venv/bin/activate && pip install -e
+# 'dynamic-config-python[dev]'`, or the same list by hand: maturin
+# pytest pytest-asyncio pydantic pydantic-settings mypy ruff).
+python:
+    cd dynamic-config-python && maturin develop
+    cd dynamic-config-python && python -m pytest tests -q
+    cd dynamic-config-python && mypy --strict python/dynamic_config/
+    cd dynamic-config-python && ruff check .
+    cd dynamic-config-python && ruff format --check .
+    cd dynamic-config-python && for example in examples/[0-9]*.py; do echo "→ $example"; python "$example" > /dev/null || exit 1; done
+
+# What a Python read costs, next to the things it is claimed to cost
+# like. Not a gate — a shared runner cannot tell an attribute lookup from
+# an attribute lookup — but the numbers the book quotes come from here.
+python-bench:
+    cd dynamic-config-python && python benchmarks/read_path.py
 
 # The loom models: every interleaving of the remote fence and the wake
 # protocol, on the real code (`src/sync.rs` swaps the primitives). Only the
@@ -95,6 +122,7 @@ msrv:
     cargo +1.88 check -p dynamic-config-s3 --locked
     cargo +1.85 check -p dynamic-config-firestore --locked
     cargo +1.85 check -p dynamic-config-cli --locked
+    cargo +1.85 check -p dynamic-config-python --locked
     cargo +1.83 check -p dynamic-config-embedded --locked --no-default-features --features json,async
 
 # Every pairwise feature combination compiles — CI's `features` job.

@@ -20,57 +20,168 @@ not here. **[figment]** is something the underlying loader,
 Decided, not aspirational — each item keeps its full description in its
 own section; this is only what ships now. The shape follows
 [the 1.0 doctrine](#the-road-to-10-is-stabilisation-not-features-own):
-0.3 stabilised what existed (its list shipped whole; the story is the
-changelog's), 0.4 adds the one engine piece everything after it needs,
-and nothing jumps the queue without displacing something.
+0.3 stabilised what existed, 0.4 built the instance engine and the
+evidence for it (both lists shipped whole; the story is the changelog's),
+and 0.5 spends that engine on the thing it was built for.
 
-**0.4 — the instance engine, and the evidence:**
+**0.5 — the Python bindings.** One release, one subject. The plan this
+was built from has been retired now that all of it shipped; what the code
+does and why is
+[Implementation Details](book/src/python/internals.md). What ships:
 
-- `Dynamic<T>` + per-instance watch identity + value export — *shipped*:
-  phase one of [python-bindings-plan.md](docs/python-bindings-plan.md), as
-  Rust API on its own merits — [Dynamic Instances](book/src/dynamic-instances.md),
-  `WatchKey`, `Snapshot::to_value`, its own test suite and bench row.
-- Benchmarks that would convince a stranger — *shipped*: criterion over
-  the read shapes, readers-during-reload, reload latency and load scaling
-  to a hundred thousand keys, plus a counting-allocator profile that
-  asserts the read path allocates nothing.
-- A bundle for single-generation groups — *settled as a documented
-  pattern*: one type, one section, one swap
-  ([The Reload Lifecycle](book/src/reload-lifecycle.md)); a `Bundle`
-  helper was considered and refused as a rename of "define one struct".
-- `dynamic-config-cli` graduates to crates.io, redacted-by-default —
-  *shipped*: `publish = false` dropped, README and LICENSE in place, the
-  third publish wave and the dry-run lists know it, `explain` redacts
-  unless `--show-values`, and `completions`/`man` render from the clap
-  definition.
-- Encrypting the last-known-good cache — *shipped*:
-  `cache_encrypted(path, encryptor)`, full fidelity at rest, recovered
-  through the installed `Decryptor`.
-- Coverage threshold joins the gates — *shipped*: the coverage job fails
-  under 80% lines (the number stabilised at ~87) and joined the required
-  set; a floor against wholesale drops, not a target to chase.
-- The figment review's two fixes — *shipped*: sections ride on a
-  namespaced profile (`global`/`default` are ordinary section names, the
-  silent override is gone), and environment provenance names the exact
-  variable, derived from prefix + path + separator. The review document
-  itself retired with its last open item — its keep-decisions live where
-  they bind, in [Stability Tiers](book/src/stability-tiers.md) and the
-  builder tour.
-- The stability-tiers chapter says out loud that the `figment` feature is
-  semver-coupled to figment — *shipped*.
-- Housekeeping riding along: `scorecard.yml`'s trigger comment follows the
-  default-branch flip (the fix sits on `dev`, with the note that a re-run
-  of an old run replays its frozen event payload — dispatch fresh after a
-  default-branch change).
+- `dynamic-config-python` — a PyO3 extension module — *shipped*: the
+  class API (`DynamicConfig(Model, key=..)`), the decorator, the full
+  lifecycle (init, load, reload, watch, hooks, `async for` changes,
+  last-known-good recovery) and the diagnostics (`source_of`, `is_set`,
+  `explain`, `check`, `snapshot`).
+- **The schema owns validation, Rust owns resolution.** A model is
+  validated exactly once per successful resolve and cached; `current()`
+  is an attribute lookup, never a boundary crossing. A rejected reload
+  keeps the previous snapshot serving, exactly as a Rust `validate`
+  refusal does. The schema can be a `dataclasses.dataclass` — the base
+  install has **no dependencies** — a Pydantic model, a Pydantic
+  dataclass or a `BaseSettings` class; `[pydantic]`,
+  `[pydantic-settings]` and `[all]` buy the ones that need a library.
+- **Secrets are derived, not re-declared** — the binding walks
+  `model_fields` for `SecretStr`/`SecretBytes` and seeds the same secret
+  list the generated Rust `builder()` seeds, so the redacted cache,
+  `explain` and the scrubbed `ValidationError` all follow from the model
+  the Python author already wrote.
+- **Type stubs**, a pytest suite that mirrors the Rust integration tests
+  (layering, strict env, LKG in three modes, watch, hooks, threading, GIL
+  and interpreter-shutdown safety, planted secrets), and a CI job that
+  runs them — *shipped*, a hundred and ninety-four tests over six
+  interpreter versions (3.9 through 3.14), with `mypy --strict` and
+  `ruff` over the package and every example run as part of the same job.
+  Three suites sit above the unit ones: `test_pydantic.py`, which asserts
+  that whatever a Pydantic model may be it may be here — inheritance,
+  `model_config`, validators, all four alias shapes, `RootModel`,
+  Pydantic dataclasses, generics, discriminated unions and
+  `BaseSettings`; `test_dataclasses.py`, which pins what the
+  dependency-free schema checks and what it refuses; and
+  `test_integration.py`, which runs whole scenarios and drives the
+  shipped framework examples, so an example that rots fails the suite. A
+  separate job installs the wheel into a bare virtualenv and proves the
+  base install needs nothing.
+- **The read path is an attribute lookup** — *shipped*: 1.1× a module
+  global, because the model is published into the Python object rather
+  than fetched back across the boundary, against 34× for a per-read
+  validation. The nanoseconds and the machine they were measured on are
+  in the same table ([the chapter](book/src/python.md#what-a-read-costs));
+  what the design claims is asserted exactly rather than timed.
+- **PyPI as `dynamic-config-py`.** The bare name is taken by an unrelated
+  single-release package from 2022; the distribution takes the qualified
+  name and the import stays `dynamic_config`, which is what every example
+  in the book and the plan spells. Reclaiming the bare name through
+  PEP 541 is worth doing and is nobody's blocker.
 
-**0.5 and later, pulled by demand:** the Python bindings proper (phases
-two through five of the plan), `proc_macro_crate` rename, key aliases
-across sections, `WriteDurability`, the embedded no-alloc wait queue, the
-shared auth core and its dependents (`with_timeout` symmetry,
+Four things the wave found on the way, and fixed where they were wrong
+rather than around:
+
+- `Builder::validate` now takes closures — a validator that needs context
+  could not be a `fn`, which is exactly what a binding needs.
+- **Nested secrets were redacted nowhere.** A dotted secret path was
+  missed by both the `explain` redaction and the redacted cache, which
+  mattered the moment a model could nest.
+- **A secret under an alias was redacted nowhere either.** The derived
+  list held one name per field, so a file spelling it any of the other
+  ways Pydantic accepts — `AliasChoices`, `AliasPath`,
+  `populate_by_name`, a Pydantic dataclass — put the value in `explain`
+  and in the "redacted" cache on disk. The list now holds every name a
+  file could use, because over-listing costs a key nothing supplies and
+  under-listing costs a secret.
+- **`bind_env` could not see a `.env` file.** A binding names one
+  variable exactly; a deployment that writes that variable into a `.env`
+  file rather than exporting it means the same thing by it, and got
+  nothing. Bindings now fall back to the `.env` files, below the real
+  environment — the order those layers were already in.
+- **A model holding an enum, a date or a `Decimal` could not be diffed.**
+  `changed_paths` — the audit half of a reload — raised a `TypeError`
+  for any schema with one of those in it, because neither `model_dump()`
+  nor `dataclasses.asdict` unwraps an enum and none of them is a JSON
+  scalar. And a *native TOML date* reached Python as a one-key marker
+  dict, so a `date` field met a table and every schema refused it. Both
+  convert now, in the one place the tree crosses the boundary.
+
+### What 0.5 deliberately left out
+
+Each of these was a **non-goal for v0**, and each is here rather than in
+a footnote because "not yet" and "not ever" are different answers:
+
+- **The remote stores in the wheel** *(0.6, demand-driven)*. etcd,
+  Consul, Vault, NATS, Redis, S3 and Firestore are a gRPC stack, the AWS
+  SDK and three HTTP clients between them. A wheel is built per platform,
+  so every one of those would ride into every wheel for every user —
+  including the ones reading a single TOML file. The shape when it comes
+  is an opt-in wheel (`dynamic-config-py[etcd]`, its own build), not a
+  flag on this one.
+- **A tokio runtime in the wheel** *(follows the stores, not on its own)*.
+  The Rust `tokio` feature routes the crate's *own* async loads into
+  tokio's blocking pool; this binding never takes that path, because a
+  Python loop can await a Python future and nothing else. Enabling it
+  today would add a runtime no code enters. What answers the same
+  question — which pool pays for the blocking half — is `set_executor`,
+  which shipped. The async store clients are the one thing that would
+  make a tokio build mean something.
+- **`RemoteSource` implemented in Python** *(needs a design pass)*. A
+  Python object on the fetch path means the GIL is held across a network
+  call and a Python exception has to become a Rust error somewhere
+  sensible. Both are solvable; neither is solvable casually.
+- **Pydantic as a hard dependency** *(reversed — it is now optional)*.
+  The base install has none at all: a `dataclasses.dataclass` is a schema,
+  validated structurally, and `pip install dynamic-config-py[pydantic]`,
+  `[pydantic-settings]` or `[all]` buy the other kinds. Importing the
+  package with Pydantic uninstalled loads no Pydantic module, and CI
+  asserts that in a bare virtualenv rather than in a sentence.
+- **Direct `pydantic-core` coupling** *(refused)*. `model_validate` is the
+  public, stable entry point. Binding to internals would be version churn
+  for a cost that profiling says is not there — reloads are rare, and the
+  read path does not validate at all.
+- **`save` and JSON Schema from Python** *(refused)*. Pydantic already
+  serializes models and emits JSON Schema, better than a second
+  implementation would.
+- **Encrypted files** *(blocked on a Rust trait)*. `Decryptor` is a Rust
+  trait with no Python side, and shipping `age` to make one usable would
+  put a crypto stack in every wheel for a door only Rust can open.
+- **Free-threaded CPython support** *(0.6)*. The read path is lock-free
+  and the binding's state sits behind ordinary locks, so there is no
+  particular reason to expect trouble — but that is not an audit of the
+  convert-validate-swap step, and declaring support without one is a
+  promise made on optimism.
+- **A `pydantic-settings` source shim** *(refused — but support shipped,
+  the other way round)*. Wiring in as a `PydanticBaseSettingsSource`
+  would inherit that library's lifecycle — read once, at construction —
+  and lose the reloading that is the point. So the support goes the
+  other direction: a `BaseSettings` class is a schema like any other
+  model, and `DynamicConfig.from_settings(...)` reads its
+  `SettingsConfigDict` and rebuilds the declaration as engine sources
+  (`toml_file`/`json_file`/`yaml_file` become files, `env_file` becomes
+  the dotenv layer, `env_prefix` becomes a binding per leaf field so
+  `APP_PORT` stays `APP_PORT` rather than becoming `APP_<KEY>_PORT`).
+  What has no engine equivalent — `secrets_dir`, `cli_parse_args`, an
+  overridden `settings_customise_sources` — is refused at the call
+  rather than dropped, and a settings class used *without*
+  `from_settings` warns if it declares sourcing, because an `env_prefix`
+  that silently reads nothing is the failure mode worth spending a
+  warning on. A `secrets_dir` equivalent — a directory of single-value
+  files, which is how Docker and Kubernetes mount secrets — is a
+  reasonable engine source to add later; it is the only translation this
+  had to give up.
+
+The Python chapter's [Limitations](book/src/python/limitations.md) says
+the same things to a user rather than to a maintainer; this list is the
+one that decides what a later release picks up.
+
+**0.6 and later, pulled by demand:** free-threaded CPython support for
+the wheels (after that audit), remote stores as an opt-in Python extra
+with the tokio runtime they need, `RemoteSource` from Python once its
+design pass happens, `proc_macro_crate` rename, key
+aliases across sections, `WriteDurability`, the embedded no-alloc wait
+queue, the shared auth core and its dependents (`with_timeout` symmetry,
 `ErrorKind::Auth`), runtime-agnostic S3 sleep, multi-key remote
-documents, an eighth store when somebody asks, serde_yaml's future as
-upstream decides it, and — far out, designed in the open first — the
-config server.
+documents, an eighth store when somebody asks, instruction-count
+benchmarks, fuzzing harnesses, serde_yaml's future as upstream decides
+it, and — far out, designed in the open first — the config server.
 
 ## Layers
 
@@ -82,18 +193,6 @@ not expressible, because a `LoadSpec` resolves one section at a time.
 Doable by resolving the other section during the alias pass. Unclaimed, and
 worth a real case first: the cost is that a load then depends on a section the
 type does not own.
-
----
-
-## Writing
-
-### Encrypting the last-known-good cache **[own]**
-Shipped in 0.4: `cache_encrypted(path, encryptor)` — full fidelity at
-rest, nothing readable on disk, recovery through the installed
-`Decryptor`. The recipient-list objection that kept it out of the
-attribute era dissolved with the builder: the recipients live in the
-`Encryptor` the caller constructs, at the call site that owns them —
-exactly the property `save_encrypted` was protecting.
 
 ---
 
@@ -121,40 +220,15 @@ and an eighth done casually would be worse than none.
 
 ## The longer arc
 
+### Instruction counts, not just wall clock **[own]**
 
-### A bundle for single-generation groups **[own]**
-
-Settled in 0.4, as a documented pattern rather than a helper: one type
-holding both concerns, one section, one swap, one generation — written up
-in [The Reload Lifecycle](book/src/reload-lifecycle.md) next to
-`ReloadGroup`'s honest limit. A `Bundle` type was considered and refused:
-it would be a rename of "define one struct", and machinery that restates
-a design decision teaches people to skip the decision.
-
-### Benchmarks that would convince a stranger **[own]**
-
-Shipped in 0.4: `benches/engine.rs` (criterion — the three read shapes,
-reads while a writer installs snapshots as fast as it can, reload
-latency end to end, and pure loads at 10², 10⁴ and 10⁵ keys) and
-`benches/alloc_profile.rs`, a counting allocator that *asserts* the
-steady-state read path allocates nothing. The hand-rolled
-`read_path.rs` stays as the loop the README quotes. Still open here:
-iai-callgrind for instruction counts — it needs valgrind on the runner,
-which is its own decision. Cross-library comparisons stay out of CI and
-in a written-up experiment — they rot too fast to gate on.
-
-### `dynamic-config-cli` on crates.io **[own]**
-
-It ships in-repo, deliberately unpublished: crates.io versions are
-permanent, and an Experimental surface should settle before it claims a
-name. Next release it graduates: drop `publish = false`, give the crate its
-own README and the symlinked LICENSE the packaging check demands, add it to
-`release.yml`'s third wave and the dry-run's README/LICENSE list, and put
-`cargo install dynamic-config-cli` in the book. Shell completions and a man
-page ride along — clap generates both for one line each. Before it claims
-the name, `explain` flips to redacted-by-default with `--show-values` to
-opt in: an Experimental tool may ask the user to know which paths are
-sensitive, a published one should not.
+The criterion suite that landed in 0.4 measures time, which a shared
+runner measures badly — that is why the bench job is not a regression
+gate. iai-callgrind counts *instructions* instead, which is stable enough
+to gate on; the cost is valgrind on the runner and a second harness to
+keep honest. Worth it the first time a performance regression gets
+through the eye test. Cross-library comparisons stay out of CI either
+way, and in a written-up experiment — they rot too fast to gate on.
 
 ### A config server **[own]**
 
@@ -167,29 +241,16 @@ loop); the server would be a new crate with its own threat model (authn,
 who may read which section, audit). Far future, and worth designing in the
 open before building.
 
-### Python bindings: Rust resolves, Pydantic validates **[own]**
-
-A PyO3 extension pairing this runtime with Pydantic: Rust owns sources,
-layering, watching, recovery and provenance; Pydantic owns the schema and
-its validators; Python reads a cached model for the price of an attribute
-lookup, re-validated once per reload, never per read. Needs two core
-changes that stand on their own — an instance engine (`Dynamic<T>`, for
-every Rust user who wanted two configurations of one type) and a watch
-identity beyond `TypeId`. The full design — decorator and class APIs, the
-GIL strategy, secrets derived from `SecretStr` fields rather than
-re-declared, the zero-bug test battery, wheels — is written up in
-[python-bindings-plan.md](docs/python-bindings-plan.md), which is the
-reference; this entry only tracks that it happens.
-
 ### The road to 1.0 is stabilisation, not features **[own]**
 
 Two releases in two days is a build phase, not a track record, and the
 API surface is now wide enough that its cost compounds. Before 1.0: a
 deliberate quiet period — 0.3 was the API-review release (the figment
 leak pass; both of its fixes shipped in 0.4, and its keep-decisions live
-in the stability-tiers chapter and the builder tour); next, real external
-users on 0.4+, then a freeze candidate. New capability
-proposals queue behind stability during that window. The problem worth
+in the stability-tiers chapter and the builder tour), 0.4 froze the shape
+of the engine, and 0.5 spends it on the bindings rather than widening the
+Rust surface again. Then: real external users, then a freeze candidate.
+New capability proposals queue behind stability during that window. The problem worth
 solving by then is not a missing feature; it is that nothing this
 sophisticated has been beaten up by strangers yet.
 
@@ -247,9 +308,4 @@ runtime abstraction ever makes executor-independence real.
 The stores classify 401/403 internally now; a public variant would let a
 caller treat "credentials are wrong" as a program-visible state. Decide the
 boundary with a real consumer in hand.
-
-### Coverage threshold + release gates **[own]**
-Done in 0.4: the number stabilised (~87% lines), and the coverage job now
-fails under 80 and sits in the required gate set — a floor against a suite
-silently stopping, not a target to game.
 

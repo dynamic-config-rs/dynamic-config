@@ -24,7 +24,9 @@ mod sections;
 
 use figment::value::Dict;
 use figment::Figment;
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
 
@@ -340,12 +342,58 @@ fn merge_environment(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, E
 
 fn merge_bindings(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     if let Some(bindings) = spec.env_bindings {
-        for binding in bindings.providers(spec.key, spec.allow_empty_env) {
+        let fallback = env_file_entries(spec)?;
+
+        for binding in bindings.providers(spec.key, spec.allow_empty_env, fallback) {
             figment = figment.merge(binding);
         }
     }
 
     Ok(figment)
+}
+
+/// What the `.env` files say, for the bindings to fall back to.
+///
+/// A binding names one variable exactly, and a deployment that writes that
+/// variable into a `.env` file rather than exporting it means the same thing
+/// by it. The prefixed `.env` layer cannot serve that: it recognises only
+/// names built from the prefix and the key, and it is skipped altogether when
+/// there is no prefix — which is exactly the shape a program that binds by
+/// name tends to have.
+///
+/// Read here rather than threaded down from the `.env` layer: the two are
+/// independent, this one runs whether or not that one did, and a `.env` file
+/// is small enough that reading it twice per load costs less than the plumbing
+/// that would avoid it.
+#[cfg(feature = "dotenv")]
+pub(crate) fn env_file_entries(
+    spec: &LoadSpec<'_>,
+) -> Result<Arc<BTreeMap<String, String>>, Error> {
+    let bound = spec
+        .env_bindings
+        .is_some_and(|bindings| !bindings.is_empty());
+
+    if spec.env_files.is_empty() || !bound {
+        return Ok(Arc::default());
+    }
+
+    let mut entries = BTreeMap::new();
+
+    // Later files win, as they do when the `.env` layer merges them.
+    for file in spec.env_files {
+        entries.extend(crate::dotenv::read(Path::new(file))?);
+    }
+
+    Ok(Arc::new(entries))
+}
+
+/// Without the feature there is nothing to read: `merge_env_files` has already
+/// refused any `.env` file the caller configured.
+#[cfg(not(feature = "dotenv"))]
+pub(crate) fn env_file_entries(
+    _spec: &LoadSpec<'_>,
+) -> Result<Arc<BTreeMap<String, String>>, Error> {
+    Ok(Arc::default())
 }
 
 fn merge_flags(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {

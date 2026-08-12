@@ -118,9 +118,11 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
             const SECRETS: &[&str] = &[#(#secret_names),*];
 
             let explanation = Self::dynamic_config_builder()?.explain(path)?;
-            let head = path.split('.').next().unwrap_or(path);
 
-            if SECRETS.contains(&head) {
+            // The builder redacts through the same rule; this is the belt
+            // to its braces, and — because it is the *same* function —
+            // the two can never drift into disagreeing.
+            if ::dynamic_config::touches_secret(path, SECRETS) {
                 return ::core::result::Result::Ok(explanation.redacted());
             }
 

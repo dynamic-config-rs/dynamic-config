@@ -24,7 +24,7 @@ impl<T: DeserializeOwned> Builder<T> {
     pub fn load(&self) -> Result<T, Error> {
         let value: T = self.with_spec(crate::loader::load)?;
 
-        if let Some(check) = self.validate {
+        if let Some(check) = &self.validate {
             check(&value)?;
         }
 
@@ -62,7 +62,7 @@ impl<T: DeserializeOwned> Builder<T> {
             Err(failure) => {
                 let recovered = self.recover(failure)?;
 
-                if let Some(check) = self.validate {
+                if let Some(check) = &self.validate {
                     check(&recovered)?;
                 }
 

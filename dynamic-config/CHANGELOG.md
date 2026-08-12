@@ -25,6 +25,60 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-12
+
+### Added
+
+- `Builder::validate` accepts closures, not just function pointers: a
+  validator that needs *context* — a policy object, a schema, another
+  runtime's validator — could not be written as a `fn`, and that is the
+  shape a language binding needs. A plain `fn` still coerces, so every
+  existing call site is unchanged.
+- `touches_secret(path, secrets)`, the one rule every redaction door
+  asks: a path that *is*, sits *under*, or *contains* a secret is
+  redacted.
+
+### Fixed
+
+- **Nested secrets were redacted nowhere.** A secret named by a dotted
+  path — `credentials.password`, which is what a nested model produces —
+  was missed by both redaction doors: `explain` matched only the head of
+  the path, and the redacted last-known-good cache dropped only
+  top-level keys. Both now understand dotted paths, so a secret inside a
+  nested table stays out of the cache file and reads `***` in an
+  explanation, whether the path asked about is the secret, something
+  under it, or the table containing it.
+- **A model holding an enum, a date or a `Decimal` could not be
+  diffed.** `changed_paths` and `set_defaults` take an instance back
+  apart, and neither `model_dump()` nor `dataclasses.asdict` unwraps an
+  `Enum` — so the audit half of a reload raised a `TypeError` for any
+  schema with one in it, Pydantic's included. Enums now convert to their
+  value, and the stdlib types a configuration legitimately holds —
+  `date`, `time`, `datetime`, `Path`, `Decimal`, `UUID`, the `ipaddress`
+  family — convert to the one text form each of them parses back from.
+- **A native TOML date reached Python as a one-key dict.** figment
+  carries dates, times and datetimes under a private marker that serde
+  reconstitutes on the Rust side and nothing reconstituted on the Python
+  one, so a `date` field met a table and every schema refused it. The
+  binding now hands over the text the file wrote, which is what a schema
+  can parse.
+- **`Snapshot::to_value`'s integers survived the crossing only up to
+  `i64`.** The binding's export cast anything larger to `f64`, so a
+  perfectly ordinary `u64` identifier came back rounded from
+  `snapshot().to_dict()` while the installed model kept it exactly. The
+  export tries `u64` before the float now.
+- **`bind_env` could not see a `.env` file.** A binding names one
+  variable exactly, and a deployment that writes that variable into a
+  `.env` file rather than exporting it means the same thing by it — yet
+  bindings read only the process environment, so the field got nothing.
+  The prefixed `.env` layer cannot cover the case either: it recognises
+  only names built from the prefix and the key, and it is skipped
+  altogether when there is no prefix, which is the usual shape for a
+  program binding `PORT` or `DATABASE_URL` by name. Bindings now fall
+  back to the `.env` files, below the real environment — the order those
+  two layers were already in. Recovery from the last-known-good cache
+  resolves them the same way.
+
 ## [0.4.0] — 2026-08-12
 
 ### Added
@@ -187,7 +241,8 @@ Initial release.
 - Diagnostics report paths and types, never values — enforced by its own
   test suite.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...v0.2.0

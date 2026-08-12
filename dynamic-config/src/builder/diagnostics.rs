@@ -28,12 +28,10 @@ impl<T: DeserializeOwned> Builder<T> {
     pub fn explain(&self, path: &str) -> Result<crate::Explanation, Error> {
         let explanation = self.with_spec(|spec| crate::explain::explain(spec, path))?;
 
-        // The same head-of-path check as the generated method: secrets are
-        // field names, and every path under one is the secret's.
+        // The same rule as the generated method, and the cache's: a path
+        // that is, sits under, or contains a secret is redacted.
         if let Some(secrets) = &self.secrets {
-            let head = path.split('.').next().unwrap_or(path);
-
-            if secrets.iter().any(|secret| secret == head) {
+            if crate::touches_secret(path, secrets) {
                 return Ok(explanation.redacted());
             }
         }

@@ -47,7 +47,7 @@
 //! have set it.
 
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use figment::value::{Dict, Value};
 use figment::{Metadata, Profile, Provider};
@@ -113,7 +113,17 @@ impl EnvBindings {
     /// figment attaches metadata per provider, not per key, so naming the
     /// variable means one provider each. There are as many as the program made
     /// bindings — a handful — and they are built once per load.
-    pub(crate) fn providers(&self, key: &str, allow_empty: bool) -> Vec<BindingProvider> {
+    ///
+    /// `fallback` is what the `.env` files say, for the variables the real
+    /// environment does not set. A binding names one variable exactly, and a
+    /// deployment that writes that variable into a `.env` file rather than
+    /// exporting it means the same thing by it.
+    pub(crate) fn providers(
+        &self,
+        key: &str,
+        allow_empty: bool,
+        fallback: Arc<BTreeMap<String, String>>,
+    ) -> Vec<BindingProvider> {
         self.lock()
             .iter()
             .map(|(path, variable)| BindingProvider {
@@ -121,6 +131,7 @@ impl EnvBindings {
                 variable: variable.clone(),
                 key: key.to_owned(),
                 allow_empty,
+                fallback: Arc::clone(&fallback),
             })
             .collect()
     }
@@ -144,6 +155,9 @@ pub(crate) struct BindingProvider {
     variable: String,
     key: String,
     allow_empty: bool,
+    /// What the `.env` files say, consulted only when the real environment
+    /// does not set the variable — the same order the layers themselves are in.
+    fallback: Arc<BTreeMap<String, String>>,
 }
 
 impl Provider for BindingProvider {
@@ -154,7 +168,7 @@ impl Provider for BindingProvider {
     fn data(&self) -> figment::Result<figment::value::Map<Profile, Dict>> {
         let mut values = Dict::new();
 
-        if let Some(value) = resolve(&self.variable, self.allow_empty) {
+        if let Some(value) = resolve(&self.variable, self.allow_empty, &self.fallback) {
             crate::layer::insert_path(&mut values, &self.path, value);
         }
 
@@ -169,9 +183,22 @@ impl Provider for BindingProvider {
 }
 
 /// Reads one variable, or `None` if it does not usefully exist.
-fn resolve(variable: &str, allow_empty: bool) -> Option<Value> {
-    let text = std::env::var_os(variable)?;
-    let text = text.to_str()?;
+///
+/// The real environment first, then the `.env` files — the order those two
+/// layers already sit in, so a binding does not invert it.
+fn resolve(
+    variable: &str,
+    allow_empty: bool,
+    fallback: &BTreeMap<String, String>,
+) -> Option<Value> {
+    let from_environment = std::env::var_os(variable)
+        .and_then(|text| text.to_str().map(ToOwned::to_owned))
+        .filter(|text| allow_empty || !text.trim().is_empty());
+
+    let text = match from_environment {
+        Some(text) => text,
+        None => fallback.get(variable)?.clone(),
+    };
 
     // The same rule as the prefixed layer and `.env` files, `allow_empty_env`
     // included: an unset value rendered into a deployment template leaves
@@ -180,6 +207,8 @@ fn resolve(variable: &str, allow_empty: bool) -> Option<Value> {
     if text.trim().is_empty() && !allow_empty {
         return None;
     }
+
+    let text = text.as_str();
 
     // Parsed the way the environment layer parses: `8080` is a number, `[1,2]`
     // a list, and anything else a string.

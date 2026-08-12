@@ -25,6 +25,50 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-12
+
+### Added
+
+- **`dynamic-config-py` — the Python bindings.** A PyO3 extension pairing
+  this engine with Pydantic: Rust owns sources, layering, watching,
+  recovery and provenance; Pydantic owns the schema; Python reads a
+  cached model for the price of an attribute lookup. Validation runs once
+  per successful resolve, a reload Pydantic rejects keeps the previous
+  model serving, and the secret list is derived from the model's own
+  `SecretStr` fields. Ships to PyPI as `dynamic-config-py`, on a version
+  of its own — the wheel embeds the engine rather than depending on a
+  published version of it, so it does not move every time the crates do
+  — and the import is `dynamic_config`. See [its chapter](book/src/python.md). Reading is an
+  attribute lookup — 28 ns against a module global's 20 — because the
+  model is published into the Python object as it installs;
+  `changed_paths` gives the audit half of a reload from Python too.
+  Every blocking call has an async twin (`init_async`, `load_async`,
+  `reload_async`, `changed_async`) and an executor knob to choose which
+  pool pays for it, thirteen runnable examples ship with the package, and the chapter has its own sections for
+  [async](book/src/python/async.md),
+  [data types](book/src/python/types.md),
+  [web frameworks](book/src/python/frameworks.md) and
+  [limitations](book/src/python/limitations.md).
+- `Builder::validate` accepts closures, not just function pointers: a
+  validator that needs *context* — a policy object, a schema, another
+  runtime's validator — could not be written as a `fn`, and that is the
+  shape a language binding needs. A plain `fn` still coerces, so every
+  existing call site is unchanged.
+- `touches_secret(path, secrets)`, the one rule every redaction door
+  asks: a path that *is*, sits *under*, or *contains* a secret is
+  redacted.
+
+### Fixed
+
+- **Nested secrets were redacted nowhere.** A secret named by a dotted
+  path — `credentials.password`, which is what a nested model produces —
+  was missed by both redaction doors: `explain` matched only the head of
+  the path, and the redacted last-known-good cache dropped only
+  top-level keys. Both now understand dotted paths, so a secret inside a
+  nested table stays out of the cache file and reads `***` in an
+  explanation, whether the path asked about is the secret, something
+  under it, or the table containing it.
+
 ## [0.4.0] — 2026-08-12
 
 ### Added
@@ -265,7 +309,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...v0.2.0

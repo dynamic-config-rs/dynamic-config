@@ -1,6 +1,29 @@
 # Releasing
 
-Ten crates, versioned together, published in three waves:
+Twelve crates. Ten publish to crates.io in three waves, versioned
+together; the Python wheels follow in a fourth, on a version of their
+own.
+
+**`dynamic-config-python` versions independently.** It is excluded from
+`cargo release` (`[package.metadata.release] release = false`) and
+carries its own number, because the wheel embeds the engine rather than
+depending on a published version of it — a Rust-only release has nothing
+in it for a Python user. Bump it when the Python package changes rather
+than when the crates do; the wheel wave uploads with `--skip-existing`,
+so a release that did not touch it is a no-op.
+
+`scripts/release-python.sh` is that flow, in the same shape as the
+workspace's — prepare, land, let CI publish:
+
+```sh
+./scripts/release-python.sh --status     # versions here and on PyPI
+./scripts/release-python.sh patch        # bump + rotate the changelog + commit
+git push origin dev && ./scripts/promote.sh
+./scripts/release-python.sh --publish    # dispatch the wheel wave
+```
+
+A workspace release carries the wheels along automatically; the dispatch
+is for a Python-only one, where there are no crates to wait for.
 
 ```text
 dynamic-config-macros          first, always
@@ -55,7 +78,7 @@ safe to redo; nothing before step 5 leaves the laptop.
    dated heading, and a pre-written one becomes a duplicate it cannot see.
    Confirm the README's install snippet names the version about to exist.
 3. **`cargo release minor --execute`** (or `patch`; pre-1.0 a breaking
-   change is `minor`). Runs `just check` first, bumps all ten crates,
+   change is `minor`). Runs `just check` first, bumps every crate,
    rotates the changelogs, and makes one local commit — no push, no tag,
    no publish.
 4. **Read the release commit.** `git show --stat HEAD`, then skim a

@@ -66,6 +66,15 @@ jobs:
             echo "::error file=dynamic-config-cli/src/main.rs::missing #![forbid(unsafe_code)]"
             exit 1
           fi
+          # The Python extension cannot say `#![forbid(unsafe_code)]`: PyO3's
+          # `#[pyclass]` and `#[pymethods]` expand to `unsafe impl`, which is
+          # the binding machinery rather than this repository's code. What
+          # *is* checkable is that the hand-written half has none, and that
+          # is what this looks at.
+          if grep -rn 'unsafe' dynamic-config-python/src/; then
+            echo "::error::hand-written unsafe in the Python extension"
+            exit 1
+          fi
           # Tests, examples and benches are separate crates, so the lib's
           # `forbid` does not reach them — the whole no-unsafe claim would
           # be one bench file away from fiction if nothing looked. Exactly

@@ -55,8 +55,16 @@ jobs:
       # `etcd-client` compiles its gRPC stubs at build time and needs the
       # `protoc` binary, which the runner image does not carry.
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-      - run: cargo clippy --workspace --all-targets --all-features
-      - run: cargo clippy --workspace --all-targets --no-default-features
+      # The Python extension is excluded from the sweeps and linted on its
+      # own line: an extension module links no libpython, so it has no
+      # test target for `--all-targets` to build.
+      - run: >
+          cargo clippy --workspace --all-targets --all-features
+          --exclude dynamic-config-python
+      - run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --exclude dynamic-config-python
+      - run: cargo clippy -p dynamic-config-python --lib
 
   test:
     strategy:
@@ -88,6 +96,7 @@ jobs:
           --exclude dynamic-config-s3
           --exclude dynamic-config-firestore
           --exclude dynamic-config-embedded
+          --exclude dynamic-config-python
       # `no_std` and the workspace's `--features full` do not mix: this crate
       # has its own features and no `full`.
       - run: cargo test -p dynamic-config-embedded --features std,async
@@ -110,6 +119,7 @@ jobs:
           --exclude dynamic-config-s3
           --exclude dynamic-config-firestore
           --exclude dynamic-config-embedded
+          --exclude dynamic-config-python
           -- --test-threads=1
         if: matrix.os == 'ubuntu-latest'
       # Doctests document the default feature set, so they are skipped when it
@@ -243,6 +253,76 @@ jobs:
       # here rather than in a user's incident.
       - run: cargo test -p dynamic-config --test loader --features json,toml,yaml
 
+  python:
+    name: the Python bindings
+    runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every interpreter the package claims to support. abi3 means one
+        # wheel covers the range, but the *Python* half — the facade, the
+        # decorator, the asyncio bridge — is ordinary code that a version
+        # can break: `asyncio.timeout` arrived in 3.11, dataclass slots
+        # in 3.10, and the typing syntax the stubs use has moved twice.
+        # Claiming a floor and testing only the ceiling is how a floor
+        # quietly stops being true.
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The framework packages are here for the three integration
+      # examples: an example that only compiles is not an example.
+      - run: pip install maturin pytest pytest-asyncio pydantic pydantic-settings mypy ruff fastapi flask django httpx
+      # `maturin build` rather than `develop`: this produces the wheel a
+      # user would install, and the next step installs *that*, so the
+      # packaging is exercised by the same job that exercises the code.
+      - run: maturin build --out dist
+        working-directory: dynamic-config-python
+      - run: pip install --no-index --find-links dist dynamic-config-py
+        working-directory: dynamic-config-python
+      - run: python -m pytest tests -q
+        working-directory: dynamic-config-python
+      # The base install has no dependencies, and that claim is worth a
+      # job rather than a sentence: a fresh interpreter, the wheel and
+      # nothing else, running the suite that needs nothing else.
+      - name: the base install, with no Pydantic anywhere
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install --quiet --no-index --find-links dist dynamic-config-py
+          /tmp/bare/bin/pip install --quiet pytest
+          /tmp/bare/bin/python -c "import dynamic_config, sys; assert not [m for m in sys.modules if m.startswith('pydantic')], 'importing the package pulled in Pydantic'"
+          /tmp/bare/bin/python -m pytest tests/test_dataclasses.py -q
+          /tmp/bare/bin/python examples/17_dataclasses.py > /dev/null
+        working-directory: dynamic-config-python
+      # The stubs are shipped, so they are checked: `current()` has to
+      # come back as the caller's model rather than as `Any`.
+      - run: mypy --strict python/dynamic_config/
+        working-directory: dynamic-config-python
+      # Lint and format, over the package, the suite and the examples —
+      # an example is code people copy, so it is held to the same rules.
+      - run: ruff check .
+        working-directory: dynamic-config-python
+      - run: ruff format --check .
+        working-directory: dynamic-config-python
+      # The examples are documentation people run, so they run here; a
+      # stale one is worse than a missing one. Each writes into a
+      # temporary directory and needs no setup.
+      - name: every example
+        working-directory: dynamic-config-python
+        run: |
+          for example in examples/[0-9]*.py; do
+            echo "── $example"
+            python "$example" > /dev/null
+          done
+
   loom:
     name: loom model checking
     runs-on: ubuntu-latest
@@ -319,6 +399,8 @@ jobs:
             package: dynamic-config-firestore
           - rust: "1.85"
             package: dynamic-config-cli
+          - rust: "1.85"
+            package: dynamic-config-python
           - rust: "1.83"
             package: dynamic-config-embedded
             flags: "--no-default-features --features json,async"
@@ -386,7 +468,7 @@ jobs:
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
             AGENTS.md CHANGELOG.md docs/*.md scripts/README.md
             dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
-            book/src/*.md book/src/remote-stores/*.md
+            book/src/*.md book/src/remote-stores/*.md book/src/python/*.md
             .claude/skills/*/SKILL.md .github/ISSUE_TEMPLATE/*.md
           fail: true
 
@@ -444,6 +526,7 @@ jobs:
           --exclude dynamic-config-nats --exclude dynamic-config-vault
           --exclude dynamic-config-redis --exclude dynamic-config-s3
           --exclude dynamic-config-firestore --exclude dynamic-config-embedded
+          --exclude dynamic-config-python
           --fail-under-lines 80
           --lcov --output-path lcov.info
       - name: summary
@@ -486,6 +569,7 @@ jobs:
       - features
       - loader
       - loom
+      - python
       - bench
       - coverage
       - msrv

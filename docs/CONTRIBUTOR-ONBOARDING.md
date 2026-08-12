@@ -12,7 +12,9 @@ and this document assumes you know what the crate does from the outside.
 
 ## 1. The shape of the workspace
 
-Ten crates, one version, published together in three waves.
+Twelve crates, one version. Ten publish to crates.io in three waves, the
+Python extension publishes a wheel to PyPI in a fourth, and the CLI rides
+the third.
 
 ```text
 dynamic-config-macros      the proc macro. No API of its own.

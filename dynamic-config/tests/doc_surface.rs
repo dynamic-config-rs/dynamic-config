@@ -234,9 +234,11 @@ fn the_readmes_agree_on_one_version() {
     let mut versions: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     // A README that contributes *nothing* is the exact regression this gate
     // exists for — a snippet deleted, or rewritten into a shape the parser
-    // no longer sees — so per-file accounting is part of the assertion. The
-    // CLI is the one legitimate exemption: a binary is installed, not
-    // depended on, and its README carries no version by design.
+    // no longer sees — so per-file accounting is part of the assertion.
+    // Two crates are legitimately exempt: the CLI and the Python
+    // extension are *installed* rather than depended on (`cargo install`,
+    // `pip install`), and neither install line carries a version by
+    // design.
     let mut empty: Vec<String> = Vec::new();
 
     for readme in &readmes {
@@ -269,7 +271,9 @@ fn the_readmes_agree_on_one_version() {
         }
 
         let contributed = versions.values().map(Vec::len).sum::<usize>() > before;
-        let exempt = readme.display().to_string().contains("dynamic-config-cli");
+        let rendered = readme.display().to_string();
+        let exempt =
+            rendered.contains("dynamic-config-cli") || rendered.contains("dynamic-config-python");
 
         if !contributed && !exempt {
             empty.push(readme.display().to_string());

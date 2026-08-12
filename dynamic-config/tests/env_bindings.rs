@@ -315,3 +315,54 @@ fn a_custom_nest_separator_reaches_nested_fields() {
         32
     );
 }
+
+/// A binding names one variable; a deployment that writes that variable into a
+/// `.env` file rather than exporting it means the same thing by it.
+///
+/// The prefixed `.env` layer cannot serve this case — it recognises only names
+/// built from the prefix and the key, and it is skipped entirely without a
+/// prefix, which is the shape a program that binds by name tends to have.
+#[cfg(feature = "dotenv")]
+#[test]
+fn a_binding_falls_back_to_the_env_files() {
+    use std::io::Write;
+
+    #[dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Bound {
+        #[allow(dead_code)]
+        host: String,
+        port: u16,
+    }
+
+    let directory = std::env::temp_dir().join("dc-binding-dotenv");
+    std::fs::create_dir_all(&directory).unwrap();
+    let file = directory.join("binding.env");
+    let mut handle = std::fs::File::create(&file).unwrap();
+    writeln!(handle, "DCB5_LEGACY_PORT=7001").unwrap();
+    drop(handle);
+
+    Bound::bind_env("port", "DCB5_LEGACY_PORT").unwrap();
+
+    let loaded = Bound::builder("db")
+        .file("tests/fixtures/base.json")
+        .env_file(file.to_str().unwrap())
+        .load()
+        .expect("the binding resolves from the .env file");
+
+    assert_eq!(loaded.port, 7001, "no prefix layer, and still bound");
+
+    // The real environment outranks a file, here as everywhere else.
+    std::env::set_var("DCB5_LEGACY_PORT", "7002");
+
+    let exported = Bound::builder("db")
+        .file("tests/fixtures/base.json")
+        .env_file(file.to_str().unwrap())
+        .load()
+        .expect("the exported variable resolves");
+
+    std::env::remove_var("DCB5_LEGACY_PORT");
+    let _ = std::fs::remove_file(&file);
+
+    assert_eq!(exported.port, 7002, "an exported variable beats the file");
+}
