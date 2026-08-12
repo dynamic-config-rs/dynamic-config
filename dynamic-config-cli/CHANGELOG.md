@@ -26,6 +26,22 @@ when.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-12
+
+### Breaking
+
+- `explain` redacts by default: every value prints as `***` unless
+  `--show-values` is passed. The old `--secret` flag is gone — a published
+  diagnostic tool cannot ask its user to already know which paths are
+  sensitive, so the safe rendering is the default and seeing values is the
+  deliberate act.
+
+### Added
+
+- The crate graduates to crates.io: `cargo install dynamic-config-cli`.
+- `completions <shell>` and `man` print shell completions and the manual
+  page, both rendered by clap from the same command definition.
+
 ## [0.3.0] — 2026-08-11
 
 ## [0.2.0] — 2026-08-11
@@ -36,6 +52,7 @@ when.
   `--secret` to mask) and `diff` (path-only difference between two
   documents) from a shell, the load restated as flags.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...v0.2.0

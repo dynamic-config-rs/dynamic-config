@@ -25,8 +25,10 @@ struct Cli {
 enum Command {
     /// Every layer's answer for one path, not just the winner's.
     ///
-    /// The output contains values — that is its point. Pass --secret for a
-    /// path you know to be sensitive and every value prints as ***.
+    /// Values print as *** unless --show-values is passed: a published
+    /// diagnostic tool cannot ask its user to already know which paths are
+    /// sensitive, so the safe rendering is the default and seeing values
+    /// is the deliberate act.
     Explain {
         /// Dotted path, relative to the section: pool.max_size
         path: String,
@@ -45,10 +47,21 @@ enum Command {
         /// .env file read as the environment layer, repeatable
         #[arg(long = "env-file")]
         env_files: Vec<String>,
-        /// Print every value as *** — for a path you know is sensitive
+        /// Print the actual values instead of ***
         #[arg(long)]
-        secret: bool,
+        show_values: bool,
     },
+    /// Shell completions, printed to stdout.
+    ///
+    /// `dynamic-config completions bash > /etc/bash_completion.d/dynamic-config`
+    Completions {
+        /// bash, zsh, fish, elvish or powershell
+        shell: clap_complete::Shell,
+    },
+    /// The manual page, as roff, printed to stdout.
+    ///
+    /// `dynamic-config man > /usr/local/share/man/man1/dynamic-config.1`
+    Man,
     /// Which paths differ between two documents. Paths only, never values.
     Diff {
         /// The earlier document
@@ -80,7 +93,7 @@ fn run(cli: Cli) -> Result<(), dynamic_config::Error> {
             env,
             profile_env,
             env_files,
-            secret,
+            show_values,
         } => {
             let sources = sources(&files)?;
             let env_files: Vec<&str> = env_files.iter().map(String::as_str).collect();
@@ -94,11 +107,26 @@ fn run(cli: Cli) -> Result<(), dynamic_config::Error> {
             }
 
             let mut explanation = explain(&spec, &path)?;
-            if secret {
+            if !show_values {
                 explanation = explanation.redacted();
             }
 
             print!("{explanation}");
+            Ok(())
+        }
+        Command::Completions { shell } => {
+            clap_complete::generate(
+                shell,
+                &mut <Cli as clap::CommandFactory>::command(),
+                "dynamic-config",
+                &mut std::io::stdout(),
+            );
+            Ok(())
+        }
+        Command::Man => {
+            clap_mangen::Man::new(<Cli as clap::CommandFactory>::command())
+                .render(&mut std::io::stdout())
+                .map_err(dynamic_config::Error::invalid)?;
             Ok(())
         }
         Command::Diff { old, new, key } => {

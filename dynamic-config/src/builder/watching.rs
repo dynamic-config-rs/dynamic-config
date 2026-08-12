@@ -44,12 +44,38 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
         debounce: core::time::Duration,
         mode: crate::watch::WatchMode,
     ) -> std::io::Result<crate::watch::WatchHandle> {
-        let Some(install) = self.install else {
+        let handle = self.watch_as(
+            crate::watch::WatchKey::Type(std::any::TypeId::of::<T>()),
+            watch_name::<T>(&self.key),
+            debounce,
+            mode,
+        )?;
+
+        if let Some(register) = self.register {
+            register(self);
+        }
+
+        Ok(handle)
+    }
+
+    /// The watch body, with the registry identity chosen by the caller:
+    /// the type's `TypeId` here, an instance number from
+    /// [`Dynamic`](crate::Dynamic). One copy of the reload closure, so the
+    /// two surfaces cannot drift on what a reload does.
+    pub(crate) fn watch_as(
+        &self,
+        key: crate::watch::WatchKey,
+        name: &'static str,
+        debounce: core::time::Duration,
+        mode: crate::watch::WatchMode,
+    ) -> std::io::Result<crate::watch::WatchHandle> {
+        let Some(install) = self.install.clone() else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "this builder is tied to no config type, so a reload would \
                  have nowhere to install; start from the generated \
-                 `builder()` on a `#[dynamic_config]` type",
+                 `builder()` on a `#[dynamic_config]` type, or wrap this \
+                 builder in a `Dynamic`",
             ));
         };
 
@@ -60,30 +86,16 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
             })?;
 
         let reloader = self.clone();
-        let name = watch_name::<T>(&self.key);
 
-        let handle = crate::watch::spawn_with(
-            std::any::TypeId::of::<T>(),
-            name,
-            watched,
-            debounce,
-            mode,
-            move || {
-                // `load` already validates, so a refused configuration keeps
-                // the previous snapshot exactly like a parse failure.
-                let value = reloader.load()?;
-                install(value);
-                reloader.write_cache();
+        crate::watch::spawn_with(key, name, watched, debounce, mode, move || {
+            // `load` already validates, so a refused configuration keeps
+            // the previous snapshot exactly like a parse failure.
+            let value = reloader.load()?;
+            install.install(value);
+            reloader.write_cache();
 
-                Ok(None)
-            },
-        )?;
-
-        if let Some(register) = self.register {
-            register(self);
-        }
-
-        Ok(handle)
+            Ok(None)
+        })
     }
 }
 

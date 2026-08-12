@@ -441,3 +441,26 @@ fn the_generated_builders_explain_redacts_too() {
         .expect("the source reads cleanly");
     assert!(host.to_string().contains("localhost"), "{host}");
 }
+
+/// `Snapshot::to_value` hands over the resolved tree — and the tree's
+/// `Debug`, like `Snapshot`'s own, shows shape and keys but never values:
+/// `{:?}` in a log line is exactly how a resolved secret leaks.
+#[test]
+fn a_values_debug_shows_shape_and_never_values() {
+    let text = r#"{"db": {"host": "localhost", "password": "hunter2-value-debug", "port": 5432}}"#;
+    let sources = [dynamic_config::Source::inline(
+        text,
+        dynamic_config::Format::Json,
+    )];
+    let snapshot = dynamic_config::snapshot(&dynamic_config::LoadSpec::new("db", &sources))
+        .expect("the inline source resolves");
+
+    let rendered = format!("{:?}", snapshot.to_value());
+
+    assert!(!rendered.contains("hunter2-value-debug"), "{rendered}");
+    assert!(!rendered.contains("5432"), "{rendered}");
+    assert!(
+        rendered.contains("password"),
+        "keys are the useful half, and they stay: {rendered}"
+    );
+}

@@ -199,3 +199,95 @@ fn the_documented_methods_are_the_generated_ones() {
         );
     }
 }
+
+/// Every README's install snippet names the same version.
+///
+/// The workspace releases in lockstep, and the failure mode is always the
+/// same: the root README gets updated for a release and a companion's
+/// snippet keeps quoting the version before it — which is exactly what
+/// happened between 0.2.0 and 0.3.0, nine files at a time. Consistency is
+/// the honest invariant to pin (rather than equality with `Cargo.toml`,
+/// which is legitimately one commit ahead mid-release): all snippets move
+/// together, or the gate names the stragglers.
+#[test]
+fn the_readmes_agree_on_one_version() {
+    let repo = repo();
+
+    let Ok(entries) = fs::read_dir(&repo) else {
+        eprintln!("skipped: not a repository checkout");
+        return;
+    };
+
+    let mut readmes: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("dynamic-config"))
+        })
+        .map(|path| path.join("README.md"))
+        .filter(|path| path.exists())
+        .collect();
+    readmes.push(repo.join("README.md"));
+
+    let mut versions: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    // A README that contributes *nothing* is the exact regression this gate
+    // exists for — a snippet deleted, or rewritten into a shape the parser
+    // no longer sees — so per-file accounting is part of the assertion. The
+    // CLI is the one legitimate exemption: a binary is installed, not
+    // depended on, and its README carries no version by design.
+    let mut empty: Vec<String> = Vec::new();
+
+    for readme in &readmes {
+        let text = fs::read_to_string(readme).expect("a README is readable");
+        let before: usize = versions.values().map(Vec::len).sum();
+
+        // `dynamic-config… = "X.Y.Z"` and `version = "X.Y.Z"`, inside toml
+        // fences; `<version>` placeholders (the book's convention) and the
+        // exact-pin `=X.Y.Z` internal form are somebody else's business.
+        for line in text.lines() {
+            let Some((name, value)) = line.split_once('=') else {
+                continue;
+            };
+
+            if !name.trim_start().starts_with("dynamic-config") && name.trim() != "version" {
+                continue;
+            }
+
+            for candidate in value.split('"').skip(1).step_by(2) {
+                let plausible = candidate.chars().next().is_some_and(|c| c.is_ascii_digit())
+                    && candidate.split('.').count() == 3;
+
+                if plausible {
+                    versions
+                        .entry(candidate.to_string())
+                        .or_default()
+                        .push(readme.display().to_string());
+                }
+            }
+        }
+
+        let contributed = versions.values().map(Vec::len).sum::<usize>() > before;
+        let exempt = readme.display().to_string().contains("dynamic-config-cli");
+
+        if !contributed && !exempt {
+            empty.push(readme.display().to_string());
+        }
+    }
+
+    assert!(
+        empty.is_empty(),
+        "these READMEs contribute no install-snippet version — deleted \
+         snippet, or a shape the parser no longer sees: {empty:?}"
+    );
+    assert!(
+        !versions.is_empty(),
+        "found no install-snippet versions — the extraction broke"
+    );
+    assert_eq!(
+        versions.len(),
+        1,
+        "the READMEs disagree on the release version: {versions:#?}"
+    );
+}

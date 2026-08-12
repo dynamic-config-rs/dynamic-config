@@ -43,7 +43,7 @@ impl<T: DeserializeOwned> Builder<T> {
         // specific mistake, and the more dangerous one to leave unexplained.
         self.check_cache_mode()?;
 
-        let Some(install) = self.install else {
+        let Some(install) = self.install.as_ref() else {
             return Err(Error::new(
                 ErrorKind::Backend,
                 "this builder is tied to no config type, so there is nowhere \
@@ -54,7 +54,7 @@ impl<T: DeserializeOwned> Builder<T> {
 
         let outcome = match self.load() {
             Ok(value) => {
-                install(value);
+                install.install(value);
                 self.write_cache();
 
                 Ok(())
@@ -66,7 +66,7 @@ impl<T: DeserializeOwned> Builder<T> {
                     check(&recovered)?;
                 }
 
-                install(recovered);
+                install.install(recovered);
                 crate::log::warning!(
                     "{}: started from the last known good configuration",
                     self.key
@@ -94,9 +94,9 @@ impl<T: DeserializeOwned> Builder<T> {
     /// installer has nothing to commit into.
     pub fn prepare(&self) -> Result<crate::group::Commit, Error>
     where
-        T: Send + 'static,
+        T: Send + Sync + 'static,
     {
-        let Some(install) = self.install else {
+        let Some(install) = self.install.as_ref() else {
             return Err(Error::new(
                 ErrorKind::Backend,
                 "this builder is tied to no config type, so a prepared \
@@ -106,7 +106,9 @@ impl<T: DeserializeOwned> Builder<T> {
 
         let value = self.load()?;
 
-        Ok(Box::new(move || install(value)))
+        let install = install.clone();
+
+        Ok(Box::new(move || install.install(value)))
     }
 
     /// Refuses a redaction-dependent cache mode on a builder that cannot
@@ -154,6 +156,15 @@ impl<T: DeserializeOwned> Builder<T> {
         let written = self.with_spec(|spec| {
             let snapshot = crate::loader::snapshot(spec)?;
 
+            #[cfg(feature = "decrypt")]
+            if let Some(encryptor) = &self.cache_encryptor {
+                return crate::cache::write_encrypted(
+                    &snapshot,
+                    Path::new(path),
+                    encryptor.as_ref(),
+                );
+            }
+
             crate::cache::write(&snapshot, Path::new(path), *mode, &secret_refs)
         });
 
@@ -180,7 +191,16 @@ impl<T: DeserializeOwned> Builder<T> {
         // to compare.
         let current = self.with_spec(crate::loader::snapshot).ok();
 
-        match crate::cache::read(Path::new(path), current.as_ref()) {
+        #[cfg(feature = "decrypt")]
+        let recovered = if let Some(_encryptor) = &self.cache_encryptor {
+            crate::cache::read_encrypted(Path::new(path), current.as_ref())
+        } else {
+            crate::cache::read(Path::new(path), current.as_ref())
+        };
+        #[cfg(not(feature = "decrypt"))]
+        let recovered = crate::cache::read(Path::new(path), current.as_ref());
+
+        match recovered {
             // Through the loader, not a bare extract: the environment and
             // `.env` files layer over the cache exactly as they would over
             // the files, which is what lets a redacted cache work — the
@@ -232,7 +252,7 @@ impl<T: DeserializeOwned> Builder<T> {
     /// The same failures as [`load`](Self::load); a builder with no
     /// installer has nothing to reload into.
     pub fn reload(&self) -> Result<(), Error> {
-        let Some(install) = self.install else {
+        let Some(install) = self.install.as_ref() else {
             return Err(Error::new(
                 ErrorKind::Backend,
                 "this builder is tied to no config type, so a reload would \
@@ -240,7 +260,7 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        install(self.load()?);
+        install.install(self.load()?);
         self.write_cache();
 
         Ok(())
@@ -249,7 +269,11 @@ impl<T: DeserializeOwned> Builder<T> {
 
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-impl<T: DeserializeOwned + Send + 'static> Builder<T> {
+// `Sync` joined the bounds when the builder learned to carry a shared
+// cell (`Installer::Cell` holds an `Arc<ConfigCell<T>>`, and moving the
+// builder to the blocking worker moves the cell with it). A config type
+// that is `Send` without `Sync` is a curiosity this crate does not chase.
+impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
     /// [`load`](Self::load), off the async executor.
     ///
     /// # Errors

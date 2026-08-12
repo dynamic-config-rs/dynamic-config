@@ -5,9 +5,10 @@ name: Scorecard
 # patterns — scored and uploaded to code scanning, where a regression shows
 # up as an alert rather than a surprise.
 #
-# Runs on `dev` because Scorecard only publishes results from the *default*
-# branch, and `dev` is it here. The schedule keeps the score honest when the
-# repository is quiet.
+# Runs on `main` because Scorecard only publishes results from the *default*
+# branch, and `main` is it. The schedule keeps the score honest when the
+# repository is quiet. A re-run of an old run replays its frozen event
+# payload — after a default-branch change, dispatch a fresh run instead.
 on:
   push:
     branches: [main]

@@ -97,6 +97,23 @@ impl Snapshot {
         self.provenance.get(path)
     }
 
+    /// The resolved section as an owned [`crate::Value`] tree.
+    ///
+    /// For the boundary that needs the configuration as *data* rather than
+    /// a type — a language binding, an exporter. Built by walking the
+    /// resolved tree directly, never through a serialized intermediate;
+    /// like [`extract`](Self::extract), it hands over real values, secrets
+    /// included — the paths-only rule governs what this crate *prints*.
+    #[must_use]
+    pub fn to_value(&self) -> crate::Value {
+        crate::value::Value::Table(
+            self.values
+                .iter()
+                .map(|(key, value)| (key.clone(), crate::value::from_figment(value)))
+                .collect(),
+        )
+    }
+
     /// Deserializes the section into `T`.
     ///
     /// # Errors

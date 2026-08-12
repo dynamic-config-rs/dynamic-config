@@ -183,7 +183,7 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
         let value = figment.find_value(path).ok();
         let origin = value
             .is_some()
-            .then(|| crate::loader::origin_in(&figment, path));
+            .then(|| crate::loader::origin_in(&figment, path, spec.nest));
 
         rows.push(Contribution {
             layer: name,
@@ -202,7 +202,7 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
     let merged = crate::loader::merged(spec)?;
 
     if let Ok(value) = merged.find_value(path) {
-        let origin = crate::loader::origin_in(&merged, path);
+        let origin = crate::loader::origin_in(&merged, path, spec.nest);
         let walk_winner = rows.iter().rev().find(|row| row.value.is_some());
         let disagrees = match walk_winner {
             None => true,

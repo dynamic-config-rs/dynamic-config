@@ -143,7 +143,7 @@ where
         .iter()
         .map(|path| Resolved {
             path: path.clone(),
-            origin: crate::loader::origin_in(&figment, path),
+            origin: crate::loader::origin_in(&figment, path, spec.nest),
         })
         .collect();
 

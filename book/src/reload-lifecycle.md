@@ -65,6 +65,31 @@ configuration exists".
 not at all. Every member loads and validates before any member installs, so
 a failure leaves all of them on their previous snapshots.
 
+One honest limit: the group's promise is all-or-nothing *installation*,
+and the commits are still separate swaps — a reader can observe member
+A's new generation next to member B's old one for an instant. For the few
+cases where even that instant matters — a certificate and the port it is
+served on — the answer is structural, not more machinery: **one type
+holding both concerns, one section, one swap, one generation.**
+
+```rust
+#[derive(Debug, Deserialize)]
+struct Tls {
+    certificate_path: String,
+    port: u16,          // moves with the certificate, atomically, always
+}
+```
+
+A reader of `Tls` can never see a torn pair, because there is no pair —
+there is one value, replaced whole, which is the crate's founding
+guarantee. This works identically on the attribute surface, on
+[`Dynamic`](dynamic-instances.md), and inside a `ReloadGroup` whose other
+members tolerate the instant. Reach for the group when types are owned by
+different modules and "roughly together" is enough; merge the sections
+when it is not. A `Bundle` helper was considered and refused: it would be
+a rename of "define one struct", and machinery that restates a design
+decision teaches people to skip the decision.
+
 **`set_blocking_executor`** — where the blocking half of an async reload
 runs. By default it is a thread per load; the `tokio` feature routes it to
 the blocking pool; anything else can be installed by hand. Reloads are rare

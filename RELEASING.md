@@ -117,9 +117,13 @@ job re-run — publishing is idempotent, already-uploaded crates are skipped.
    and no hand-written heading for the version being cut: the heading is
    `cargo release`'s to write. A release with an empty section is a release
    nobody can read.
-3. The README's install snippet names the version you are about to publish.
-   `cargo release` does not rewrite it, because it appears in prose as often as
-   in a code block and a regex that catches all of them catches too much.
+3. The README install snippets take care of themselves: the pre-release
+   hook runs `scripts/sync-readme-versions.sh`, which rewrites every
+   snippet — the root's and the nine companions' — to the version being
+   cut. It touches only the assignment shapes the `doc_surface` gate
+   parses, never prose (the old objection to automating this was a regex
+   loose enough to catch prose; the answer was to not catch prose). The
+   gate still fails when the snippets disagree, as the backstop.
 
 ### If it has to be done by hand
 
@@ -139,6 +143,7 @@ cargo publish -p dynamic-config-redis
 cargo publish -p dynamic-config-vault
 cargo publish -p dynamic-config-s3
 cargo publish -p dynamic-config-firestore
+cargo publish -p dynamic-config-cli
 ```
 
 `--no-verify` is deliberately not used. The verification build is the last

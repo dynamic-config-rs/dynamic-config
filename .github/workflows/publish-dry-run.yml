@@ -54,7 +54,8 @@ jobs:
                        dynamic-config-etcd dynamic-config-consul \
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
-                       dynamic-config-firestore dynamic-config-embedded; do
+                       dynamic-config-firestore dynamic-config-embedded \
+                       dynamic-config-cli; do
             tarball=$(find target/package -maxdepth 1 -name "$crate-*.crate" 2>/dev/null | head -1)
 
             if [ -z "$tarball" ]; then

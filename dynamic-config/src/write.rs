@@ -71,6 +71,35 @@ pub(crate) fn save_dict(
     write_atomically(path, &rendered)
 }
 
+/// [`save_dict`], through an [`Encryptor`](crate::Encryptor) — what the
+/// encrypted last-known-good cache writes with.
+#[cfg(feature = "decrypt")]
+pub(crate) fn save_dict_encrypted(
+    section: &Dict,
+    path: &Path,
+    format: Format,
+    key: &str,
+    encryptor: &dyn crate::Encryptor,
+) -> Result<(), Error> {
+    let mut document = Dict::new();
+    document.insert(key.to_owned(), Value::from(section.clone()));
+
+    let mut rendered = render(&document, format)?;
+    let encrypted = encryptor
+        .encrypt(rendered.as_bytes())
+        .map_err(|error| error.prepend_key(encryptor.describe()));
+
+    // The same courtesy `save_encrypted` extends: the plaintext does not
+    // linger in freed memory on either path.
+    {
+        use zeroize::Zeroize;
+
+        rendered.zeroize();
+    }
+
+    write_bytes_atomically(path, &encrypted?)
+}
+
 fn render(document: &Dict, format: Format) -> Result<String, Error> {
     // With no format feature on, every arm below is compiled out.
     #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]

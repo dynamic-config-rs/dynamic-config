@@ -68,6 +68,26 @@ the generated `builder()` on a `#[dynamic_config]` type carries — on a bare
 `Builder::new`, those modes are refused at `init` rather than silently caching
 everything. `CacheMode::Full`, spelled out, still works there.
 
+### Encrypted, the fourth answer
+
+With the `decrypt` feature, `cache_encrypted(path, encryptor)` collapses
+the trade-off the three modes exist to navigate: full fidelity — recovery
+needs nothing from the live environment — with nothing readable on disk.
+
+```rust
+AppConfig::builder("app")
+    .file("config.toml")
+    .cache_encrypted("/var/lib/app/last.json.age", encryptor)
+    .init()?;
+```
+
+The cache is written through the `Encryptor` the caller constructs — the
+recipients live there, at the call site that owns them — and recovered
+through the installed [`Decryptor`](encryption.md), the same door
+`encrypted_file(..)` reads through, so one `set_decryptor` covers both.
+The path carries the format under the encryption suffix, exactly like an
+encrypted source file: `last.json.age` is JSON.
+
 ## Last known good
 
 A process that cannot read its configuration should normally refuse to start —

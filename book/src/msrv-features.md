@@ -1,30 +1,9 @@
 # MSRV & Features
 
-## Cargo features
-
-| Feature | Default | Effect |
-|---|---|---|
-| `json` | ✅ | `.json` sources |
-| `toml` | | `.toml` sources |
-| `yaml` | | `.yaml` / `.yml` sources |
-| `watch` | | `builder.watch()` / `watch_with()` and the file watcher |
-| `async` | | `load_async`, `init_async`, `changes`, `AsyncRemoteSource` — no runtime dependency |
-| `tokio` | | `async`, plus tokio's blocking pool instead of a thread per load |
-| `clap` | | `bind_clap` |
-| `schema` | | `builder.schema()` — a JSON Schema for the config files |
-| `decrypt` | | `Decryptor` and `set_decryptor`, for a scheme of your own |
-| `age` | | `decrypt`, plus transparent decryption and encryption of `age` files |
-| `dotenv` | | `.env_file(..)` — a `.env` read as the environment layer |
-| `figment` | | `Source::provider`, and figment re-exported |
-| `tracing` | | Watcher diagnostics via `tracing` instead of stderr |
-| `full` | | all of the above |
-
-Using `watch` or `async` surface whose feature is off is a compile error —
-the methods do not exist. A file whose *format* feature is off is a load-time
-error naming the feature to add, because the path is runtime data now; the
-message says exactly what to put in `features = [..]`, so it is a surprise
-that diagnoses itself rather than a mystery on the one machine that reads
-YAML.
+What each feature unlocks, and why it is a choice, is the
+[Cargo Features](features.md) chapter's subject; this page is the cost
+side — which flags move the compiler floor, and how the floors are kept
+honest.
 
 ## Minimum supported Rust version
 

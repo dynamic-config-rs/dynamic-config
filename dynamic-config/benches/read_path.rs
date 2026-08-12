@@ -1,10 +1,12 @@
-//! What `current()` costs, on each of the two storage shapes.
+//! What `current()` costs, on each of the three storage shapes.
 //!
 //! The question this answers is whether generic configuration types can share
 //! the non-generic read path or need one of their own. A non-generic type keeps
 //! its snapshot in a `static` — one atomic load. A generic one cannot, because
 //! Rust has no generic statics, so it goes through a `TypeId`-keyed registry:
-//! a read lock, a hash, and a downcast before the same atomic load.
+//! a read lock, a hash, and a downcast before the same atomic load. A
+//! `Dynamic` instance owns its cell behind an `Arc` — the same atomic load,
+//! one pointer hop earlier.
 //!
 //! ```text
 //! cargo bench -p dynamic-config --features json
@@ -60,6 +62,11 @@ fn time(label: &str, mut work: impl FnMut()) -> f64 {
     per_call
 }
 
+#[derive(Debug, Deserialize)]
+struct Instance {
+    port: u16,
+}
+
 fn main() {
     Plain::builder("db")
         .file("benches/bench.json")
@@ -80,5 +87,17 @@ fn main() {
         black_box(Generic::<Marker>::current().port);
     });
 
+    let dynamic_config = dynamic_config::Dynamic::new(
+        dynamic_config::Builder::<Instance>::new("db").file("benches/bench.json"),
+    );
+    dynamic_config
+        .init()
+        .expect("benches/bench.json should load");
+
+    let dynamic = time("Dynamic (instance)", || {
+        black_box(dynamic_config.current().expect("initialised above").port);
+    });
+
     println!("\ngeneric / static: {:.1}x", generic / plain);
+    println!("dynamic / static: {:.1}x", dynamic / plain);
 }

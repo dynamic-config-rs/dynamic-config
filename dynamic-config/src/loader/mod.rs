@@ -42,19 +42,34 @@ pub(crate) use recover::recover;
 /// Metadata name for the recovery provider.
 pub(crate) const CACHED_NAME: &str = "the last configuration that worked";
 
+/// The figment profile a section's data files under.
+///
+/// Prefixed, because figment reserves two profile names with inheritance
+/// semantics — `global` overrides every profile's own values, `default`
+/// seeds them — and an unprefixed mapping handed those powers to any
+/// config file with an innocently named top-level table, silently and
+/// invisibly to every diagnostic. Both sides go through here: the `Sections`
+/// provider files each top-level key this way, and every select asks the
+/// same way, so a user's key can never collide with figment's machinery.
+pub(crate) fn section_profile(key: &str) -> String {
+    format!("section:{key}")
+}
+
 /// Prefixed onto a remote store's own description, so that a value traced back
 /// to one names the store rather than reporting "an inline source" — which is
 /// what figment sees, and is the wrong answer to the question being asked.
 const REMOTE_PREFIX: &str = "the remote store ";
 
 pub(crate) fn load<T: DeserializeOwned>(spec: &LoadSpec<'_>) -> Result<T, Error> {
-    merged(spec)?.extract().map_err(convert)
+    merged(spec)?
+        .extract()
+        .map_err(|error| convert(error, spec))
 }
 
 /// The composed figment: every layer merged, aliases applied, the section
 /// selected. What every question below starts from.
 pub(crate) fn merged(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    Ok(apply_aliases(build(spec)?, spec).select(spec.key))
+    Ok(apply_aliases(build(spec)?, spec).select(section_profile(spec.key)))
 }
 
 /// Resolves the section without deserializing it.
@@ -73,7 +88,7 @@ pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<(Snapshot, Figment), Error
     let mut snapshot = figment
         .extract::<Dict>()
         .map(Snapshot::new)
-        .map_err(convert)?;
+        .map_err(|error| convert(error, spec))?;
 
     // The one moment the figment that knows where every value came from is
     // still alive — asked for every leaf before it is dropped, so the
@@ -81,7 +96,7 @@ pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<(Snapshot, Figment), Error
     let provenance = snapshot
         .leaf_paths()
         .into_iter()
-        .filter_map(|path| match origin_in(&figment, &path) {
+        .filter_map(|path| match origin_in(&figment, &path, spec.nest) {
             // An `Unknown` row answers the question with a shrug; absence
             // says the same without taking up a slot.
             Origin::Unknown => None,
@@ -94,15 +109,21 @@ pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<(Snapshot, Figment), Error
 }
 
 /// Where `path` comes from, in a figment [`resolved`] already built.
-pub(crate) fn origin_in(figment: &Figment, path: &str) -> Origin {
-    figment
-        .find_metadata(path)
-        .map_or(Origin::Unknown, origin::origin_of)
+pub(crate) fn origin_in(figment: &Figment, path: &str, nest: &str) -> Origin {
+    origin::refine_env(
+        figment
+            .find_metadata(path)
+            .map_or(Origin::Unknown, origin::origin_of),
+        path.split('.'),
+        nest,
+    )
 }
 
 /// Where the value at `path` would come from, if anywhere.
 pub(crate) fn source_of(spec: &LoadSpec<'_>, path: &str) -> Result<Option<Origin>, Error> {
-    Ok(merged(spec)?.find_metadata(path).map(origin::origin_of))
+    Ok(merged(spec)?.find_metadata(path).map(|metadata| {
+        origin::refine_env(origin::origin_of(metadata), path.split('.'), spec.nest)
+    }))
 }
 
 /// Whether anything supplies `path`.
@@ -231,7 +252,7 @@ pub(crate) fn layer_figments(spec: &LoadSpec<'_>) -> Result<Vec<(&'static str, F
         .map(|layer| {
             Ok((
                 layer.name,
-                (layer.merge)(Figment::new(), spec)?.select(spec.key),
+                (layer.merge)(Figment::new(), spec)?.select(section_profile(spec.key)),
             ))
         })
         .collect()
@@ -239,7 +260,9 @@ pub(crate) fn layer_figments(spec: &LoadSpec<'_>) -> Result<Vec<(&'static str, F
 
 fn merge_defaults(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     match spec.defaults {
-        Some(defaults) => Ok(figment.merge(defaults.provider(spec.key, DEFAULTS_NAME))),
+        Some(defaults) => {
+            Ok(figment.merge(defaults.provider(&section_profile(spec.key), DEFAULTS_NAME)))
+        }
         None => Ok(figment),
     }
 }
@@ -327,14 +350,16 @@ fn merge_bindings(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, 
 
 fn merge_flags(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     match spec.flags {
-        Some(flags) => Ok(figment.merge(flags.provider(spec.key, FLAGS_NAME))),
+        Some(flags) => Ok(figment.merge(flags.provider(&section_profile(spec.key), FLAGS_NAME))),
         None => Ok(figment),
     }
 }
 
 fn merge_overrides(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     match spec.overrides {
-        Some(overrides) => Ok(figment.merge(overrides.provider(spec.key, OVERRIDES_NAME))),
+        Some(overrides) => {
+            Ok(figment.merge(overrides.provider(&section_profile(spec.key), OVERRIDES_NAME)))
+        }
         None => Ok(figment),
     }
 }

@@ -32,7 +32,7 @@ pub(super) fn apply_aliases(figment: Figment, spec: &LoadSpec<'_>) -> Figment {
         progressed = false;
 
         for (from, to) in &pairs {
-            let selected = figment.clone().select(spec.key);
+            let selected = figment.clone().select(super::section_profile(spec.key));
 
             // "Something supplies `to`" only counts when that something
             // outranks a runtime default. The defaults layer is the *bottom*
@@ -57,7 +57,7 @@ pub(super) fn apply_aliases(figment: Figment, spec: &LoadSpec<'_>) -> Figment {
 
             figment = figment.merge(Aliased {
                 values,
-                profile: figment::Profile::from(spec.key),
+                profile: figment::Profile::from(super::section_profile(spec.key)),
                 from: from.clone(),
             });
 

@@ -230,6 +230,7 @@ mod decrypt;
 mod discovery;
 #[cfg(feature = "dotenv")]
 mod dotenv;
+mod dynamic;
 mod error;
 mod explain;
 mod group;
@@ -246,6 +247,7 @@ mod snapshot;
 mod source;
 pub(crate) mod sync;
 mod units;
+mod value;
 mod write;
 
 #[cfg(feature = "watch")]
@@ -280,6 +282,7 @@ pub use check::{check, Report, Resolved, UnknownKey};
 #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
 pub use decrypt::{has_decryptor, set_decryptor, Decryptor, Encryptor};
 pub use discovery::Search;
+pub use dynamic::Dynamic;
 pub use error::{Error, ErrorKind, Origin};
 pub use explain::{Contribution, Explanation};
 pub use group::{Commit, ReloadGroup, Reloadable};
@@ -292,6 +295,7 @@ pub use remote::{Fetched, Remote, RemoteSink, RemoteSource, RemoteWatch, Watchin
 pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};
+pub use value::Value;
 #[cfg(feature = "decrypt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
 pub use write::save_encrypted;

@@ -195,8 +195,7 @@ a reload landing mid-request shows one request two configurations.
 ```rust
 fn sane(config: &AppConfig) -> Result<(), dynamic_config::Error> {
     if config.port == 0 {
-        return Err(dynamic_config::Error::new(
-            dynamic_config::ErrorKind::Invalid,
+        return Err(dynamic_config::Error::invalid(
             "port 0 binds to a random port, which no one ever means",
         ));
     }

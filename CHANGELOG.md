@@ -25,6 +25,47 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-12
+
+### Added
+
+- **The figment review's fixes landed.** Top-level tables named `global`
+  or `default` are ordinary sections now: sections ride on a *namespaced*
+  profile, so figment's reserved-profile inheritance — which silently let
+  a `global` table override every section's own values, invisible to
+  `check` and `source_of` — has nothing to grab. And environment
+  provenance names the exact variable (`APP_DB_POOL__MAX_SIZE`), derived
+  from prefix, path and the nesting separator, instead of `APP_DB_*` —
+  in errors, `source_of`, snapshot provenance, `check` and `explain`
+  alike.
+- **`cache_encrypted(path, encryptor)` — the last-known-good cache,
+  encrypted at rest.** Full fidelity with nothing readable on disk:
+  written through the caller's `Encryptor`, recovered through the
+  installed `Decryptor` — the same door `encrypted_file` reads through.
+  Behind the `decrypt` feature.
+- **`dynamic-config-cli` is on crates.io** (`cargo install
+  dynamic-config-cli`), with `completions` and `man` subcommands — and
+  `explain` now redacts by default; `--show-values` opts in (the CLI's own
+  changelog carries the details).
+- **`Dynamic<T>` — the instance engine.** One configuration per *value*
+  rather than per type: its own snapshot, hooks, watcher and cache, with
+  the same builder carrying the sources. `current()` answers `Option`
+  instead of panicking, two instances of one type watch side by side, and
+  the type-level surface is untouched. The watcher registry now keys on
+  `WatchKey` (`Type` or `Instance`) to make that possible.
+- **`Value` and `Snapshot::to_value`.** The resolved tree as owned data —
+  seven shapes, no loader types in the signature, built by walking the
+  resolved tree rather than a JSON round trip — for boundaries that need
+  configuration as values: exporters, language bindings.
+
+### Breaking
+
+- `watch::spawn` / `watch::spawn_with` take a `WatchKey` where they took a
+  `TypeId` (`WatchKey::Type(id)` is the old behaviour), and the async and
+  grouped-commit builder surfaces (`load_async`, `init_async`, `prepare`)
+  require `T: Sync` — the builder can now carry a shared cell, and moving
+  it to a worker moves the cell with it.
+
 ## [0.3.0] — 2026-08-11
 
 ### Breaking
@@ -224,7 +265,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ctolon/dynamic-config/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ctolon/dynamic-config/compare/v0.0.1...v0.1.0

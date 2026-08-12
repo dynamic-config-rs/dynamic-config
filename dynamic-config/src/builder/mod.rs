@@ -51,6 +51,37 @@ use crate::source::{Format, LoadSpec, Source};
 /// An application-level validation hook: deserialized, not yet installed.
 type Validator<T> = fn(&T) -> Result<(), Error>;
 
+/// Where a successful load goes.
+///
+/// Two known shapes rather than an `Arc<dyn Fn>`: the generated `builder()`
+/// points at a `static` cell through a plain `fn` — no allocation, and the
+/// generated code keeps compiling unchanged — while a
+/// [`Dynamic`](crate::Dynamic) instance owns its cell and shares it here.
+pub(crate) enum Installer<T> {
+    /// The generated path: a `fn` that stores into the type's static cell.
+    Static(fn(T)),
+    /// The instance path: this builder installs into a shared cell.
+    Cell(std::sync::Arc<crate::cell::ConfigCell<T>>),
+}
+
+impl<T> Installer<T> {
+    pub(super) fn install(&self, value: T) {
+        match self {
+            Self::Static(install) => install(value),
+            Self::Cell(cell) => cell.store(value),
+        }
+    }
+}
+
+impl<T> Clone for Installer<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Static(install) => Self::Static(*install),
+            Self::Cell(cell) => Self::Cell(std::sync::Arc::clone(cell)),
+        }
+    }
+}
+
 /// Runtime-chosen sources for one configuration section.
 ///
 /// Methods take and return `self`, are infallible, and defer every check to
@@ -72,12 +103,16 @@ pub struct Builder<T> {
     profile_env: Option<String>,
     search: Option<(String, Vec<String>)>,
     cache: Option<(String, CacheMode)>,
+    /// `Some` routes the cache through this encryptor: written encrypted,
+    /// recovered through the installed [`Decryptor`](crate::Decryptor).
+    #[cfg(feature = "decrypt")]
+    cache_encryptor: Option<std::sync::Arc<dyn crate::Encryptor>>,
     /// `Some` even when empty: knowing there are *no* secret fields is
     /// knowledge, and only the generated `builder()` has it.
     secrets: Option<Vec<String>>,
     validate: Option<Validator<T>>,
     fields: &'static [&'static str],
-    install: Option<fn(T)>,
+    install: Option<Installer<T>>,
     /// Remembers this builder as the type's configuration on a successful
     /// `init`, so `source_of`, `check`, `prepare` and friends can answer
     /// later without being handed the builder again.
@@ -104,10 +139,12 @@ impl<T> Clone for Builder<T> {
             profile_env: self.profile_env.clone(),
             search: self.search.clone(),
             cache: self.cache.clone(),
+            #[cfg(feature = "decrypt")]
+            cache_encryptor: self.cache_encryptor.clone(),
             secrets: self.secrets.clone(),
             validate: self.validate,
             fields: self.fields,
-            install: self.install,
+            install: self.install.clone(),
             register: self.register,
             defaults: self.defaults,
             overrides: self.overrides,
@@ -138,6 +175,8 @@ impl<T: DeserializeOwned> Builder<T> {
             profile_env: None,
             search: None,
             cache: None,
+            #[cfg(feature = "decrypt")]
+            cache_encryptor: None,
             secrets: None,
             validate: None,
             fields: &[],
@@ -157,7 +196,22 @@ impl<T: DeserializeOwned> Builder<T> {
     #[doc(hidden)]
     #[must_use]
     pub fn with_installer(mut self, install: fn(T)) -> Self {
-        self.install = Some(install);
+        self.install = Some(Installer::Static(install));
+        self
+    }
+
+    /// The instance path: this builder installs into `cell`. What
+    /// [`Dynamic::new`](crate::Dynamic::new) wires; not public API.
+    ///
+    /// The registration callback is severed along with the installer: a
+    /// generated builder's `register` points at the *type's* `Configured`
+    /// slot, and an instance-owned builder landing there would cross-wire
+    /// the type surface — `Config::reload()` installing into the
+    /// `Dynamic`'s cell while `Config::current()` reads a static nothing
+    /// writes.
+    pub(crate) fn with_cell(mut self, cell: std::sync::Arc<crate::cell::ConfigCell<T>>) -> Self {
+        self.install = Some(Installer::Cell(cell));
+        self.register = None;
         self
     }
 
@@ -193,6 +247,12 @@ impl<T: DeserializeOwned> Builder<T> {
         self.remote = Some(remote);
         self.register = Some(register);
         self
+    }
+
+    /// The section key this builder reads.
+    #[must_use]
+    pub fn key(&self) -> &str {
+        &self.key
     }
 
     /// Application-level validation, run after deserializing and before
@@ -293,6 +353,41 @@ impl<T: DeserializeOwned> Builder<T> {
     #[must_use]
     pub fn cache(mut self, path: impl Into<String>, mode: CacheMode) -> Self {
         self.cache = Some((path.into(), mode));
+        // Last writer wins outright: a plaintext cache asked for after an
+        // encrypted one must not keep the encryptor and silently write a
+        // full encrypted document where redaction was requested.
+        #[cfg(feature = "decrypt")]
+        {
+            self.cache_encryptor = None;
+        }
+        self
+    }
+
+    /// A last-known-good cache, encrypted at rest.
+    ///
+    /// The fourth answer to the cache trade-off, and the one that collapses
+    /// it: full fidelity — recovery needs nothing from the live environment
+    /// — with nothing readable on disk. Written through `encryptor` after
+    /// every clean [`init`](Self::init) or watch reload; recovered through
+    /// the installed [`Decryptor`](crate::Decryptor), the same door
+    /// [`encrypted_file`](Self::encrypted_file) reads through, so one
+    /// `set_decryptor` covers both. The path carries the format under the
+    /// encryption suffix — `last.json.age` — exactly like an encrypted
+    /// source file.
+    ///
+    /// The recipient question that kept this out of the attribute era has
+    /// the builder's answer: the recipients live in the `encryptor` the
+    /// caller constructs, at the call site that owns them.
+    #[cfg(feature = "decrypt")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
+    #[must_use]
+    pub fn cache_encrypted(
+        mut self,
+        path: impl Into<String>,
+        encryptor: impl crate::Encryptor + 'static,
+    ) -> Self {
+        self.cache = Some((path.into(), CacheMode::Full));
+        self.cache_encryptor = Some(std::sync::Arc::new(encryptor));
         self
     }
 

@@ -69,7 +69,7 @@ fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
     struct DuplicateMarker;
 
     let spec = explicit_spec();
-    let key = TypeId::of::<DuplicateMarker>();
+    let key = super::WatchKey::Type(TypeId::of::<DuplicateMarker>());
 
     let first = spawn(
         key,
@@ -126,7 +126,7 @@ fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
 fn a_failed_spawn_frees_its_registration_for_a_retry() {
     struct FailedSpawnMarker;
 
-    let key = TypeId::of::<FailedSpawnMarker>();
+    let key = super::WatchKey::Type(TypeId::of::<FailedSpawnMarker>());
 
     static BAD: [crate::Source<'static>; 1] = [crate::Source::file(
         "/nonexistent-dynamic-config-test-dir/config.toml",

@@ -154,8 +154,22 @@ impl<T> ConfigCell<T> {
         hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static,
     ) -> HookGuard<T> {
         HookGuard {
-            cell: self,
             token: self.register(Arc::new(hook)),
+            cell: GuardCell::Static(self),
+        }
+    }
+
+    /// The scoped hook over an instance's shared cell; what
+    /// [`Dynamic::on_reload_scoped`](crate::Dynamic::on_reload_scoped)
+    /// hands out — the guard co-owns the cell, so it outliving the
+    /// `Dynamic` is safe rather than subtle.
+    pub(crate) fn on_reload_scoped_shared(
+        cell: &Arc<Self>,
+        hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static,
+    ) -> HookGuard<T> {
+        HookGuard {
+            token: cell.register(Arc::new(hook)),
+            cell: GuardCell::Shared(Arc::clone(cell)),
         }
     }
 
@@ -268,13 +282,23 @@ impl<T> ConfigCell<T> {
 /// Unregisters its hook when dropped. From
 /// [`on_reload_scoped`](ConfigCell::on_reload_scoped).
 pub struct HookGuard<T: 'static> {
-    cell: &'static ConfigCell<T>,
+    cell: GuardCell<T>,
     token: u64,
+}
+
+/// The cell a guard unregisters from: a type's `static`, or an instance's
+/// own — the same two shapes `Changes` distinguishes, for the same reason.
+enum GuardCell<T: 'static> {
+    Static(&'static ConfigCell<T>),
+    Shared(Arc<ConfigCell<T>>),
 }
 
 impl<T> Drop for HookGuard<T> {
     fn drop(&mut self) {
-        self.cell.unregister(self.token);
+        match &self.cell {
+            GuardCell::Static(cell) => cell.unregister(self.token),
+            GuardCell::Shared(cell) => cell.unregister(self.token),
+        }
     }
 }
 

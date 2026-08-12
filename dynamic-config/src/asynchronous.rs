@@ -156,15 +156,43 @@ impl Notify {
 /// }
 /// ```
 pub struct Changes<T: Send + Sync + 'static> {
-    cell: &'static crate::ConfigCell<T>,
+    cell: CellRef<T>,
     seen: u64,
+}
+
+/// The cell a `Changes` watches: a type's `static`, or an instance's own.
+///
+/// Two known shapes, so the type-keyed path stays a bare pointer — the
+/// `Arc` exists only where an instance's cell has to outlive the `Dynamic`
+/// that handed the `Changes` out.
+enum CellRef<T: 'static> {
+    Static(&'static crate::ConfigCell<T>),
+    Shared(std::sync::Arc<crate::ConfigCell<T>>),
+}
+
+impl<T> CellRef<T> {
+    fn get(&self) -> &crate::ConfigCell<T> {
+        match self {
+            Self::Static(cell) => cell,
+            Self::Shared(cell) => cell,
+        }
+    }
 }
 
 impl<T: Send + Sync + 'static> Changes<T> {
     pub(crate) fn new(cell: &'static crate::ConfigCell<T>) -> Self {
         Self {
             seen: cell.notify().generation(),
-            cell,
+            cell: CellRef::Static(cell),
+        }
+    }
+
+    /// A `Changes` over an instance's shared cell; what
+    /// [`Dynamic::changes`](crate::Dynamic::changes) hands out.
+    pub(crate) fn new_shared(cell: std::sync::Arc<crate::ConfigCell<T>>) -> Self {
+        Self {
+            seen: cell.notify().generation(),
+            cell: CellRef::Shared(cell),
         }
     }
 
@@ -204,7 +232,7 @@ impl<T: Send + Sync + 'static> Future for Changed<'_, T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Arc<T>> {
         let changes = &mut self.get_mut().changes;
-        let cell = changes.cell;
+        let cell = changes.cell.get();
         let notify = cell.notify();
 
         // The check-register-check protocol lives in `poll_with`; the load

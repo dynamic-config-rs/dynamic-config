@@ -76,7 +76,7 @@ fn kind_of(actual: &figment::error::Actual) -> &'static str {
 }
 
 /// Translates a figment error, preserving the key path and the source.
-pub(super) fn convert(error: figment::Error) -> Error {
+pub(super) fn convert(error: figment::Error, spec: &crate::source::LoadSpec<'_>) -> Error {
     use figment::error::Kind;
 
     let kind = match &error.kind {
@@ -104,7 +104,11 @@ pub(super) fn convert(error: figment::Error) -> Error {
         }
     }
 
-    let origin = error.metadata.as_ref().map_or(Origin::Unknown, origin_of);
+    let origin = refine_env(
+        error.metadata.as_ref().map_or(Origin::Unknown, origin_of),
+        path.iter().map(String::as_str),
+        spec.nest,
+    );
     let mut translated = Error::new(kind, message(&error)).with_origin(origin);
 
     // Rebuilt outermost-last so `Error::path()` reads root-first.
@@ -113,6 +117,51 @@ pub(super) fn convert(error: figment::Error) -> Error {
     }
 
     translated
+}
+
+/// Upgrades a prefix-grained environment origin to the exact variable.
+///
+/// figment attaches metadata per provider and the prefixed environment is
+/// one provider, so the trail ends at `APP_DB_*`. But the crate holds
+/// every ingredient the full name is made of — the prefix (in the origin
+/// itself), the key path the question is about, and the nesting separator
+/// — so the variable is *derived*: path segments uppercased and joined by
+/// the separator, appended to the prefix. A naming convention rather than
+/// a measurement, which is why `tests/loader.rs` pins it: if figment ever
+/// changes the convention, the drift shows up there and not in a bug
+/// report.
+///
+/// Derived, then *checked*: the composed name is only claimed when that
+/// variable actually exists in the environment. An aliased value carries
+/// the destination path while the variable that supplied it spells the
+/// old one — deriving from the path would name a variable nobody set —
+/// and the honest fallback for any composition the environment does not
+/// confirm is the prefix wildcard the trail already ended at.
+pub(super) fn refine_env<'a>(
+    origin: Origin,
+    path: impl Iterator<Item = &'a str>,
+    nest: &str,
+) -> Origin {
+    let Origin::Env(prefix) = &origin else {
+        return origin;
+    };
+    let Some(stem) = prefix.strip_suffix('*') else {
+        return origin;
+    };
+
+    let segments: Vec<String> = path.map(str::to_ascii_uppercase).collect();
+
+    if segments.is_empty() {
+        return origin;
+    }
+
+    let variable = format!("{stem}{}", segments.join(&nest.to_ascii_uppercase()));
+
+    if std::env::var_os(&variable).is_none() {
+        return origin;
+    }
+
+    Origin::Env(variable)
 }
 
 /// Pulls the prefix out of ``"`APP_DB_` environment variable(s)"``.

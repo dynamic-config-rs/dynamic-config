@@ -119,7 +119,27 @@ impl figment::Provider for Foreign<'_> {
     }
 
     fn data(&self) -> figment::Result<figment::value::Map<figment::Profile, Dict>> {
-        self.0.data()
+        // The documented contract stands — a provider produces its section
+        // as a profile named after the section — and the loader's internal
+        // namespacing is applied *for* it here, so the contract survives
+        // the prefix. `default` and `global` pass through untouched: for a
+        // provider author they are figment's own vocabulary, deliberately
+        // reachable through this one door.
+        Ok(self
+            .0
+            .data()?
+            .into_iter()
+            .map(|(profile, dict)| {
+                if profile == figment::Profile::Default || profile == figment::Profile::Global {
+                    (profile, dict)
+                } else {
+                    (
+                        figment::Profile::from(super::section_profile(profile.as_str().as_str())),
+                        dict,
+                    )
+                }
+            })
+            .collect())
     }
 
     fn profile(&self) -> Option<figment::Profile> {
@@ -325,7 +345,7 @@ impl<P: figment::Provider> figment::Provider for Sections<P> {
                     )));
                 };
 
-                sections.insert(figment::Profile::from(key), dict);
+                sections.insert(figment::Profile::from(super::section_profile(&key)), dict);
             }
         }
 

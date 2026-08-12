@@ -7,16 +7,14 @@ rust-version = "1.85"
 license.workspace = true
 description = "Command-line diagnostics for dynamic-config: explain a value, diff two documents"
 repository.workspace = true
-# Not on crates.io yet: Experimental, shipped in-repo. The release pipeline's
-# publish waves do not know it, and `cargo package --workspace` skips it.
-publish = false
+readme = "README.md"
 
 [[bin]]
 name = "dynamic-config"
 path = "src/main.rs"
 
 [dependencies]
-dynamic-config = { version = "=0.3.0", path = "../dynamic-config", features = [
+dynamic-config = { workspace = true, features = [
     "json",
     "toml",
     "yaml",
@@ -26,3 +24,7 @@ dynamic-config = { version = "=0.3.0", path = "../dynamic-config", features = [
 # statement about this crate's rust-version: a `^4.5` here would unify the
 # whole workspace's clap to 4.5, whose MSRV breaks the core's 1.71 row.
 clap = { version = "4.4", features = ["derive"] }
+# Completions and the man page: clap renders both from the same command
+# definition, one call each.
+clap_complete = "4.4"
+clap_mangen = "0.2"

@@ -30,8 +30,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.2.0", features = ["toml", "watch"] }
+dynamic-config = { version = "<version>", features = ["toml", "watch"] }
 ```
+
+`<version>` stands for the latest release —
+[crates.io](https://crates.io/crates/dynamic-config) names it, and every
+snippet in this book uses the same placeholder so the book cannot go stale
+one number at a time. Which features to turn on is the
+[Cargo Features](features.md) chapter's whole subject.
 
 The attribute declares — *this type is a configuration* — and generates its
 storage and accessors. The builder configures: which files, which prefix,

@@ -136,7 +136,7 @@ fn every_kind_of_source_is_attributed() {
 
 /// A value the environment supplied is attributed to it, not left unknown.
 #[test]
-fn an_environment_value_names_its_prefix() {
+fn an_environment_value_names_its_exact_variable() {
     use dynamic_config::{source_of, Origin};
 
     std::env::set_var("DCORIGIN_DB_PORT", "7777");
@@ -146,7 +146,9 @@ fn an_environment_value_names_its_prefix() {
 
     assert_eq!(
         source_of(&spec, "port").unwrap(),
-        Some(Origin::Env("DCORIGIN_DB_*".to_owned()))
+        // Derived, not measured: prefix + path, uppercased, joined by the
+        // nesting separator — the wildcard this used to dead-end at is gone.
+        Some(Origin::Env("DCORIGIN_DB_PORT".to_owned()))
     );
     assert_eq!(
         source_of(&spec, "host").unwrap(),
@@ -154,6 +156,47 @@ fn an_environment_value_names_its_prefix() {
         "a key the environment does not set still points at the file"
     );
 
+    // The error path names the same variable: a type failure inside the
+    // env layer points at what supplied the bad value. Same test, because
+    // this file allows itself exactly one env-touching test — `set_var`
+    // while another thread enumerates the environment is the race the
+    // header describes, whatever the prefixes are.
+    #[derive(Debug, Deserialize)]
+    struct Nested {
+        #[allow(dead_code)]
+        pool: Pool,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Pool {
+        #[allow(dead_code)]
+        max_size: u32,
+    }
+
+    std::env::set_var("DCORIGIN_DB_POOL__MAX_SIZE", "not-a-number");
+
+    let empty: [Source<'static>; 0] = [];
+    let nested_spec = LoadSpec::new("db", &empty).with_env("DCORIGIN_");
+
+    let error = load::<Nested>(&nested_spec).expect_err("a string is not a u32");
+    assert!(
+        error.to_string().contains("DCORIGIN_DB_POOL__MAX_SIZE"),
+        "the error should name the exact variable: {error}"
+    );
+
+    // The question path agrees, through the builder surface.
+    let origin = dynamic_config::Builder::<Nested>::new("db")
+        .env("DCORIGIN_")
+        .source_of("pool.max_size");
+    assert_eq!(
+        format!(
+            "{}",
+            origin.expect("resolvable").expect("the env supplies it")
+        ),
+        "from DCORIGIN_DB_POOL__MAX_SIZE"
+    );
+
+    std::env::remove_var("DCORIGIN_DB_POOL__MAX_SIZE");
     std::env::remove_var("DCORIGIN_DB_PORT");
 }
 
@@ -261,4 +304,53 @@ fn another_top_level_scalar_says_what_the_rule_is() {
 
     assert!(error.to_string().contains("_comment"), "{error}");
     assert!(error.to_string().contains("section"), "{error}");
+}
+
+/// figment reserves the profile names `global` and `default`, and sections
+/// used to ride on profiles unprefixed — so an ordinary `global` table in a
+/// shared file silently overrode every section's own values, and a
+/// `default` table gap-filled them — silently, and invisibly to `check`
+/// and `source_of`, which is what made it a bug and not a feature. The
+/// namespace
+/// is escaped now; these pin all four corners of the fix.
+#[test]
+fn a_global_table_is_an_ordinary_section_and_bleeds_into_nothing() {
+    #[derive(Debug, Deserialize)]
+    struct Db {
+        host: String,
+    }
+
+    let text = r#"{"db": {"host": "own"}, "global": {"host": "evil"}}"#;
+    let sources = [Source::inline(text, Format::Json)];
+
+    // The section keeps its own value…
+    let own: Db = load(&LoadSpec::new("db", &sources)).expect("db loads");
+    assert_eq!(
+        own.host, "own",
+        "a `global` table must not override a section"
+    );
+
+    // …and `global` is reachable as a plain section of its own.
+    let named: Db = load(&LoadSpec::new("global", &sources)).expect("`global` is a section name");
+    assert_eq!(named.host, "evil");
+}
+
+#[test]
+fn a_default_table_fills_no_gaps_and_is_an_ordinary_section() {
+    #[derive(Debug, Deserialize)]
+    struct Db {
+        host: String,
+    }
+
+    let text = r#"{"db": {}, "default": {"host": "filler"}}"#;
+    let sources = [Source::inline(text, Format::Json)];
+
+    // A field the section does not set stays missing…
+    let error = load::<Db>(&LoadSpec::new("db", &sources))
+        .expect_err("a `default` table must not gap-fill a section");
+    assert_eq!(error.kind(), ErrorKind::Missing);
+
+    // …and `default` is reachable as a plain section of its own.
+    let named: Db = load(&LoadSpec::new("default", &sources)).expect("`default` is a section name");
+    assert_eq!(named.host, "filler");
 }

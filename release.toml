@@ -38,7 +38,7 @@ pre-release-commit-message = "release {{version}}"
 # The hook runs from each crate's own directory, so the script is reached
 # through the repository root, not a relative path — `just` already finds
 # the root justfile by walking up.
-pre-release-hook = ["bash", "-c", "just check && \"$(git rev-parse --show-toplevel)\"/scripts/rotate-root-changelog.sh"]
+pre-release-hook = ["bash", "-c", "just check && root=\"$(git rev-parse --show-toplevel)\" && \"$root\"/scripts/rotate-root-changelog.sh && \"$root\"/scripts/sync-readme-versions.sh"]
 
 # Applied to every package, so each companion crate's own changelog gets the
 # same treatment as the workspace one.

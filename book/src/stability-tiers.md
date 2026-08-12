@@ -36,3 +36,14 @@ a release may rename, restructure or remove things with no deprecation cycle,
 noted in the changelog but not negotiated there. Pin an exact version if you
 depend on one. The path out of Experimental is use: a store crate whose surface
 has stopped moving gets promoted to Beta.
+
+## The `figment` feature is a coupling, on purpose
+
+With the `figment` feature on, `Source::provider` and the `pub use
+figment` re-export make figment's own API part of this crate's public
+surface — so a figment major release forces either a major release here
+or a compatibility shim, and 1.0 of this crate will not extend its
+stability promise across that boundary. That is the feature's price and
+its point: it exists precisely so the long tail of sources this crate
+will never ship stays reachable without forking. With the feature off —
+the default — a figment major bump is not a breaking change here.

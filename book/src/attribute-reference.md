@@ -110,6 +110,7 @@ with an error saying to start from the generated `builder()`.
 | `env_file(path)` | A `.env` file read as the environment layer, just below the real thing. Needs the `dotenv` feature at load time. |
 | `profile_env(variable)` | The environment variable naming the active profile, as in `profile_env("APP_ENV")`. |
 | `cache(path, mode)` | A last-known-good cache: written after every clean `init` or watch reload, recovered from when the sources will not load. `mode` is a [`CacheMode`](persistence.md#cache-modes). |
+| `cache_encrypted(path, encryptor)` | The cache, encrypted at rest: full fidelity through the caller's `Encryptor`, recovered through the installed `Decryptor`. Path carries the format under the suffix — `last.json.age`. Needs the `decrypt` feature. Last cache call wins, either direction. |
 | `validate(f)` | Application-level validation, `fn(&T) -> Result<(), Error>`, run after deserializing and before anything installs. A reload it refuses keeps the previous snapshot. |
 
 ### Loading and installing

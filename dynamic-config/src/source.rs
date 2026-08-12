@@ -182,6 +182,11 @@ impl<'a> Source<'a> {
     /// mapping of top-level keys to sections. A provider does not: what it
     /// yields is merged as figment sees it, so it has to produce the section as
     /// a profile — `.nested()` on a figment `Data` provider does exactly that.
+    /// The loader namespaces section profiles internally (so a section named
+    /// `global` cannot collide with figment's reserved profiles); the prefix
+    /// is applied *for* the provider on the way in, and `default` / `global`
+    /// pass through untouched — for a provider author they are figment's own
+    /// vocabulary, deliberately reachable through this one door.
     ///
     /// **Provenance.** `source_of` and every error report the provider's own
     /// metadata name. A provider that describes itself badly produces a

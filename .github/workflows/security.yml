@@ -66,6 +66,21 @@ jobs:
             echo "::error file=dynamic-config-cli/src/main.rs::missing #![forbid(unsafe_code)]"
             exit 1
           fi
+          # Tests, examples and benches are separate crates, so the lib's
+          # `forbid` does not reach them — the whole no-unsafe claim would
+          # be one bench file away from fiction if nothing looked. Exactly
+          # one exemption exists: the allocation profile's counting
+          # allocator, because `GlobalAlloc` is an unsafe trait and there
+          # is no safe way to hook the allocator. It never ships, and its
+          # unsafe is two delegating lines audited in place.
+          stray=$(grep -rln 'unsafe' \
+              dynamic-config/tests dynamic-config/benches dynamic-config/examples \
+              dynamic-config-*/tests dynamic-config-*/examples 2>/dev/null \
+            | grep -v 'benches/alloc_profile.rs' || true)
+          if [ -n "$stray" ]; then
+            echo "::error::unsafe outside the audited exemption: $stray"
+            exit 1
+          fi
 
   secrets-in-diagnostics:
     name: secrets stay out of diagnostics

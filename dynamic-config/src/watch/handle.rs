@@ -1,10 +1,10 @@
 //! Starting a watcher, and the handle that stops it.
 //!
-//! The registry (one watcher per type, keyed by `TypeId`), the spawn that
-//! registers *before* returning so no edit slips through the gap, the
-//! rollback that frees the name when a spawn fails partway, and the
-//! directory-level watches — directories, not files, because editors and
-//! atomic saves replace the inode.
+//! The registry (one watcher per [`WatchKey`] — a type, or one `Dynamic`
+//! instance), the spawn that registers *before* returning so no edit slips
+//! through the gap, the rollback that frees the key when a spawn fails
+//! partway, and the directory-level watches — directories, not files,
+//! because editors and atomic saves replace the inode.
 
 use std::any::TypeId;
 use std::collections::BTreeMap;
@@ -21,11 +21,25 @@ use crate::log::warning;
 use super::debounce::run;
 use super::{WatchMode, Watched};
 
-/// Types that already have a watcher, keyed by [`TypeId`] — the one identity
-/// that survives generics. The display name is kept only for messages: keyed
-/// by name, `Db<Postgres>` and `Db<Mysql>` both stringify to `"Db"`, and the
-/// second `start_watch()` silently watched nothing.
-pub(super) static STARTED: Mutex<BTreeMap<TypeId, &'static str>> = Mutex::new(BTreeMap::new());
+/// What a watcher is watched *as*: one per type, or one per instance.
+///
+/// A type's identity is its [`TypeId`] — the one identity that survives
+/// generics; the display name is kept only for messages, because keyed by
+/// name `Db<Postgres>` and `Db<Mysql>` both stringify to `"Db"` and the
+/// second `start_watch()` would silently watch nothing. A
+/// [`Dynamic`](crate::Dynamic) instance has no usable `TypeId` — every
+/// `Dynamic<Value>` is the same type — so it carries a process-unique
+/// number instead, allocated at construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum WatchKey {
+    /// One watcher per configuration *type* — the attribute's contract.
+    Type(TypeId),
+    /// One watcher per [`Dynamic`](crate::Dynamic) *instance*.
+    Instance(u64),
+}
+
+/// Configurations that already have a watcher, by [`WatchKey`].
+pub(super) static STARTED: Mutex<BTreeMap<WatchKey, &'static str>> = Mutex::new(BTreeMap::new());
 
 /// Keeps a watcher alive. Dropping it stops watching.
 ///
@@ -40,7 +54,7 @@ pub(super) static STARTED: Mutex<BTreeMap<TypeId, &'static str>> = Mutex::new(BT
 #[must_use = "dropping the handle stops the watcher; bind it, or call `.detach()` \
               to watch for the rest of the process"]
 pub struct WatchHandle {
-    key: TypeId,
+    key: WatchKey,
     name: &'static str,
     /// `None` only while `detach` is dismantling the handle.
     watcher: Option<Backend>,
@@ -136,7 +150,7 @@ impl std::fmt::Debug for WatchHandle {
 /// directory that fails while others succeed is reported and skipped.
 ///
 pub fn spawn(
-    key: TypeId,
+    key: WatchKey,
     name: &'static str,
     watched: Watched,
     debounce: Duration,
@@ -152,7 +166,7 @@ pub fn spawn(
 /// As [`spawn`].
 ///
 pub fn spawn_with(
-    key: TypeId,
+    key: WatchKey,
     name: &'static str,
     watched: Watched,
     debounce: Duration,
@@ -223,7 +237,7 @@ pub fn spawn_with(
 /// Every `?` between the insertion and the end of `spawn_with` — the backend,
 /// the directory watches, the thread — runs through this on the way out.
 struct Registered {
-    key: TypeId,
+    key: WatchKey,
     armed: bool,
 }
 

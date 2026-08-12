@@ -14,7 +14,7 @@ mod relevance;
 #[cfg(test)]
 mod tests;
 
-pub use handle::{spawn, spawn_with, WatchHandle};
+pub use handle::{spawn, spawn_with, WatchHandle, WatchKey};
 
 use std::path::PathBuf;
 use std::time::Duration;

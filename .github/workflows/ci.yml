@@ -271,9 +271,10 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       # Not a regression gate — a shared runner is too noisy for that. It keeps
-      # the benchmark compiling and the README's figures reproducible by
-      # anyone who wants to check them.
-      - run: cargo bench -p dynamic-config --features json
+      # the benchmarks compiling and the figures reproducible by anyone who
+      # wants to check them. `--quick` trades criterion's full sampling for a
+      # bounded run; the hand-rolled targets ignore the flag.
+      - run: cargo bench -p dynamic-config --features json -- --quick
 
   msrv:
     strategy:
@@ -431,15 +432,19 @@ jobs:
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
         with:
           tool: cargo-llvm-cov
-      # A report, not a gate: a threshold that fights refactoring teaches
-      # people to game the number. The trend lives in the job summaries; the
-      # lcov artifact feeds anything that wants detail.
+      # A floor, not a target: the number stabilised at ~87% line coverage
+      # (the roadmap's condition for gating on it), and 80 leaves enough
+      # headroom that ordinary refactoring never fights the gate — what it
+      # catches is a wholesale drop, a suite accidentally stopping running.
+      # Chasing the number *up* is still explicitly not the game; the trend
+      # lives in the job summaries and the lcov artifact feeds the detail.
       - run: >
           cargo llvm-cov --workspace --features full
           --exclude dynamic-config-etcd --exclude dynamic-config-consul
           --exclude dynamic-config-nats --exclude dynamic-config-vault
           --exclude dynamic-config-redis --exclude dynamic-config-s3
           --exclude dynamic-config-firestore --exclude dynamic-config-embedded
+          --fail-under-lines 80
           --lcov --output-path lcov.info
       - name: summary
         run: |
@@ -482,6 +487,7 @@ jobs:
       - loader
       - loom
       - bench
+      - coverage
       - msrv
       - docs
       - docs-links

@@ -159,7 +159,10 @@ impl Provider for BindingProvider {
         }
 
         let mut map = figment::value::Map::new();
-        map.insert(Profile::from(self.key.clone()), values);
+        map.insert(
+            Profile::from(crate::loader::section_profile(&self.key)),
+            values,
+        );
 
         Ok(map)
     }

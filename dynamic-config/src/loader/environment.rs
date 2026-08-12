@@ -31,7 +31,7 @@ pub(super) fn environment(prefix: &str, key: &str, nest: &str, allow_empty: bool
         }
     }
 
-    env.split(nest).profile(key)
+    env.split(nest).profile(super::section_profile(key))
 }
 
 /// The spellings strict mode refuses: they read like booleans (or like

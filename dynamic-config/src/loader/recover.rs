@@ -27,7 +27,7 @@ pub(crate) fn recover<T: DeserializeOwned>(
 ) -> Result<(T, Snapshot), Error> {
     let mut figment = Figment::new().merge(Cached {
         values: cached.values().clone(),
-        profile: figment::Profile::from(spec.key),
+        profile: figment::Profile::from(super::section_profile(spec.key)),
     });
 
     // The same order as `build()`, deliberately: `.env` files first, the real
@@ -66,13 +66,13 @@ pub(crate) fn recover<T: DeserializeOwned>(
         figment = figment.merge(overrides.provider(spec.key, OVERRIDES_NAME));
     }
 
-    let figment = apply_aliases(figment, spec).select(spec.key);
+    let figment = apply_aliases(figment, spec).select(super::section_profile(spec.key));
 
     // The resolved tree rides along so the caller can seed the diff baseline:
     // without it, the first successful reload after a recovery had nothing to
     // compare against and reported no changes — untrue, and at the worst time.
-    let resolved: Dict = figment.extract().map_err(convert)?;
-    let config: T = figment.extract().map_err(convert)?;
+    let resolved: Dict = figment.extract().map_err(|error| convert(error, spec))?;
+    let config: T = figment.extract().map_err(|error| convert(error, spec))?;
 
     Ok((config, Snapshot::new(resolved)))
 }

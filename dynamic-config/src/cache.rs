@@ -183,6 +183,73 @@ pub(crate) fn write(
     crate::write::save_dict(&document, path, format, CACHED)
 }
 
+/// [`write`], full fidelity, through an [`Encryptor`](crate::Encryptor).
+///
+/// Always the whole document — encryption at rest is what collapses the
+/// full/redacted trade-off, which is the mode's whole reason to exist —
+/// with the same marker a `full` cache carries, so the read side after
+/// decryption is the ordinary read side.
+#[cfg(feature = "decrypt")]
+pub(crate) fn write_encrypted(
+    snapshot: &Snapshot,
+    path: &Path,
+    encryptor: &dyn crate::Encryptor,
+) -> Result<(), Error> {
+    let format = encrypted_format_of(path)?;
+
+    let mut document = snapshot.values().clone();
+    let mut marker = Dict::new();
+    marker.insert("version".to_owned(), Value::from(1));
+    marker.insert("mode".to_owned(), Value::from("full"));
+    document.insert(MARKER.to_owned(), Value::from(marker));
+
+    crate::write::save_dict_encrypted(&document, path, format, CACHED, encryptor)
+}
+
+/// [`read`], decrypting through the installed
+/// [`Decryptor`](crate::Decryptor) first — the same door
+/// `encrypted_file(..)` reads through, so one installation covers both.
+#[cfg(feature = "decrypt")]
+pub(crate) fn read_encrypted(path: &Path, current: Option<&Snapshot>) -> Result<Recovery, Error> {
+    let format = encrypted_format_of(path)?;
+
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Recovery::Absent),
+        Err(error) => {
+            return Err(Error::new(ErrorKind::Io, error.to_string())
+                .with_origin(Origin::File(path.to_owned())))
+        }
+    };
+
+    // `decrypt` hands back a zeroizing `Plaintext` and has already refused
+    // non-UTF-8, naming the path.
+    let plaintext = crate::decrypt::decrypt(&bytes, &path.display().to_string())?;
+
+    parse_cache(plaintext.text(), format, path, current)
+}
+
+/// The format under the encryption suffix: `last.json.age` is JSON.
+#[cfg(feature = "decrypt")]
+fn encrypted_format_of(path: &Path) -> Result<crate::Format, Error> {
+    let name = path
+        .to_str()
+        .ok_or_else(|| Error::new(ErrorKind::Io, "the cache path is not valid UTF-8"))?;
+
+    let Some((inner, _suffix)) = crate::source::inner_name(name) else {
+        return Err(Error::new(
+            ErrorKind::Backend,
+            format!(
+                "an encrypted cache path carries the format under the \
+                 encryption suffix — `last.json.{}`, not `{name}`",
+                crate::source::ENCRYPTED_SUFFIX
+            ),
+        ));
+    };
+
+    format_of(Path::new(inner))
+}
+
 /// Reads whatever `path` holds.
 ///
 /// # Errors
@@ -201,7 +268,18 @@ pub(crate) fn read(path: &Path, current: Option<&Snapshot>) -> Result<Recovery, 
         }
     };
 
-    let sources = [crate::Source::inline(&text, format)];
+    parse_cache(&text, format, path, current)
+}
+
+/// The shared tail of [`read`] and [`read_encrypted`]: text to `Recovery`.
+fn parse_cache(
+    text: &str,
+    format: crate::Format,
+    path: &Path,
+    current: Option<&Snapshot>,
+) -> Result<Recovery, Error> {
+    let _ = path;
+    let sources = [crate::Source::inline(text, format)];
     let cached = crate::loader::snapshot(&crate::LoadSpec::new(CACHED, &sources))?;
 
     // The marker says what the document is. Files written before the marker

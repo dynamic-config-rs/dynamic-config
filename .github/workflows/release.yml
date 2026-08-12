@@ -149,7 +149,7 @@ jobs:
           for crate in dynamic-config-etcd dynamic-config-consul \
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
-                       dynamic-config-firestore; do
+                       dynamic-config-firestore dynamic-config-cli; do
             publish "$crate"
           done
         env:
