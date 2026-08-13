@@ -240,6 +240,11 @@ jobs:
       && (needs.decide.outputs.release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    env:
+      # One protoc for every wheel this job builds — the container's, the
+      # macOS runner's and the Windows runner's. Pinned rather than
+      # "whatever the index has today": see the installs below.
+      PROTOC_VERSION: "29.3"
     strategy:
       # One platform failing must not strand the others: PyPI takes wheels
       # as they arrive, and a rerun uploads only what is missing.
@@ -306,13 +311,39 @@ jobs:
       # Every other job in this repository installs it with `apt-get`; that
       # would not work here, because the Linux rows of this matrix build
       # *inside* the manylinux container and a package installed on the
-      # runner is not in it. So the two halves are installed separately:
-      # `before-script-linux` runs in the container, and the macOS and
-      # Windows rows are the runner itself.
+      # runner is not in it. So it is installed twice, in two places:
+      # `before-script-linux` runs in the container, and the two steps below
+      # run on the runner itself.
+      #
+      # **From the project's own release, pinned, rather than from a package
+      # manager.** The 0.6 release found out why: `choco install protoc`
+      # answered "the package was not found with the source(s) listed" and
+      # took the Windows wheel down with it, and the feed was returning 504
+      # for that name an hour later. A wheel wave is not the place to
+      # discover that somebody else's index is having an afternoon — and a
+      # pinned binary also means every platform's wheels are built by the
+      # *same* compiler, which is a property worth having for its own sake.
       - if: runner.os == 'macOS'
-        run: brew install protobuf
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "${RUNNER_TEMP}/protoc.zip" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-osx-universal_binary.zip"
+          sudo unzip -o "${RUNNER_TEMP}/protoc.zip" 'bin/protoc' 'include/*' -d /usr/local
+          protoc --version
       - if: runner.os == 'Windows'
-        run: choco install --no-progress -y protoc
+        shell: pwsh
+        run: |
+          $version = $env:PROTOC_VERSION
+          $url = "https://github.com/protocolbuffers/protobuf/releases/download/v$version/protoc-$version-win64.zip"
+          $zip = Join-Path $env:RUNNER_TEMP 'protoc.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'protoc'
+
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          # `GITHUB_PATH` rather than `$env:PATH`: each step is its own
+          # shell, and the build below is the step that needs it.
+          Join-Path $dir 'bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & (Join-Path $dir 'bin\protoc.exe') --version
       - uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target/python-remote
@@ -342,7 +373,7 @@ jobs:
               apt-get update && apt-get install -y protobuf-compiler unzip
             fi
             if ! protoc --version 2>/dev/null | grep -qE 'libprotoc (3|[1-9][0-9])'; then
-              version=29.3
+              version=${{ env.PROTOC_VERSION }}
               case "$(uname -m)" in
                 aarch64|arm64) arch=aarch_64 ;;
                 *) arch=x86_64 ;;
