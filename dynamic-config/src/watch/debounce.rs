@@ -1,6 +1,7 @@
 //! The background loop: block on a relevant event, wait out the flurry,
 //! reload once.
 
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -12,7 +13,7 @@ use crate::error::Error;
 use crate::log::info;
 use crate::log::warning;
 
-use super::relevance::is_relevant;
+use super::relevance::relevant_path;
 use super::Watched;
 
 /// Pause after the debounce window, before the files are read back.
@@ -26,17 +27,17 @@ pub(super) fn run(
     name: &'static str,
     watched: &Watched,
     debounce: Duration,
-    reload: impl Fn() -> Result<Option<String>, Error>,
+    reload: impl Fn(&Path) -> Result<Option<String>, Error>,
     receiver: &mpsc::Receiver<notify::Result<Event>>,
 ) {
     loop {
-        match collect_relevant(receiver, name, debounce, watched) {
-            Collected::Dirty => {}
+        let trigger = match collect_relevant(receiver, name, debounce, watched) {
+            Collected::Dirty(path) => path,
             Collected::Disconnected => {
                 // The watcher was dropped, so no further events can arrive.
                 return;
             }
-        }
+        };
 
         thread::sleep(ATOMIC_SAVE_GRACE);
 
@@ -50,7 +51,7 @@ pub(super) fn run(
             .entered();
 
         let started = std::time::Instant::now();
-        let outcome = reload();
+        let outcome = reload(&trigger);
         let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         // Under `tracing`, the outcome and duration are structured *fields*
@@ -90,8 +91,9 @@ pub(super) fn run(
 
 /// What one round of event collection concluded.
 enum Collected {
-    /// A configured file changed; reload.
-    Dirty,
+    /// A configured file changed; reload. Carries the path whose event
+    /// opened the window — see [`collect_relevant`].
+    Dirty(PathBuf),
     /// The channel closed; the watch is over.
     Disconnected,
 }
@@ -105,8 +107,12 @@ enum Collected {
 ///   directory — a log file, a state file — both filled a growing `Vec` and
 ///   kept pushing the quiet-period out. An irrelevant event now costs a
 ///   comparison and is gone.
-/// - **No batch at all.** One dirty flag: whether a configured file changed
-///   is one bit, and a bit cannot grow.
+/// - **No batch at all.** One dirty flag, and one path with it: whether a
+///   configured file changed is one bit, and a bit cannot grow. The path is
+///   the *first* relevant event's, kept so the reload can say what triggered
+///   it; the later ones are deliberately dropped rather than collected,
+///   because a Kubernetes remount writes a fresh timestamped directory name
+///   every time and a set of those grows without bound.
 /// - **`max_wait` bounds the debounce.** The quiet-period restarts on every
 ///   relevant event, which is the point of debouncing — but under a
 ///   sustained storm of writes it used to restart forever, and the reload
@@ -119,14 +125,17 @@ fn collect_relevant(
     watched: &Watched,
 ) -> Collected {
     // Phase 1: sleep until something we care about happens.
-    loop {
+    let trigger = loop {
         match receiver.recv() {
-            Ok(Ok(event)) if is_relevant(&event, watched) => break,
-            Ok(Ok(_)) => {}
+            Ok(Ok(event)) => {
+                if let Some(path) = relevant_path(&event, watched) {
+                    break path.to_path_buf();
+                }
+            }
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
             Err(mpsc::RecvError) => return Collected::Disconnected,
         }
-    }
+    };
 
     // Phase 2: wait out the flurry an editor save produces, but not forever.
     let deadline = std::time::Instant::now() + debounce.saturating_mul(4);
@@ -138,19 +147,20 @@ fn collect_relevant(
         let target = quiet_until.min(deadline);
 
         if now >= target {
-            return Collected::Dirty;
+            return Collected::Dirty(trigger);
         }
 
         match receiver.recv_timeout(target - now) {
             // A relevant event restarts the quiet period (up to the deadline);
             // an irrelevant one merely waits out the remainder — a neighbour's
             // churn must not delay our reload.
-            Ok(Ok(event)) if is_relevant(&event, watched) => {
-                quiet_until = std::time::Instant::now() + debounce;
+            Ok(Ok(event)) => {
+                if relevant_path(&event, watched).is_some() {
+                    quiet_until = std::time::Instant::now() + debounce;
+                }
             }
-            Ok(Ok(_)) => {}
             Ok(Err(error)) => warning!("{name}: watcher error: {error}"),
-            Err(mpsc::RecvTimeoutError::Timeout) => return Collected::Dirty,
+            Err(mpsc::RecvTimeoutError::Timeout) => return Collected::Dirty(trigger),
             Err(mpsc::RecvTimeoutError::Disconnected) => return Collected::Disconnected,
         }
     }

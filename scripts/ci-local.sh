@@ -95,6 +95,9 @@ just test
 step "the loom models, every interleaving"
 just loom
 
+step "the shuttle models, the residue loom cannot reach"
+just shuttle
+
 step "the scripted-server mocks"
 just mocks
 

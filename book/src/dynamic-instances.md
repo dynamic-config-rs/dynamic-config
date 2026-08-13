@@ -14,11 +14,17 @@ use dynamic_config::{Builder, Dynamic};
 let acme  = Dynamic::new(Builder::<Tenant>::new("tenant").file("acme.json"));
 let umbra = Dynamic::new(Builder::<Tenant>::new("tenant").file("umbra.json"));
 
-acme.init()?;
+let a = acme.init_and_current()?;                     // Arc<Tenant>
 umbra.init()?;
-
-let a = acme.current().expect("initialised above");   // Arc<Tenant>
 ```
+
+`init_and_current()` is `init()` with the snapshot it installed still in
+hand. It is worth more here than on the type surface: an instance's
+`current()` is an `Option`, so the split form ends in an `expect` whose
+message only restates the line above it. What comes back is *that*
+install's snapshot — a reload landing a moment later moves `current()` and
+leaves this one alone, which is what "the configuration this program
+started with" means.
 
 The builder inside is the [same builder](builder-tour.md) with every
 capability intact — files, discovery, the environment, profiles,
@@ -47,9 +53,14 @@ let _watch_a = acme.watch(Duration::from_millis(250))?;
 let _watch_b = umbra.watch(Duration::from_millis(250))?;   // side by side
 ```
 
-**Hooks and `changes()` are per instance.** `on_reload` /
-`on_reload_scoped` fire only for the instance they were registered on, and
-`changes()` is woken only by its own installs — with the same
+**Hooks, `status()` and `changes()` are per instance.** `on_reload` /
+`on_reload_scoped` — and their event forms `on_reload_with` /
+`on_reload_with_scoped`, which carry the
+[reload reason](reload-lifecycle.md#why-a-reload-happened) — fire only for
+the instance they were registered on;
+[`status()`](reload-lifecycle.md#operating-a-configuration) counts only its
+own installs and failures; and `changes()` is woken only by its own
+installs — with the same
 first-install contract as the type surface: a handle taken before `init()`
 resolves on the first install, so it doubles as "wake me when this
 configuration exists". The handle co-owns the storage, so it outliving the

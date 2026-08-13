@@ -102,6 +102,12 @@ Detection is skipped entirely when any field is `#[serde(flatten)]`: a flattened
 field legitimately absorbs keys the outer struct never names, and reporting
 those as typos would be worse than reporting nothing.
 
+Where it is skipped — a flattened field, a bare `Builder::new`, a
+[schemaless configuration](schemaless.md) — the report says so:
+`Report::unknown_checked` is `false`, and the rendering carries
+`unknown keys: not checked (no field list)`. An empty list and a list
+nobody built mean opposite things, and only one of them is an all-clear.
+
 ## Where did this value come from?
 
 ```rust

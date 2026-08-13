@@ -1,0 +1,23 @@
+# Twenty keys under one section, which is a realistic small service's
+# configuration and the document `reload_twenty_keys` walks end to end.
+[db]
+host = "localhost"
+port = 5432
+user = "service"
+database = "orders"
+schema = "public"
+sslmode = "require"
+application_name = "orders-api"
+connect_timeout = 5
+statement_timeout = 30
+idle_timeout = 600
+max_lifetime = 1800
+min_connections = 1
+max_connections = 32
+acquire_timeout = 3
+test_before_acquire = true
+log_statements = false
+log_slow_after = 250
+retry_attempts = 3
+retry_backoff = 100
+prepared_statements = true

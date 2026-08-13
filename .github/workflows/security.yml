@@ -54,18 +54,24 @@ jobs:
                        dynamic-config-etcd dynamic-config-consul \
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
-                       dynamic-config-firestore dynamic-config-embedded; do
+                       dynamic-config-firestore dynamic-config-embedded \
+                       dynamic-config-store-core dynamic-config-git \
+                       dynamic-config-server; do
             if ! grep -q '#!\[forbid(unsafe_code)\]' "$crate/src/lib.rs"; then
               echo "::error file=$crate/src/lib.rs::missing #![forbid(unsafe_code)]"
               exit 1
             fi
           done
-          # The CLI is a binary: its root is main.rs, so it gets its own line
-          # rather than a silent exemption from the loop above.
-          if ! grep -q '#!\[forbid(unsafe_code)\]' dynamic-config-cli/src/main.rs; then
-            echo "::error file=dynamic-config-cli/src/main.rs::missing #![forbid(unsafe_code)]"
-            exit 1
-          fi
+          # The CLI and the server are binaries too: their roots are main.rs,
+          # so they get their own lines rather than a silent exemption from
+          # the loop above.
+          for root in dynamic-config-cli/src/main.rs \
+                      dynamic-config-server/src/main.rs; do
+            if ! grep -q '#!\[forbid(unsafe_code)\]' "$root"; then
+              echo "::error file=$root::missing #![forbid(unsafe_code)]"
+              exit 1
+            fi
+          done
           # The Python extension cannot say `#![forbid(unsafe_code)]`: PyO3's
           # `#[pyclass]` and `#[pymethods]` expand to `unsafe impl`, which is
           # the binding machinery rather than this repository's code. What

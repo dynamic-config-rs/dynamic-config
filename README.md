@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.5.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.6.0", features = ["toml", "watch"] }
 ```
 
 ```rust
@@ -61,14 +61,17 @@ runtime data, and it lives in runtime code.
 
 ## Why this one
 
-- **Reads are lock-free.** `current()` is an atomic pointer load — ~17 ns —
-  so configuration can be read per request without a second thought.
+- **Reads are lock-free and allocation-free.** `current()` acquires an
+  `arc-swap` guard — **85 instructions**, ~20 ns, and zero allocations per
+  100 000 reads, all three measured rather than asserted — so configuration
+  can be read per request without a second thought.
 - **A bad edit cannot take the process down.** A file that no longer parses
   or validates degrades to "no change"; the previous snapshot keeps serving,
   and the error is reported.
 - **Layers with provenance.** `defaults < discovered < files < remote <
-  .env < environment < bindings < flags < overrides` — and `source_of("key")`
-  names the file, variable or store a value actually came from.
+  secrets_dir < .env < environment < bindings < flags < overrides` — and
+  `source_of("key")` names the file, variable or store a value actually
+  came from.
 - **Secrets stay out of diagnostics.** Errors, diffs, reports and `{:?}`
   print paths and types, never values — enforced by its own test suite.
 - **Any runtime, or none.** The async surface is a `Future` and a thread;
@@ -95,9 +98,15 @@ schema export, units, the last-known-good cache, testing patterns — lives in
 | [`dynamic-config-vault`](dynamic-config-vault) | Vault KV v2, version polling | Experimental |
 | [`dynamic-config-s3`](dynamic-config-s3) | S3 & compatibles, ETag polling — needs tokio | Experimental |
 | [`dynamic-config-firestore`](dynamic-config-firestore) | Firestore REST, `updateTime` polling | Experimental |
+| [`dynamic-config-git`](dynamic-config-git) | a git repository, shallow single-ref fetch — GitHub, GitLab, Azure DevOps | Experimental |
 | [`dynamic-config-embedded`](dynamic-config-embedded) | the same shape for `no_std` targets | Experimental |
+| [`dynamic-config-server`](dynamic-config-server) | serves configuration over HTTP, per-caller authorisation | Experimental |
 | [`dynamic-config-cli`](dynamic-config-cli) | `explain` and `diff` on the command line — `cargo install dynamic-config-cli` | Experimental |
 | [`dynamic-config-python`](dynamic-config-python) | Python bindings — `pip install dynamic-config-py`, Pydantic validates | Experimental |
+| [`dynamic-config-python-remote`](dynamic-config-python-remote) | the stores for Python — `pip install "dynamic-config-py[remote]"` | Experimental |
+
+`dynamic-config-store-core` is also published, and is not in the table: it
+is machinery the store crates share rather than something to depend on.
 
 **Beta**: breaking changes bump the minor pre-1.0 and are announced in the
 changelog. **Experimental**: may change shape without ceremony — pin an
@@ -118,8 +127,10 @@ stop latency and change-detection rule side by side in
 | `schema` feature | 1.74 (schemars) |
 | `watch` / `age` / `full` features | 1.85 (measured, not declared) |
 | store crates | 1.85 — nats/redis/s3: 1.88 (their clients) |
+| `dynamic-config-server` | 1.80 (axum) |
 | `dynamic-config-cli` | 1.85 |
-| `dynamic-config-python` | 1.85 — and CPython 3.9+, one abi3 wheel per platform |
+| `dynamic-config-python` | 1.85 — and CPython 3.9+, one abi3 wheel per platform, plus a `cp314t` manylinux wheel for free-threaded builds |
+| `dynamic-config-python-remote` | 1.88 (the AWS, NATS and Redis clients) |
 | `dynamic-config-embedded` | 1.83 |
 
 MSRV changes are breaking. Every floor has a CI row against a real

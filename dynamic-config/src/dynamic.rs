@@ -20,11 +20,8 @@
 //! let acme = Dynamic::new(Builder::new("tenant").file("acme.json"));
 //! let umbra = Dynamic::new(Builder::new("tenant").file("umbra.json"));
 //!
-//! acme.init()?;
-//! umbra.init()?;
-//!
-//! let a: std::sync::Arc<Tenant> = acme.current().expect("initialised above");
-//! let u: std::sync::Arc<Tenant> = umbra.current().expect("initialised above");
+//! let a: std::sync::Arc<Tenant> = acme.init_and_current()?;
+//! let u: std::sync::Arc<Tenant> = umbra.init_and_current()?;
 //! # let _ = (a, u);
 //! # }
 //! # Ok::<(), dynamic_config::Error>(())
@@ -101,6 +98,21 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
         self.builder.init()
     }
 
+    /// [`init`](Self::init), handing back the snapshot it installed.
+    ///
+    /// Worth more here than on the type-level surface: an instance's
+    /// [`current`](Self::current) is an `Option` — nothing can panic with a
+    /// type's name in it — so the split form ends in an `expect` that this
+    /// removes. What comes back is *this* call's snapshot, not whatever a
+    /// reload made current a moment later.
+    ///
+    /// # Errors
+    ///
+    /// Exactly [`init`](Self::init)'s.
+    pub fn init_and_current(&self) -> Result<Arc<T>, Error> {
+        self.builder.init_and_current()
+    }
+
     /// The installed snapshot, if [`init`](Self::init) has succeeded.
     ///
     /// One atomic load, no lock — cheap enough per request, but take it
@@ -112,6 +124,28 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     #[must_use]
     pub fn current(&self) -> Option<Arc<T>> {
         self.cell.load()
+    }
+
+    /// Installs since this instance was created; zero before the first.
+    ///
+    /// Monotonic, and the number a reload hook should read when it needs a
+    /// total order — [`on_reload`](Self::on_reload) does not define one
+    /// across overlapping reloads.
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.cell.generation()
+    }
+
+    /// What is true of the installed snapshot, or `None` before the first.
+    ///
+    /// For operators — which generation is live, how long ago it landed —
+    /// and deliberately off the read path: [`current`](Self::current) does
+    /// not consult it, so the value and its metadata are two loads that a
+    /// reload landing between them leaves one install apart. See
+    /// `SnapshotMeta`.
+    #[must_use]
+    pub fn meta(&self) -> Option<crate::SnapshotMeta> {
+        self.cell.meta()
     }
 
     /// Reads the sources and deserializes, installing nothing.
@@ -139,16 +173,67 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     /// The same contract as the type-level `on_reload`: called with the
     /// outgoing and incoming snapshots, on whichever thread performed the
     /// reload — compare, then signal the subsystem that owns the resource.
+    ///
+    /// # Concurrent reloads
+    ///
+    /// Each call sees a consistent `(previous, current)` pair: both were
+    /// installed, and `current` was installed after `previous`.
+    ///
+    /// The *order of calls* is not defined when two reloads overlap. Two
+    /// hooks may observe the same pair, and one hook may see `(A, B)` after
+    /// another saw `(B, C)`. A hook that needs a total order should read
+    /// [`generation`](Self::generation) — which is monotonic — rather than
+    /// infer one from its arguments.
+    ///
+    /// Reloads are not serialised against each other on purpose: a lock held
+    /// across user callbacks would let one slow hook delay every reader, and
+    /// a hook that blocked would then block reloads.
     pub fn on_reload(&self, hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static) {
         self.cell.on_reload(hook);
     }
 
     /// [`on_reload`](Self::on_reload), until the returned guard drops.
+    ///
+    /// The same concurrency contract: a consistent pair every call, in no
+    /// defined order across overlapping reloads.
     pub fn on_reload_scoped(
         &self,
         hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static,
     ) -> crate::HookGuard<T> {
         ConfigCell::on_reload_scoped_shared(&self.cell, hook)
+    }
+
+    /// [`on_reload`](Self::on_reload), told *why*.
+    ///
+    /// The callback receives a [`ReloadEvent`](crate::ReloadEvent): both
+    /// snapshots, the [`ReloadReason`](crate::ReloadReason), and the
+    /// install's [`SnapshotMeta`](crate::SnapshotMeta). Same list, same
+    /// registration order, same panic isolation as the pair form — and it
+    /// fires for the **first** install too, with `previous: None`, which
+    /// the pair form has nowhere to say.
+    pub fn on_reload_with(&self, hook: impl Fn(&crate::ReloadEvent<T>) + Send + Sync + 'static) {
+        self.cell.on_reload_with(hook);
+    }
+
+    /// [`on_reload_with`](Self::on_reload_with), until the returned guard
+    /// drops.
+    pub fn on_reload_with_scoped(
+        &self,
+        hook: impl Fn(&crate::ReloadEvent<T>) + Send + Sync + 'static,
+    ) -> crate::HookGuard<T> {
+        ConfigCell::on_reload_with_scoped_shared(&self.cell, hook)
+    }
+
+    /// What is true of this instance right now: generation, when it landed,
+    /// why, and how the reloads since have gone.
+    ///
+    /// A handful of atomic loads and **no I/O** — no source is re-read —
+    /// so an exporter can call it per scrape. See
+    /// [`ConfigStatus`](crate::ConfigStatus) for what it carries and, as
+    /// deliberately, what it does not.
+    #[must_use]
+    pub fn status(&self) -> crate::ConfigStatus {
+        self.cell.status()
     }
 
     /// This instance's builder, for the diagnostics that answer without
@@ -247,6 +332,15 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     /// The same failures as [`init`](Self::init).
     pub async fn init_async(&self) -> Result<(), Error> {
         self.builder.init_async().await
+    }
+
+    /// [`init_and_current`](Self::init_and_current), off the async executor.
+    ///
+    /// # Errors
+    ///
+    /// The same failures as [`init`](Self::init).
+    pub async fn init_and_current_async(&self) -> Result<Arc<T>, Error> {
+        self.builder.init_and_current_async().await
     }
 }
 

@@ -104,6 +104,22 @@ init, reload, a watch-driven reload, `replace`, and recovery.
 - **Waits release the GIL** and are bounded (a quarter second per slice),
   so cancelling an `async for` is noticed promptly rather than at the
   next reload.
+- **A Python remote source is called straight through**, not handed to a
+  worker thread. `refresh_remote()` detaches for the whole refresh and
+  the shim re-takes the GIL only to call `fetch()`; the design note that
+  preceded the feature assumed that would stop the process, and the
+  measurement says otherwise — a `fetch()` doing I/O releases the GIL
+  itself, so a second thread keeps running at 68–102% of its free rate.
+  The worker would also have created the one deadlock this shape does not
+  have: a `fetch()` calling back into the extension would be waiting on
+  the thread it is running on. See
+  [Remote Stores in Python](remote-stores.md#the-gil-measured).
+- **No lock is held across a fetch.** The engine clones its source out of
+  the remote slot, and the shim clones the Python object out of its own,
+  before either calls anything. That is what lets a `fetch()` read
+  `current()`, `snapshot()` or `explain()` on the configuration it is
+  fetching for. Calling `refresh_remote()` from inside one is refused by
+  a thread-local flag, because that is recursion rather than re-entrancy.
 
 ## Interpreter shutdown
 
@@ -116,7 +132,20 @@ Python.
 
 The suite runs this for real, in subprocesses: a detached watcher at
 exit, an exit during a reload storm, a hook that reads back through its
-own configuration, and a configuration dropped while watching.
+own configuration, a configuration dropped while watching, and a process
+exiting while a Python remote source is mid-fetch.
+
+A Python remote source is the same hazard wearing a different hat, and it
+needed one more move than the watchers did. The shim the engine calls
+lives in a `Remote` that is leaked `&'static`, so a `Py<PyAny>` stored
+*inside* it would be immortal — and since the ordinary shape of a source
+is one that holds the configuration it feeds, that would be a cycle
+running through a `static` no collector could reach. The object lives on
+the configuration instead, behind a `Mutex`; the shim holds a `Weak` to
+it. That makes it an ordinary edge: visited by `tp_traverse`, dropped by
+`tp_clear`, and dropped again by the `atexit` release, after which a late
+fetch answers *released* rather than calling into a torn-down
+interpreter.
 
 ## Secrets
 

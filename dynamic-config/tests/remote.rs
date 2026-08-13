@@ -517,3 +517,61 @@ fn a_stale_sink_cannot_overwrite_the_store_that_followed_it() {
         "the stale push must not have landed"
     );
 }
+
+/// The generated door onto a store's `RemoteStatus`.
+///
+/// `remote_sink().status()` answers the same question and is what a watch loop
+/// already holds; this is for everything else — a `/metrics` handler has no
+/// reason to take a sink, and taking one only to read a number reads as though
+/// it meant to push.
+mod reporting {
+    use super::*;
+
+    #[dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Scraped {
+        port: u16,
+    }
+
+    struct Answering;
+
+    impl RemoteSource for Answering {
+        fn fetch(&self) -> Result<Fetched, Error> {
+            Ok(Fetched::new(r#"{"db": {"port": 9200}}"#, Format::Json))
+        }
+
+        fn describe(&self) -> String {
+            "an answering store".to_owned()
+        }
+    }
+
+    #[test]
+    fn a_type_reports_its_stores_fetches_without_taking_a_sink() {
+        assert_eq!(
+            Scraped::remote_status().reachable(),
+            None,
+            "a store nobody has asked anything is not down"
+        );
+
+        Scraped::set_remote(Answering);
+        Scraped::refresh_remote().expect("the store answers");
+        Scraped::builder("db")
+            .init()
+            .expect("the fetched document is a whole configuration");
+
+        assert_eq!(Scraped::current().port, 9200);
+
+        let status = Scraped::remote_status();
+
+        assert_eq!(status.fetches, 1);
+        assert_eq!(status.reachable(), Some(true));
+        assert!(status.last_fetch.is_some());
+        assert_eq!(status.consecutive_failures, 0);
+
+        assert_eq!(
+            Scraped::remote_sink().status().fetches,
+            status.fetches,
+            "the two doors are the same slot"
+        );
+    }
+}

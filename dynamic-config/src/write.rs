@@ -100,7 +100,13 @@ pub(crate) fn save_dict_encrypted(
     write_bytes_atomically(path, &encrypted?)
 }
 
-fn render(document: &Dict, format: Format) -> Result<String, Error> {
+/// One tree, as the text of a `format` document.
+///
+/// `pub(crate)` rather than private because it is one half of the parse seam —
+/// [`Value::render`](crate::Value::render) is this, reached from outside — and a
+/// second serializer written next to it would be a second set of edge cases for
+/// nulls and integer widths.
+pub(crate) fn render(document: &Dict, format: Format) -> Result<String, Error> {
     // With no format feature on, every arm below is compiled out.
     #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
     let _ = document;
@@ -234,7 +240,10 @@ fn document_of<T: Serialize>(value: &T, key: &str) -> Result<Dict, Error> {
     let Value::Dict(_, section) = section else {
         return Err(Error::new(
             ErrorKind::Type,
-            format!("a configuration section must be a table, not {section:?}"),
+            format!(
+                "a configuration section must be a table, not {}",
+                shape(&section)
+            ),
         ));
     };
 
@@ -242,6 +251,22 @@ fn document_of<T: Serialize>(value: &T, key: &str) -> Result<Dict, Error> {
     document.insert(key.to_owned(), Value::from(section));
 
     Ok(document)
+}
+
+/// Names what a value is without saying what it holds.
+///
+/// `{value:?}` here rendered the value itself: a configuration type that
+/// serializes to a bare string — a newtype over a token is the easy way to
+/// have one — put that string in the error, and this is a *write* path, so
+/// the string is as likely to be a credential as anything in the crate ever
+/// is. The shape is the whole of what the message needs.
+fn shape(value: &Value) -> &'static str {
+    match value {
+        Value::Dict(..) => "a table",
+        Value::Array(..) => "a list",
+        Value::Empty(..) => "nothing",
+        _ => "a single value",
+    }
 }
 
 /// Writes through a temporary file in the same directory, then renames.

@@ -39,8 +39,48 @@ fn message(error: &figment::Error) -> String {
                 kind_of(actual)
             )
         }
-        _ => error.to_string(),
+        _ => without_quoted_source(&error.to_string()),
     }
+}
+
+/// Drops the source excerpt a parser echoes back at a syntax error.
+///
+/// `toml` renders one as a gutter block:
+///
+/// ```text
+/// TOML parse error at line 2, column 25
+///   |
+/// 2 | password = "hunter2
+///   |                    ^
+/// invalid basic string
+/// ```
+///
+/// The offending line is the document, verbatim — which is the one way a
+/// *value* reaches a diagnostic here without any of this crate's own code
+/// putting it there, and an unterminated string is exactly the typo somebody
+/// makes while pasting a password in. The position and the reason are what a
+/// person needs and both survive; the quoted line goes.
+///
+/// A filter rather than a truncation at the first newline: the reason sits
+/// *below* the block, so cutting at the first line would keep the position and
+/// throw away what was wrong. JSON and YAML render one line and pass through
+/// untouched.
+fn without_quoted_source(message: &str) -> String {
+    message
+        .lines()
+        .filter(|line| !is_gutter(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim_end()
+        .to_owned()
+}
+
+/// Whether a line belongs to a rendered excerpt: `  |`, `2 | text`, `  |   ^`.
+fn is_gutter(line: &str) -> bool {
+    line.trim_start()
+        .trim_start_matches(|character: char| character.is_ascii_digit())
+        .trim_start()
+        .starts_with('|')
 }
 
 /// Names what was there without saying what it was.
@@ -75,11 +115,11 @@ fn kind_of(actual: &figment::error::Actual) -> &'static str {
     }
 }
 
-/// Translates a figment error, preserving the key path and the source.
-pub(super) fn convert(error: figment::Error, spec: &crate::source::LoadSpec<'_>) -> Error {
+/// Which of this crate's categories a figment failure belongs to.
+fn kind_of_error(error: &figment::Error) -> ErrorKind {
     use figment::error::Kind;
 
-    let kind = match &error.kind {
+    match &error.kind {
         Kind::MissingField(_) => ErrorKind::Missing,
         Kind::InvalidType(..)
         | Kind::InvalidValue(..)
@@ -92,10 +132,16 @@ pub(super) fn convert(error: figment::Error, spec: &crate::source::LoadSpec<'_>)
         Kind::Message(_) if error.path.is_empty() => ErrorKind::Parse,
         Kind::Message(_) => ErrorKind::Type,
         _ => ErrorKind::Backend,
-    };
+    }
+}
 
-    // A missing field is named inside the kind rather than in the path, so it
-    // has to be moved across for `Error::path()` to be useful.
+/// The key path a figment error happened at.
+///
+/// A missing field is named inside the kind rather than in the path, so it
+/// has to be moved across for `Error::path()` to be useful.
+fn error_path(error: &figment::Error) -> Vec<String> {
+    use figment::error::Kind;
+
     let mut path = error.path.clone();
 
     if path.is_empty() {
@@ -104,19 +150,44 @@ pub(super) fn convert(error: figment::Error, spec: &crate::source::LoadSpec<'_>)
         }
     }
 
-    let origin = refine_env(
-        error.metadata.as_ref().map_or(Origin::Unknown, origin_of),
-        path.iter().map(String::as_str),
-        spec.nest,
-    );
-    let mut translated = Error::new(kind, message(&error)).with_origin(origin);
+    path
+}
+
+/// A figment error as this crate's, value stripped, provenance not yet known.
+///
+/// **Every** road from figment to a caller goes through here, which is what
+/// makes [`message`]'s stripping a property of the crate rather than of one
+/// call site: a seam that parses on its own — [`Value::parse`](crate::Value::parse)
+/// — has no layer to name and no `LoadSpec` to name it with, and still must not
+/// be the one path that prints ``found string "hunter2"``.
+///
+/// The two schemaless read doors reach it the same way and for the same
+/// reason. [`Snapshot::get`](crate::Snapshot::get),
+/// [`Snapshot::extract`](crate::Snapshot::extract) and
+/// [`Value::get_as`](crate::Value::get_as) deserialize a value already in
+/// hand, so they have no spec either — and they used to render the backend's
+/// message verbatim, which put the value of any mistyped key into the error.
+/// Reading by path is precisely where a password lands in a numeric field.
+pub(crate) fn translate(error: &figment::Error) -> Error {
+    let mut translated = Error::new(kind_of_error(error), message(error));
 
     // Rebuilt outermost-last so `Error::path()` reads root-first.
-    for segment in path.into_iter().rev() {
+    for segment in error_path(error).into_iter().rev() {
         translated = translated.prepend_key(segment);
     }
 
     translated
+}
+
+/// Translates a figment error, preserving the key path and the source.
+pub(super) fn convert(error: figment::Error, spec: &crate::source::LoadSpec<'_>) -> Error {
+    let origin = refine_env(
+        error.metadata.as_ref().map_or(Origin::Unknown, origin_of),
+        error_path(&error).iter().map(String::as_str),
+        spec.nest,
+    );
+
+    translate(&error).with_origin(origin)
 }
 
 /// Upgrades a prefix-grained environment origin to the exact variable.
@@ -240,5 +311,26 @@ mod tests {
     fn the_environment_prefix_is_recovered_from_figments_name() {
         assert_eq!(env_prefix("`APP_DB_` environment variable(s)"), "APP_DB_*");
         assert_eq!(env_prefix("environment variable(s)"), "the environment");
+    }
+
+    /// `toml`'s rendering, verbatim: the position and the reason are kept, the
+    /// quoted document is not.
+    #[test]
+    fn a_quoted_source_line_is_dropped_and_the_reason_kept() {
+        let rendered = "TOML parse error at line 2, column 25\n  \
+                        |\n2 | password = \"hunter2\n  |                   ^\n\
+                        invalid basic string\n";
+
+        assert_eq!(
+            without_quoted_source(rendered),
+            "TOML parse error at line 2, column 25\ninvalid basic string"
+        );
+    }
+
+    #[test]
+    fn a_one_line_message_passes_through_untouched() {
+        let rendered = "EOF while parsing an object at line 1 column 28";
+
+        assert_eq!(without_quoted_source(rendered), rendered);
     }
 }

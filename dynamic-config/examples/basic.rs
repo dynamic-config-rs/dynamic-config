@@ -20,14 +20,13 @@ struct ServerConfig {
 
 fn main() -> Result<(), dynamic_config::Error> {
     // The attribute declares the type; where the values come from is chosen
-    // here, at runtime.
-    ServerConfig::builder("server")
+    // here, at runtime. `init_and_current` installs and hands back what it
+    // installed — everywhere else in the program reads the same snapshot with
+    // `ServerConfig::current()`, which needs no builder and no arguments.
+    let config = ServerConfig::builder("server")
         .file("dynamic-config/examples/config.json")
         .env("APP_")
-        .init()?;
-
-    // Take the snapshot once; every later read is this same generation.
-    let config = ServerConfig::current();
+        .init_and_current()?;
 
     println!("listening on {}:{}", config.host, config.port);
     println!("tags: {:?}", config.tags);

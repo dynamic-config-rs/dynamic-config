@@ -331,6 +331,23 @@ pub(crate) fn check_path(path: &str) -> Result<(), Error> {
         ));
     }
 
+    // `db::timeout` means "in another section", and exactly one place can
+    // honour that: the old path of an alias, which splits the qualifier off
+    // before it gets here. Everywhere else a path is relative to the section
+    // being loaded, so accepting one would silently create a key with a colon
+    // in its name that looks, in every report, like it worked.
+    if path.contains(crate::aliases::SECTION) {
+        return Err(Error::new(
+            ErrorKind::Type,
+            format!(
+                "`{path}` names another section, and this path is relative to \
+                 the section being loaded; `{}` is only meaningful in the old \
+                 path of an alias",
+                crate::aliases::SECTION
+            ),
+        ));
+    }
+
     Ok(())
 }
 

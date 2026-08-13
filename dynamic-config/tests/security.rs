@@ -442,6 +442,78 @@ fn the_generated_builders_explain_redacts_too() {
     assert!(host.to_string().contains("localhost"), "{host}");
 }
 
+/// A reload event and a status are exactly what somebody `{:?}`s into a
+/// log, so neither may hold a configured value — not through the reason,
+/// not through the failure record, and not through the snapshots the event
+/// carries.
+#[test]
+fn a_reload_event_and_a_status_print_no_values() {
+    use serde::Deserialize;
+    use std::sync::{Arc, Mutex};
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Deserialize)]
+    struct Operated {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        password: String,
+    }
+
+    const PLANTED: &str = "hunter2-operations";
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/security-operations.json",
+        format!(r#"{{"db": {{"host": "db.internal", "password": "{PLANTED}"}}}}"#),
+    )
+    .unwrap();
+
+    let rendered = Arc::new(Mutex::new(Vec::new()));
+    {
+        let recorder = Arc::clone(&rendered);
+        Operated::on_reload_with(move |event| {
+            recorder.lock().unwrap().push(format!("{event:?}"));
+        });
+    }
+
+    let builder = Operated::builder("db").file("tests/scratch/security-operations.json");
+    builder.init().expect("the source reads cleanly");
+    builder.reload().expect("and reloads");
+
+    // And a failure, so `last_failure` is populated for the status below.
+    std::fs::write(
+        "tests/scratch/security-operations.json",
+        format!(r#"{{"db": {{"host": {{"nested": "{PLANTED}"}}, "password": "x"}}}}"#),
+    )
+    .unwrap();
+    builder
+        .reload()
+        .expect_err("`host` is a table, not a string");
+
+    let mut printed = format!("{:?}", Operated::status());
+
+    for event in rendered.lock().unwrap().iter() {
+        printed.push(' ');
+        printed.push_str(event);
+    }
+
+    assert!(
+        !printed.contains(PLANTED),
+        "a reload event and a status are log lines: {printed}"
+    );
+    assert!(
+        !printed.contains("db.internal"),
+        "no value, secret or not: {printed}"
+    );
+    assert!(
+        printed.contains("host"),
+        "the key path is the actionable half, and it stays: {printed}"
+    );
+    assert!(printed.contains("Manual"), "so is the reason: {printed}");
+}
+
 /// `Snapshot::to_value` hands over the resolved tree — and the tree's
 /// `Debug`, like `Snapshot`'s own, shows shape and keys but never values:
 /// `{:?}` in a log line is exactly how a resolved secret leaks.
@@ -462,5 +534,495 @@ fn a_values_debug_shows_shape_and_never_values() {
     assert!(
         rendered.contains("password"),
         "keys are the useful half, and they stay: {rendered}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A configuration with no struct: the same line, with nothing declaring it
+// ---------------------------------------------------------------------------
+
+/// Reading by path is *where* a password lands in a numeric field, and the
+/// three schemaless read doors all deserialize a value already in hand — so
+/// none of them met the loader's stripping. figment renders a mismatch as
+/// ``invalid type: found string "hunter2", expected u16``; two of these used
+/// to hand that back verbatim.
+#[test]
+fn a_schemaless_type_error_names_the_path_and_not_the_value() {
+    let text = format!(r#"{{"db": {{"port": "{SECRET}"}}}}"#);
+    let sources = [Source::inline(&text, Format::Json)];
+    let spec = LoadSpec::new("db", &sources);
+
+    let snapshot = dynamic_config::snapshot(&spec).expect("the document resolves");
+    let values = snapshot.to_value();
+
+    #[derive(Deserialize, Debug)]
+    #[allow(dead_code)]
+    struct Ported {
+        port: u16,
+    }
+
+    let doors = [
+        values.get_as::<u16>("port").unwrap_err(),
+        snapshot.get::<u16>("port").unwrap_err(),
+        snapshot.extract::<Ported>().unwrap_err(),
+    ];
+
+    for error in doors {
+        let rendered = error.to_string();
+
+        assert!(!rendered.contains(SECRET), "{rendered}");
+        assert!(
+            rendered.contains("port"),
+            "the path is the actionable half: {rendered}"
+        );
+        assert!(
+            rendered.contains("a string"),
+            "and so is the kind of thing that was there: {rendered}"
+        );
+        assert_eq!(error.kind(), dynamic_config::ErrorKind::Type);
+    }
+}
+
+/// A schemaless configuration has no `#[config(secret)]` to derive a list
+/// from — so the list is supplied by hand, and `explain` redacts against it
+/// exactly as it does for a declared one.
+#[test]
+fn a_hand_supplied_secret_list_redacts_a_schemaless_explanation() {
+    const PLANTED: &str = "hunter2-schemaless-explain";
+    const FIXTURE: &str = "tests/scratch/security-schemaless.json";
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        FIXTURE,
+        format!(r#"{{"db": {{"host": "localhost", "credentials": {{"password": "{PLANTED}"}}}}}}"#),
+    )
+    .unwrap();
+
+    let guarded = dynamic_config::Builder::values("db")
+        .file(FIXTURE)
+        .secrets(&["credentials"]);
+
+    // The three-way rule, against a list nothing declared: the path *is* a
+    // secret, and the path is *under* one.
+    for path in ["credentials", "credentials.password"] {
+        let explanation = guarded.explain(path).expect("the source reads cleanly");
+
+        assert!(
+            !explanation.to_string().contains(PLANTED),
+            "{path}: {explanation}"
+        );
+        assert!(explanation
+            .rows()
+            .iter()
+            .all(|row| row.value.as_deref() != Some(PLANTED)));
+    }
+
+    // The neighbour is not a secret and still explains with its value.
+    assert!(guarded
+        .explain("host")
+        .expect("the source reads cleanly")
+        .to_string()
+        .contains("localhost"));
+
+    // With no list, `explain` has nothing to redact against — it is the one
+    // diagnostic that prints values, and the book says so. The tree itself
+    // still never prints, declared or not: `Value`'s `Debug` is shape-only,
+    // which is what keeps a `{:?}` of a schemaless snapshot from being the
+    // leak a struct's generated `Debug` prevents.
+    let values = dynamic_config::Builder::values("db")
+        .file(FIXTURE)
+        .load()
+        .expect("the source reads cleanly");
+
+    let printed = format!("{values:?}");
+
+    assert!(!printed.contains(PLANTED), "{printed}");
+    assert!(!printed.contains("localhost"), "{printed}");
+    assert!(
+        printed.contains("credentials"),
+        "keys are the safe half: {printed}"
+    );
+}
+
+/// A *syntax* error is the one diagnostic whose text this crate does not
+/// write: the parser does, and `toml` writes it by quoting the line that
+/// failed.
+///
+/// An unterminated string is exactly the typo somebody makes while pasting a
+/// password into a config file, and the quoted line is then the password. The
+/// position and the reason are what a person needs; both survive
+/// `loader::origin::without_quoted_source`, and the document does not.
+#[cfg(feature = "toml")]
+#[test]
+fn a_syntax_error_does_not_quote_the_line_it_failed_on() {
+    let text = format!("[db]\nhost = \"localhost\"\npassword = \"{SECRET}\n");
+    let sources = [dynamic_config::Source::inline(
+        &text,
+        dynamic_config::Format::Toml,
+    )];
+
+    let error = dynamic_config::load::<Secretive>(&dynamic_config::LoadSpec::new("db", &sources))
+        .expect_err("the string is never closed");
+
+    let rendered = error.to_string();
+
+    assert!(!rendered.contains(SECRET), "{rendered}");
+    assert!(
+        rendered.contains("line 3"),
+        "the position is the actionable half, and it stays: {rendered}"
+    );
+    assert!(
+        rendered.contains("basic string"),
+        "so is the reason, which `toml` prints below the quoted line: {rendered}"
+    );
+}
+
+/// The same line, held on the parse seam a store crate reaches directly.
+///
+/// Two doors onto one road: `Value::parse` never touches a `LoadSpec` and has
+/// no layer to name, so it would have been the easy place to render the
+/// backend error raw.
+#[cfg(feature = "toml")]
+#[test]
+fn the_parse_seam_strips_what_the_loader_strips() {
+    let text = format!("[db]\npassword = \"{SECRET}\n");
+
+    let error = dynamic_config::Value::parse(&text, dynamic_config::Format::Toml)
+        .expect_err("the string is never closed");
+
+    assert!(!error.to_string().contains(SECRET), "{error}");
+}
+
+/// The unit adapters parse a *value*, and a value that is not a duration is
+/// exactly the shape of a password pasted into the wrong field. The message
+/// says what was expected, never what was there — including the *unit* arm,
+/// which used to quote back whatever followed the digits.
+#[test]
+fn a_unit_that_does_not_parse_echoes_no_value() {
+    #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
+    struct Timed {
+        #[serde(with = "dynamic_config::duration")]
+        timeout: std::time::Duration,
+        #[serde(with = "dynamic_config::bytes")]
+        max_body: u64,
+    }
+
+    for document in [
+        format!(r#"{{"db": {{"timeout": "{SECRET}", "max_body": 1}}}}"#),
+        format!(r#"{{"db": {{"timeout": "12{SECRET}", "max_body": 1}}}}"#),
+        format!(r#"{{"db": {{"timeout": "1s", "max_body": "12{SECRET}"}}}}"#),
+    ] {
+        let sources = [Source::inline(&document, Format::Json)];
+
+        let error = dynamic_config::load::<Timed>(&LoadSpec::new("db", &sources))
+            .expect_err("the secret is not a duration");
+
+        assert!(!error.to_string().contains(SECRET), "{error}");
+    }
+}
+
+/// Writing refuses a configuration that is not a table by naming its *shape*
+/// rather than its contents: a newtype over a token serializes to exactly one
+/// string, and this is the path that would otherwise have written it to disk.
+#[test]
+fn a_section_that_is_not_a_table_is_refused_without_quoting_it() {
+    let path = std::env::temp_dir().join("dynamic-config-not-a-table.json");
+
+    let error = dynamic_config::save(&SECRET.to_owned(), &path, Format::Json, "db")
+        .expect_err("a bare string is not a section");
+
+    assert!(!error.to_string().contains(SECRET), "{error}");
+    assert!(error.to_string().contains("table"), "{error}");
+    assert!(!path.exists(), "and nothing was written");
+}
+
+/// An `Error` has no `source()`, and that is a decision rather than an
+/// oversight.
+///
+/// Returning the backend failure would make `anyhow`/`eyre` chains and
+/// `{:#}` render usefully — and would render the message this crate went to
+/// the trouble of stripping: figment says ``invalid type: found string
+/// "hunter2", expected u16``, and `loader::origin::message` reduces it to
+/// the kind. A source is that stripped message's way back into every log
+/// line, so there is none, and the chain a caller prints is the redacted
+/// `Display` and nothing else.
+#[test]
+fn an_error_chain_has_nothing_behind_it_to_leak() {
+    use std::error::Error as _;
+
+    let text = format!(r#"{{"db": {{"pool": {{"max_size": "{SECRET}"}}}}}}"#);
+    let sources = [Source::inline(&text, Format::Json)];
+
+    let error = dynamic_config::load::<Secretive>(&LoadSpec::new("db", &sources))
+        .expect_err("max_size is not a number");
+
+    assert!(
+        error.source().is_none(),
+        "a source would carry the backend's unredacted message"
+    );
+
+    // What `anyhow` prints: the whole chain, walked the way it walks it.
+    let mut chain = error.to_string();
+    let mut link: Option<&(dyn std::error::Error + 'static)> = error.source();
+
+    while let Some(cause) = link {
+        write!(chain, ": {cause}").unwrap();
+        link = cause.source();
+    }
+
+    assert!(!chain.contains(SECRET), "{chain}");
+    assert!(chain.contains("max_size"), "{chain}");
+}
+
+// ---------------------------------------------------------------------------
+// Telemetry: a metric label and a span field are diagnostics like any other,
+// and the scrape endpoint is usually the least guarded surface a process has.
+// ---------------------------------------------------------------------------
+
+/// A metric label may not carry a configured value — and, unlike a log
+/// line, may not carry a **key path** either: a path is a disclosure *and*
+/// an unbounded label set, which is how one counter becomes a million
+/// series.
+#[test]
+#[cfg(feature = "telemetry")]
+fn no_metric_label_carries_a_value_a_path_or_a_file_name() {
+    #[dynamic_config]
+    #[derive(Deserialize)]
+    struct Exported {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        password: String,
+    }
+
+    const PLANTED: &str = "hunter2-exported";
+    const FIXTURE: &str = "tests/scratch/security-telemetry.json";
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        FIXTURE,
+        format!(r#"{{"db": {{"host": "db.internal", "password": "{PLANTED}"}}}}"#),
+    )
+    .unwrap();
+
+    let builder = Exported::builder("db").file(FIXTURE);
+    builder.init().expect("the source reads cleanly");
+
+    // A refusal too, so `last_failure` — the half that knows a key path — is
+    // populated when the exposition is rendered.
+    std::fs::write(
+        FIXTURE,
+        format!(r#"{{"db": {{"host": {{"nested": "{PLANTED}"}}, "password": "x"}}}}"#),
+    )
+    .unwrap();
+    builder
+        .reload()
+        .expect_err("`host` is a table, not a string");
+
+    let mut exposition = dynamic_config::telemetry::Exposition::new();
+    exposition.add("db", &Exported::status());
+    let rendered = exposition.render();
+
+    assert!(
+        !rendered.contains(PLANTED),
+        "a value reached a label: {rendered}"
+    );
+    assert!(
+        !rendered.contains("db.internal"),
+        "no value, secret or not: {rendered}"
+    );
+    assert!(
+        !rendered.contains("host"),
+        "a key path is unbounded cardinality as well as a disclosure: {rendered}"
+    );
+    assert!(
+        !rendered.contains("security-telemetry.json"),
+        "and so is a file name: {rendered}"
+    );
+    assert!(
+        rendered.contains(r#"kind="type""#),
+        "the category is what a label may carry: {rendered}"
+    );
+}
+
+#[cfg(feature = "tracing")]
+mod capture;
+
+/// A span field may name a key path — that is what makes a failed reload
+/// actionable — and may never hold what was at it.
+#[test]
+#[cfg(feature = "tracing")]
+fn no_span_or_event_field_carries_a_value() {
+    #[dynamic_config]
+    #[derive(Deserialize)]
+    struct Traced {
+        #[allow(dead_code)]
+        host: String,
+        #[config(secret)]
+        #[allow(dead_code)]
+        password: String,
+    }
+
+    const PLANTED: &str = "hunter2-traced";
+    const FIXTURE: &str = "tests/scratch/security-telemetry-events.json";
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        FIXTURE,
+        format!(r#"{{"db": {{"host": "db.internal", "password": "{PLANTED}"}}}}"#),
+    )
+    .unwrap();
+
+    let captured = capture::global();
+
+    let builder = Traced::builder("db").file(FIXTURE);
+    builder.init().expect("the source reads cleanly");
+
+    std::fs::write(
+        FIXTURE,
+        format!(r#"{{"db": {{"host": {{"nested": "{PLANTED}"}}, "password": "x"}}}}"#),
+    )
+    .unwrap();
+    builder
+        .reload()
+        .expect_err("`host` is a table, not a string");
+
+    // This test's own records, and not its neighbours': the subscriber is
+    // the binary's, and every record names the configuration type it
+    // belongs to.
+    let lines = captured.about("no_span_or_event_field_carries_a_value::Traced");
+
+    assert!(!lines.contains(PLANTED), "a value reached a field: {lines}");
+    assert!(
+        !lines.contains("db.internal"),
+        "no value, secret or not: {lines}"
+    );
+    assert!(
+        lines.contains(r#"error.kind="type""#),
+        "the category is the useful half, and it stays: {lines}"
+    );
+    assert!(
+        lines.contains(r#"error.path="host""#),
+        "so is the key path: {lines}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A remote store's URL is a credential
+// ---------------------------------------------------------------------------
+
+/// The one string a `Remote` can produce about itself is its source's
+/// description, and a store URL routinely embeds `user:password@host`. The
+/// fetch half of telemetry therefore names no store at all: the series is
+/// labelled by whoever renders it.
+#[cfg(feature = "telemetry")]
+#[test]
+fn a_store_url_never_becomes_a_metric_label() {
+    use dynamic_config::{Error, Fetched, Remote, RemoteSource};
+
+    const URL: &str = "https://vault:hunter2-in-a-url@store.internal:8200/v1/secret/db";
+    const DOCUMENT: &str = r#"{"db": {"password": "hunter2-in-a-document"}}"#;
+
+    struct Store(bool);
+
+    impl RemoteSource for Store {
+        fn fetch(&self) -> Result<Fetched, Error> {
+            if self.0 {
+                Ok(Fetched::new(DOCUMENT, Format::Json))
+            } else {
+                Err(Error::remote("the store is unreachable"))
+            }
+        }
+
+        fn describe(&self) -> String {
+            URL.to_owned()
+        }
+    }
+
+    let remote = Remote::new();
+
+    remote.set(Store(true));
+    remote.refresh().expect("the store answers");
+    remote.set(Store(false));
+    remote.refresh().expect_err("the store is unreachable");
+
+    let mut exposition = dynamic_config::telemetry::Exposition::new();
+    exposition.add_remote("db", &remote.status());
+    let rendered = exposition.render();
+
+    assert!(
+        !rendered.contains("hunter2-in-a-url"),
+        "a credential reached a label: {rendered}"
+    );
+    assert!(
+        !rendered.contains("store.internal"),
+        "and neither does the host it was in: {rendered}"
+    );
+    assert!(
+        !rendered.contains("hunter2-in-a-document"),
+        "nor anything the store answered with: {rendered}"
+    );
+    assert!(!rendered.contains("password"), "nor a key path: {rendered}");
+    assert!(
+        rendered.contains(r#"dynamic_config_remote_up{config="db"} 0"#),
+        "what survives is the outcome, under the caller's own name: {rendered}"
+    );
+    assert!(
+        rendered.contains(r#"kind="remote""#),
+        "and the category: {rendered}"
+    );
+}
+
+/// The same rule one notch looser and still tight: a fetch span may carry an
+/// outcome and an `ErrorKind`, and may not carry the URL it fetched from or
+/// the document it fetched.
+#[cfg(all(feature = "tracing", feature = "telemetry"))]
+#[test]
+fn a_store_url_never_becomes_a_span_or_event_field() {
+    use dynamic_config::{Error, Fetched, Remote, RemoteSource};
+
+    const URL: &str = "https://consul:hunter2-in-a-span@store.internal:8500/v1/kv/db";
+    const DOCUMENT: &str = r#"{"db": {"password": "hunter2-in-a-fetched-document"}}"#;
+
+    struct Store;
+
+    impl RemoteSource for Store {
+        fn fetch(&self) -> Result<Fetched, Error> {
+            Ok(Fetched::new(DOCUMENT, Format::Json))
+        }
+
+        fn describe(&self) -> String {
+            URL.to_owned()
+        }
+    }
+
+    let captured = capture::global();
+
+    let remote = Remote::new();
+    remote.set(Store);
+    remote.refresh().expect("the store answers");
+
+    // Every record in the binary, not this test's own slice: a fetch record
+    // carries no configuration type to filter by — deliberately, since the
+    // only name a `Remote` has is the URL this test is asserting about.
+    let lines = captured.joined();
+
+    assert!(
+        !lines.contains("hunter2-in-a-span"),
+        "a credential reached a field: {lines}"
+    );
+    assert!(
+        !lines.contains("store.internal"),
+        "and neither does the host: {lines}"
+    );
+    assert!(
+        !lines.contains("hunter2-in-a-fetched-document"),
+        "nor the document: {lines}"
+    );
+    assert!(
+        lines.contains(r#"outcome="fetched""#),
+        "what survives is the outcome: {lines}"
     );
 }

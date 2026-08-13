@@ -102,9 +102,10 @@ variable. Nesting uses a doubled separator:
 
 ## What a schema may be
 
-Three kinds of class can be a schema, and the whole surface — sources,
-precedence, watching, recovery, diagnostics — is identical across them.
-What differs is what *validation* means, and what you have to install:
+Four kinds of class can be a schema — and a fifth answer, which is *no
+schema*. The whole surface — sources, precedence, watching, recovery,
+diagnostics — is identical across all of them. What differs is what
+*validation* means, and what you have to install:
 
 | Schema | Install | Validation |
 |---|---|---|
@@ -112,9 +113,59 @@ What differs is what *validation* means, and what you have to install:
 | `pydantic.BaseModel` | `[pydantic]` | Pydantic's, entire — coercion, constraints, validators, computed fields |
 | `pydantic.dataclasses.dataclass` | `[pydantic]` | the same, through the dataclass validator |
 | `pydantic_settings.BaseSettings` | `[pydantic-settings]` | Pydantic's, plus a [sourcing declaration this engine can translate](#pydantic-settings) |
+| `Values` | nothing | none — [a configuration with no schema](#values-a-configuration-with-no-schema) |
 
 The base install has no dependencies at all; each extra buys one more
 kind of schema and nothing else. `[all]` is both.
+
+### `Values`: a configuration with no schema
+
+The Python spelling of the crate's [schemaless
+configuration](../schemaless.md), for the keys a program learns at run
+time rather than declares — a plugin host, a feature-flag table, a tool
+reading a file it did not write. Pass the **class**; every load hands
+back an **instance**:
+
+```python
+from dynamic_config import DynamicConfig, Values
+
+config = DynamicConfig(Values, key="plugins").file("plugins.toml").env("APP_")
+config.init()
+
+values = config.current()
+
+values["cache.ttl"]           # by dotted path
+values.get("cache.ttl", 60)   # ...with a default
+values["cache"]["ttl"]        # or a step at a time
+dict(values)                  # a plain dict
+```
+
+It is a `Mapping`, so `len()`, `in`, `.keys()`, `.items()` and iteration
+work as they do on a dict, and every value is already a plain Python
+object — `str`, `int`, `float`, `bool`, `list`, `dict`, `None`. There is
+nothing to unwrap. Lookup takes a **dotted path**, which is the one place
+it is not a dict: a key that itself contains a dot is not reachable by
+name, the same trade the Rust `Value::get` makes.
+
+Everything else is the engine you already have: the same layers and
+precedence, profiles, discovery, the secrets directory, the watcher,
+reload hooks, `source_of`, `explain`, `snapshot` and `check`.
+
+**What it gives up is exactly what it never declared.** Two answers
+change, and both are reported rather than assumed:
+
+| | A declared model | `Values` |
+|---|---|---|
+| `check()` unknown keys | compared against the field names | nothing to compare — `report.unknown_checked` is `False` and the rendering says `unknown keys: not checked (no field list)` |
+| secret paths | derived from the declaration (`SecretStr`, `metadata={"secret": True}`) | **none**, unless `DynamicConfig(Values, key=…, secrets=["token"])` says so |
+
+The second has teeth: a `redacted` or `fingerprint` [cache](reference.md)
+is *refused* for a configuration that never said what is secret, rather
+than writing a file that claims a redaction it did not perform. Naming
+the paths with `secrets=` buys the cache and the `***` in `explain`
+together.
+
+`examples/20_schemaless.py` runs all of it.
 
 ### A dataclass, and what it checks
 
@@ -227,6 +278,7 @@ declaration as engine sources:
 | `toml_file`, `json_file`, `yaml_file` | `file(...)`, in that order |
 | `env_file` | `env_file(...)` — the dotenv layer |
 | `env_prefix` | one `bind_env` per leaf field, so `APP_PORT` stays `APP_PORT` rather than becoming `APP_<KEY>_PORT` |
+| `secrets_dir` | `secrets_dir(...)` — a directory of single-value files |
 | `env_nested_delimiter` | the separator inside those names |
 | `case_sensitive` | whether they are upper-cased |
 
@@ -236,8 +288,11 @@ loses to overrides. Bindings see `.env` files too, so a variable a
 deployment writes into `.env` rather than exporting still reaches the
 field it names.
 
+`secrets_dir` translates too, onto the engine source of the same shape —
+a directory where each file is one key.
+
 What has no engine equivalent is **refused at the call** rather than
-dropped: `secrets_dir`, `cli_parse_args`, and an overridden
+dropped: `cli_parse_args`, and an overridden
 `settings_customise_sources`. Declare those on the configuration
 instead — or keep the class for its schema and use `DynamicConfig`
 directly, which is a fine thing to want:

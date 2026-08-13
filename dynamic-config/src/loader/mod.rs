@@ -20,7 +20,8 @@ mod aliases_pass;
 mod environment;
 mod origin;
 mod recover;
-mod sections;
+mod secrets;
+pub(crate) mod sections;
 
 use figment::value::Dict;
 use figment::Figment;
@@ -38,8 +39,11 @@ use crate::source::LoadSpec;
 use aliases_pass::apply_aliases;
 use environment::{environment, merge_env_files};
 use origin::convert;
+use secrets::merge_secrets_dir;
 
+pub(crate) use origin::translate;
 pub(crate) use recover::recover;
+pub(crate) use sections::parse_document;
 
 /// Metadata name for the recovery provider.
 pub(crate) const CACHED_NAME: &str = "the last configuration that worked";
@@ -178,6 +182,17 @@ const LAYERS: &[LayerDef] = &[
         },
         merge: merge_remote,
     },
+    // Above the remote store and below the environment, which is the same
+    // argument made twice: a mounted secret is a fact about *this*
+    // deployment, so it beats a document a central store hands to every
+    // deployment alike — and loses to a variable exported for this one run,
+    // which is more specific still. pydantic-settings agrees on the second
+    // half and has no remote layer to disagree about the first.
+    LayerDef {
+        name: "secrets",
+        active: |spec| spec.secrets_dir.is_some(),
+        merge: merge_secrets_dir,
+    },
     // A `.env` is the environment layer sourced from disk, so it goes just
     // below the real thing: a variable somebody exported for this run beats
     // a file in the repository.
@@ -271,11 +286,18 @@ fn merge_defaults(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Erro
 
 fn merge_discovered(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     let profile = sections::validated_profile(spec)?;
+    let layout = sections::Layout::of(spec);
 
     if let Some(search) = &spec.search {
         for (path, format) in search.resolve() {
-            figment = sections::merge_file(figment, &path, format)?;
-            figment = sections::merge_profile_variant(figment, &path, format, profile.as_deref())?;
+            figment = sections::merge_file(figment, &path, format, layout)?;
+            figment = sections::merge_profile_variant(
+                figment,
+                &path,
+                format,
+                profile.as_deref(),
+                layout,
+            )?;
         }
     }
 
@@ -284,9 +306,10 @@ fn merge_discovered(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment
 
 fn merge_listed(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
     let profile = sections::validated_profile(spec)?;
+    let layout = sections::Layout::of(spec);
 
     for source in spec.sources {
-        figment = sections::merge(figment, source)?;
+        figment = sections::merge(figment, source, layout)?;
 
         if let (Some(path), Some(format)) = (source.path(), source.format()) {
             figment = sections::merge_profile_variant(
@@ -294,6 +317,7 @@ fn merge_listed(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Er
                 Path::new(path),
                 format,
                 profile.as_deref(),
+                layout,
             )?;
         }
     }
@@ -315,6 +339,7 @@ fn merge_remote(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error>
                 document.format,
                 &name,
                 None,
+                sections::Layout::of(spec),
             );
         }
     }

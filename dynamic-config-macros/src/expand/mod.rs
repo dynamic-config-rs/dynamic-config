@@ -20,9 +20,58 @@ mod remote;
 mod schema;
 mod watch;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::{Error, ItemStruct, Result};
+
+/// The path the generated code names the facade crate by.
+///
+/// `::dynamic_config` was hardcoded, which meant a renamed dependency —
+/// `config = { package = "dynamic-config" }`, a perfectly ordinary thing to
+/// write — expanded to a crate the user's namespace does not have.
+/// `proc-macro-crate` reads the *consumer's* manifest and answers with the
+/// name that is actually in scope there.
+fn crate_path() -> TokenStream {
+    match crate_name("dynamic-config") {
+        // `Itself` means only that the manifest being compiled is the
+        // facade's; it does not mean the facade's *library* is what is being
+        // compiled. An example, a bin or a doctest of that same package links
+        // the library as an ordinary extern crate, where `crate` is the
+        // example — which is how this was caught: every example in the
+        // repository stopped compiling.
+        Ok(FoundCrate::Itself) if compiling_the_facade() => quote!(crate),
+        Ok(FoundCrate::Itself) => quote!(::dynamic_config),
+        Ok(FoundCrate::Name(name)) => {
+            let ident = Ident::new(&name, Span::call_site());
+
+            quote!(::#ident)
+        }
+        // Not in the dependency list at all, or a manifest that will not
+        // parse. Today's behaviour stands, so what the user reads is rustc's
+        // "unresolved crate `dynamic_config`" — pointing at the missing
+        // dependency — rather than a panic from inside a proc macro.
+        Err(_) => quote!(::dynamic_config),
+    }
+}
+
+/// Whether this expansion is going into the facade's own library target.
+///
+/// Two sibling cases answer `FoundCrate::Itself` and must not be treated as
+/// one. Cargo names each compilation unit in `CARGO_CRATE_NAME`, so an
+/// example or a bin of the same package is told apart by that; a doctest is
+/// not, because rustdoc runs under the library's own name — but it sets
+/// `UNSTABLE_RUSTDOC_TEST_PATH`, which is the only marker there is. An
+/// integration test needs neither check: `proc-macro-crate` already answers
+/// `Name` for one.
+///
+/// Both are environment variables rather than anything a compiler
+/// guarantees, so getting this wrong fails loudly at the use site — an
+/// unresolved path — and never silently.
+fn compiling_the_facade() -> bool {
+    std::env::var_os("UNSTABLE_RUSTDOC_TEST_PATH").is_none()
+        && std::env::var("CARGO_CRATE_NAME").is_ok_and(|name| name == "dynamic_config")
+}
 
 /// Builds the `impl` block that accompanies the annotated struct.
 pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
@@ -73,24 +122,29 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
     // Two shapes, chosen at compile time. A non-generic type keeps its `static`
     // and pays one atomic load per read; a generic one has no such option and
     // pays a registry lookup. Nobody pays for a feature they are not using.
-    let cell_slot = accessors::cell_slot(is_generic, name, &type_generics);
-    let configured_slot = accessors::configured_slot(is_generic, name, &type_generics);
-    let defaults_slot = accessors::defaults_slot(is_generic);
-    let overrides_slot = accessors::overrides_slot(is_generic);
-    let remote_slot = accessors::remote_slot(is_generic);
-    let aliases_slot = accessors::aliases_slot(is_generic);
-    let bindings_slot = accessors::bindings_slot(is_generic);
-    let flags_slot = accessors::flags_slot(is_generic);
+    // Resolved once and threaded through every helper: `crate_name` reads and
+    // parses the consumer's `Cargo.toml`, and the answer cannot change
+    // between two items of one expansion.
+    let path = &crate_path();
 
-    let layer_setters = accessors::layer_setters();
-    let introspection_methods = diagnostics::introspection_methods(&secret_names);
-    let hook_methods = watch::hook_methods();
-    let defaults_and_flag_setters = accessors::defaults_and_flag_setters();
-    let remote_methods = remote::remote_methods(name);
-    let binding_methods = accessors::binding_methods();
+    let cell_slot = accessors::cell_slot(path, is_generic, name, &type_generics);
+    let configured_slot = accessors::configured_slot(path, is_generic, name, &type_generics);
+    let defaults_slot = accessors::defaults_slot(path, is_generic);
+    let overrides_slot = accessors::overrides_slot(path, is_generic);
+    let remote_slot = accessors::remote_slot(path, is_generic);
+    let aliases_slot = accessors::aliases_slot(path, is_generic);
+    let bindings_slot = accessors::bindings_slot(path, is_generic);
+    let flags_slot = accessors::flags_slot(path, is_generic);
+
+    let layer_setters = accessors::layer_setters(path);
+    let introspection_methods = diagnostics::introspection_methods(path, &secret_names);
+    let hook_methods = watch::hook_methods(path);
+    let defaults_and_flag_setters = accessors::defaults_and_flag_setters(path);
+    let remote_methods = remote::remote_methods(path, name);
+    let binding_methods = accessors::binding_methods(path);
     let clear_remote_method = remote::clear_remote_method();
     let clear_flags_method = accessors::clear_flags_method();
-    let check_method = diagnostics::check_method();
+    let check_method = diagnostics::check_method(path);
     let clear_layer_methods = accessors::clear_layer_methods();
 
     Ok(quote! {
@@ -126,9 +180,12 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             /// configuration later. Keep the builder around to
             /// [`watch`](::dynamic_config::Builder::watch) with it.
             #[must_use]
-            pub fn builder(key: &str) -> ::dynamic_config::Builder<Self> {
-                ::dynamic_config::Builder::new(key)
-                    .with_installer(Self::replace)
+            pub fn builder(key: &str) -> #path::Builder<Self> {
+                #path::Builder::new(key)
+                    .with_installer(
+                        Self::dynamic_config_install,
+                        Self::dynamic_config_record_failure,
+                    )
                     .with_secrets(&[#(#secret_names),*])
                     .with_fields(Self::DYNAMIC_CONFIG_FIELDS)
                     .with_type_statics(
@@ -144,7 +201,7 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
 
             /// Remembers the builder that configured this type; see
             /// [`builder`](Self::builder).
-            fn dynamic_config_remember(builder: &::dynamic_config::Builder<Self>) {
+            fn dynamic_config_remember(builder: &#path::Builder<Self>) {
                 Self::dynamic_config_configured().set(::core::clone::Clone::clone(builder));
             }
 
@@ -154,7 +211,7 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             ///
             /// When nothing was configured yet.
             fn dynamic_config_builder(
-            ) -> ::core::result::Result<::dynamic_config::Builder<Self>, ::dynamic_config::Error>
+            ) -> ::core::result::Result<#path::Builder<Self>, #path::Error>
             {
                 Self::dynamic_config_configured().get(::core::stringify!(#name))
             }
@@ -197,8 +254,8 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             /// The same failures as a load — or the type not having been
             /// configured yet.
             pub fn prepare() -> ::core::result::Result<
-                ::dynamic_config::Commit,
-                ::dynamic_config::Error,
+                #path::Commit,
+                #path::Error,
             > {
                 Self::dynamic_config_builder()?.prepare()
             }
@@ -206,9 +263,39 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             /// Atomically swaps in a new snapshot.
             ///
             /// Readers already holding an `Arc` from an earlier
-            /// [`current`](Self::current) keep their own generation.
+            /// [`current`](Self::current) keep their own generation. The
+            /// install is recorded as `ReloadReason::Manual` — the program
+            /// did it.
             pub fn replace(config: Self) {
                 Self::dynamic_config_cell().store(config);
+            }
+
+            /// The builder's install door, carrying why and handing back
+            /// what it installed — which is what `init_and_current`
+            /// returns; see `builder`.
+            fn dynamic_config_install(
+                config: Self,
+                reason: #path::ReloadReason,
+            ) -> ::std::sync::Arc<Self> {
+                Self::dynamic_config_cell().store_with(config, reason)
+            }
+
+            /// The builder's failure door: a reload that installed nothing
+            /// is still a fact about this type, and `status()` reports it.
+            fn dynamic_config_record_failure(error: &#path::Error) {
+                Self::dynamic_config_cell().record_failure(error);
+            }
+
+            /// What is true of this configuration right now: which
+            /// generation is live, when it landed, why, and how the reloads
+            /// since have gone.
+            ///
+            /// A handful of atomic loads and **no I/O** — nothing is
+            /// re-read — so an exporter can call it per scrape. It carries
+            /// key paths, counts, timestamps and error kinds, and never a
+            /// configured value.
+            pub fn status() -> #path::ConfigStatus {
+                Self::dynamic_config_cell().status()
             }
 
             /// The current snapshot.
@@ -231,28 +318,49 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
                 Self::dynamic_config_cell().load()
             }
 
+            /// How many snapshots have been installed. Zero before the first.
+            ///
+            /// Monotonic, and the number to reach for when a hook needs a
+            /// total order across concurrent reloads — the order callbacks
+            /// are *called* in is not defined, this is.
+            pub fn generation() -> u64 {
+                Self::dynamic_config_cell().generation()
+            }
+
+            /// What is true of the installed snapshot: its generation, and
+            /// when it was installed. `None` before the first install.
+            ///
+            /// For operators rather than for correctness. Reading it is a
+            /// second load, so it can be one install away from a
+            /// [`current`](Self::current) taken beside it; nothing on the
+            /// read path consults it, which is why `current` is still one
+            /// atomic load.
+            pub fn meta() -> ::core::option::Option<#path::SnapshotMeta> {
+                Self::dynamic_config_cell().meta()
+            }
+
             // Expands to `bind_clap` when the facade has the `clap` feature,
             // and to nothing otherwise. It cannot be an expression-level guard
             // like the format redirects: the signature names a clap type.
-            ::dynamic_config::__clap_methods!();
+            #path::__clap_methods!();
 
             // The async loading surface, whenever the facade has `async` —
             // there is no argument to opt in with any more, and an unused
             // `changes()` costs nothing.
-            ::dynamic_config::__async_methods!(#name);
+            #path::__async_methods!(#name);
 
             // Emitted whenever the facade has `async`, with no argument to opt
             // in: wanting an async *store* is a different question from wanting
             // the async *loading* surface.
-            ::dynamic_config::__async_remote_methods!();
+            #path::__async_remote_methods!();
         }
 
-        impl #impl_generics ::dynamic_config::Reloadable for #name #type_generics
+        impl #impl_generics #path::Reloadable for #name #type_generics
             #where_clause
         {
             fn prepare() -> ::core::result::Result<
-                ::dynamic_config::Commit,
-                ::dynamic_config::Error,
+                #path::Commit,
+                #path::Error,
             > {
                 Self::prepare()
             }
@@ -262,4 +370,34 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one branch the end-to-end fixture cannot reach.
+    ///
+    /// `tests/renamed_dependency.rs` in the facade covers `FoundCrate::Name`
+    /// and the whole suite covers `Itself`; a consumer with no readable
+    /// manifest at all is only reachable by pointing the resolver at one.
+    /// What it must not do is panic — a proc macro that panics reports its
+    /// own backtrace instead of the missing dependency.
+    #[test]
+    fn a_manifest_that_cannot_be_read_keeps_the_old_hardcoded_path() {
+        let empty = std::env::temp_dir().join("dynamic-config-macros-no-manifest");
+        std::fs::create_dir_all(&empty).expect("the scratch directory is writable");
+
+        let restore = std::env::var_os("CARGO_MANIFEST_DIR");
+        std::env::set_var("CARGO_MANIFEST_DIR", &empty);
+
+        let path = crate_path().to_string();
+
+        match restore {
+            Some(value) => std::env::set_var("CARGO_MANIFEST_DIR", value),
+            None => std::env::remove_var("CARGO_MANIFEST_DIR"),
+        }
+
+        assert_eq!(path, quote!(::dynamic_config).to_string());
+    }
 }

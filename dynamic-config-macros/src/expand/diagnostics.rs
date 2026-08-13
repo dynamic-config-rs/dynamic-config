@@ -90,7 +90,7 @@ fn derives_debug(input: &ItemStruct) -> Option<&syn::Attribute> {
 
 /// `source_of`, `is_set`, `snapshot` and `explain`: the read-only
 /// introspection surface.
-pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
+pub(super) fn introspection_methods(path: &TokenStream, secret_names: &[String]) -> TokenStream {
     quote! {
         /// Explains `path`: every configured layer's answer, not just the
         /// winner's — what each layer had to say and who beat whom.
@@ -114,7 +114,7 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
         /// configured yet.
         pub fn explain(
             path: &str,
-        ) -> ::core::result::Result<::dynamic_config::Explanation, ::dynamic_config::Error> {
+        ) -> ::core::result::Result<#path::Explanation, #path::Error> {
             const SECRETS: &[&str] = &[#(#secret_names),*];
 
             let explanation = Self::dynamic_config_builder()?.explain(path)?;
@@ -122,7 +122,7 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
             // The builder redacts through the same rule; this is the belt
             // to its braces, and — because it is the *same* function —
             // the two can never drift into disagreeing.
-            if ::dynamic_config::touches_secret(path, SECRETS) {
+            if #path::touches_secret(path, SECRETS) {
                 return ::core::result::Result::Ok(explanation.redacted());
             }
 
@@ -142,8 +142,8 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
         pub fn source_of(
             path: &str,
         ) -> ::core::result::Result<
-            ::core::option::Option<::dynamic_config::Origin>,
-            ::dynamic_config::Error,
+            ::core::option::Option<#path::Origin>,
+            #path::Error,
         > {
             Self::dynamic_config_builder()?.source_of(path)
         }
@@ -154,7 +154,7 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
         ///
         /// The same failures as a load — or the type not having been
         /// configured yet.
-        pub fn is_set(path: &str) -> ::core::result::Result<bool, ::dynamic_config::Error> {
+        pub fn is_set(path: &str) -> ::core::result::Result<bool, #path::Error> {
             Self::dynamic_config_builder()?.is_set(path)
         }
 
@@ -170,8 +170,8 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
         /// The same failures as a load — or the type not having been
         /// configured yet.
         pub fn snapshot() -> ::core::result::Result<
-            ::dynamic_config::Snapshot,
-            ::dynamic_config::Error,
+            #path::Snapshot,
+            #path::Error,
         > {
             Self::dynamic_config_builder()?.snapshot()
         }
@@ -179,7 +179,7 @@ pub(super) fn introspection_methods(secret_names: &[String]) -> TokenStream {
 }
 
 /// `check`: the unknown-key and would-it-load report.
-pub(super) fn check_method() -> TokenStream {
+pub(super) fn check_method(path: &TokenStream) -> TokenStream {
     quote! {
         /// What this configuration resolves to, and whether it would load.
         ///
@@ -193,8 +193,8 @@ pub(super) fn check_method() -> TokenStream {
         /// configuration that would fail to deserialize is a successful
         /// report with `failure` set.
         pub fn check() -> ::core::result::Result<
-            ::dynamic_config::Report,
-            ::dynamic_config::Error,
+            #path::Report,
+            #path::Error,
         > {
             Self::dynamic_config_builder()?.check()
         }

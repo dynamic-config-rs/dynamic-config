@@ -25,6 +25,45 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-13
+
+### Added
+
+- `ConfigCell::waiter_evictions()` (feature `async`): a saturating count of
+  registrations that had to displace another waiter. Non-zero means `WAITERS`
+  is too small for this firmware — the condition that otherwise shows up only
+  as a device that never idles. Four bytes of RAM per cell, 18 bytes of
+  `.text` for the counter and 72 more if the accessor is called
+  (`thumbv7em-none-eabihf`, `opt-level = "z"`).
+
+### Changed
+
+- **The waiter budget stays a compile-time number, and there will be no wait
+  queue.** An intrusive list lifts the cap without an allocator and costs
+  `unsafe` in a crate that forbids it, self-referential futures that must
+  unlink on drop, and more RAM per waiting task than a slot — a node is a
+  `Waker` plus its links, a slot is the `Waker` alone. Raising the default
+  instead was measured and rejected: a slot is eight bytes on a 32-bit target,
+  so `ConfigCell<Settings, 4>` is 56 bytes against 88 for eight slots at
+  identical code size, and nine tasks on an eight-slot cell behave exactly as
+  five do on four. A device knows its tasks at compile time, so the const
+  parameter is the answer and `waiter_evictions()` says when it is set wrong.
+- Documented what over-budget actually costs: not churn but a livelock. The
+  displaced task wakes, re-registers and displaces another, so the executor
+  never reaches its idle loop until the configuration changes. No wake-up is
+  lost; the cost is power.
+- Documented interrupt safety: registering a waker, storing a configuration
+  and reading one are sound from an interrupt handler, because no borrow
+  outlives its critical section and no waker is woken while one is held.
+
+### Fixed
+
+- Nothing in behaviour, but the guarantee is now tested rather than argued: a
+  store that lands while a waker is registering is never a lost wake-up, every
+  waiter within budget is woken exactly once per change, and both places a
+  waker is woken — a configuration change and an eviction — hold no borrow
+  while they do it.
+
 ## [0.5.0] — 2026-08-12
 
 ## [0.4.0] — 2026-08-12
@@ -72,7 +111,8 @@ Initial release.
 - The `Validate` trait, and `Error`/`ErrorKind` small enough for a status
   register.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0

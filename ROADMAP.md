@@ -17,195 +17,131 @@ not here. **[figment]** is something the underlying loader,
 
 ## The next release
 
-Decided, not aspirational — each item keeps its full description in its
-own section; this is only what ships now. The shape follows
-[the 1.0 doctrine](#the-road-to-10-is-stabilisation-not-features-own):
-0.3 stabilised what existed, 0.4 built the instance engine and the
-evidence for it (both lists shipped whole; the story is the changelog's),
-and 0.5 spends that engine on the thing it was built for.
+Decided, not aspirational — each item keeps its full description in its own
+section below; this is the list and the order. The shape follows
+[the 1.0 doctrine](#the-road-to-10-is-stabilisation-not-features-own): 0.3
+stabilised what existed, 0.4 built the instance engine, 0.5 spent it on the
+Python bindings, and **0.6 is the clearing release** — everything that had
+been waiting for a reason other than "nobody has asked", done in one wave so
+the surface stops accumulating.
 
-**0.5 — the Python bindings.** One release, one subject. The plan this
-was built from has been retired now that all of it shipped; what the code
-does and why is
-[Implementation Details](book/src/python/internals.md). What ships:
+**0.6 is built and unreleased.** What landed is not here: the changelogs
+carry it, [README.md](README.md) describes the crate as it is, and this
+file keeps only what is still open. Three of its items were answered by
+*measurement* rather than by code, and each answer is written where it
+belongs rather than here:
 
-- `dynamic-config-python` — a PyO3 extension module — *shipped*: the
-  class API (`DynamicConfig(Model, key=..)`), the decorator, the full
-  lifecycle (init, load, reload, watch, hooks, `async for` changes,
-  last-known-good recovery) and the diagnostics (`source_of`, `is_set`,
-  `explain`, `check`, `snapshot`).
-- **The schema owns validation, Rust owns resolution.** A model is
-  validated exactly once per successful resolve and cached; `current()`
-  is an attribute lookup, never a boundary crossing. A rejected reload
-  keeps the previous snapshot serving, exactly as a Rust `validate`
-  refusal does. The schema can be a `dataclasses.dataclass` — the base
-  install has **no dependencies** — a Pydantic model, a Pydantic
-  dataclass or a `BaseSettings` class; `[pydantic]`,
-  `[pydantic-settings]` and `[all]` buy the ones that need a library.
-- **Secrets are derived, not re-declared** — the binding walks
-  `model_fields` for `SecretStr`/`SecretBytes` and seeds the same secret
-  list the generated Rust `builder()` seeds, so the redacted cache,
-  `explain` and the scrubbed `ValidationError` all follow from the model
-  the Python author already wrote.
-- **Type stubs**, a pytest suite that mirrors the Rust integration tests
-  (layering, strict env, LKG in three modes, watch, hooks, threading, GIL
-  and interpreter-shutdown safety, planted secrets), and a CI job that
-  runs them — *shipped*, a hundred and ninety-four tests over six
-  interpreter versions (3.9 through 3.14), with `mypy --strict` and
-  `ruff` over the package and every example run as part of the same job.
-  Three suites sit above the unit ones: `test_pydantic.py`, which asserts
-  that whatever a Pydantic model may be it may be here — inheritance,
-  `model_config`, validators, all four alias shapes, `RootModel`,
-  Pydantic dataclasses, generics, discriminated unions and
-  `BaseSettings`; `test_dataclasses.py`, which pins what the
-  dependency-free schema checks and what it refuses; and
-  `test_integration.py`, which runs whole scenarios and drives the
-  shipped framework examples, so an example that rots fails the suite. A
-  separate job installs the wheel into a bare virtualenv and proves the
-  base install needs nothing.
-- **The read path is an attribute lookup** — *shipped*: 1.1× a module
-  global, because the model is published into the Python object rather
-  than fetched back across the boundary, against 34× for a per-read
-  validation. The nanoseconds and the machine they were measured on are
-  in the same table ([the chapter](book/src/python.md#what-a-read-costs));
-  what the design claims is asserted exactly rather than timed.
-- **PyPI as `dynamic-config-py`.** The bare name is taken by an unrelated
-  single-release package from 2022; the distribution takes the qualified
-  name and the import stays `dynamic_config`, which is what every example
-  in the book and the plan spells. Reclaiming the bare name through
-  PEP 541 is worth doing and is nobody's blocker.
+- **figment as a plug-in** was rejected. `Source` is already the name of the
+  layer descriptor, `Source::provider` is already the trait the item asks
+  for, and a parser plug-in has no `Origin` to report — so the seam that
+  landed is narrower and public (`Value::parse`/`merge`/`render`/
+  `overlapping_paths`), and the reasoning is in
+  [the book](book/src/limitations.md).
+- **The embedded wait queue** was rejected on the target's own numbers. Past
+  the waiter budget the failure is a livelock rather than wake-churn, so
+  raising the default only relocates the cliff; an intrusive node costs more
+  RAM per waiter than a slot does, before the `unsafe`. What shipped is
+  `waiter_evictions()` — the budget reports when it is set wrong.
+- **A type-state builder** was rejected with a prototype: at the 1.71 floor
+  `#[diagnostic::on_unimplemented]` does not exist, the error a user gets is
+  worse than today's sentence, and the state parameter leaks into four
+  public signatures.
 
-Four things the wave found on the way, and fixed where they were wrong
-rather than around:
+**0.6 is complete.** Every item in it either landed or was answered by
+measurement; the entries below are what those answers left behind, and none
+of them is a design question any more.
 
-- `Builder::validate` now takes closures — a validator that needs context
-  could not be a `fn`, which is exactly what a binding needs.
-- **Nested secrets were redacted nowhere.** A dotted secret path was
-  missed by both the `explain` redaction and the redacted cache, which
-  mattered the moment a model could nest.
-- **A secret under an alias was redacted nowhere either.** The derived
-  list held one name per field, so a file spelling it any of the other
-  ways Pydantic accepts — `AliasChoices`, `AliasPath`,
-  `populate_by_name`, a Pydantic dataclass — put the value in `explain`
-  and in the "redacted" cache on disk. The list now holds every name a
-  file could use, because over-listing costs a key nothing supplies and
-  under-listing costs a secret.
-- **`bind_env` could not see a `.env` file.** A binding names one
-  variable exactly; a deployment that writes that variable into a `.env`
-  file rather than exporting it means the same thing by it, and got
-  nothing. Bindings now fall back to the `.env` files, below the real
-  environment — the order those layers were already in.
-- **A model holding an enum, a date or a `Decimal` could not be diffed.**
-  `changed_paths` — the audit half of a reload — raised a `TypeError`
-  for any schema with one of those in it, because neither `model_dump()`
-  nor `dataclasses.asdict` unwraps an enum and none of them is a JSON
-  scalar. And a *native TOML date* reached Python as a one-key marker
-  dict, so a `date` field met a table and every schema refused it. Both
-  convert now, in the one place the tree crosses the boundary.
+1. [Instruction counts](#instruction-counts-not-just-wall-clock-own) — the
+   harness and the workflow landed and have **never executed**: there is no
+   valgrind where they were built. The gate arms itself the moment a
+   maintainer runs the workflow once and commits the baseline it uploads.
+2. [What a remote fetch does not yet report](#what-a-remote-fetch-does-not-yet-report-own)
+   — the door exists now (`RemoteSink::failed`); what is left is one call at
+   each failure site in the seven network watch loops.
 
-### What 0.5 deliberately left out
+Two 0.6 answers are worth keeping in view because they will be asked again:
 
-Each of these was a **non-goal for v0**, and each is here rather than in
-a footnote because "not yet" and "not ever" are different answers:
+- **The config server carries no OpenTelemetry SDK.** Four dependency trees
+  and a background exporter in the one program holding every service's
+  secrets is weight that has to earn its place, and this does not: the
+  library side is free — `tracing` spans bridged through
+  `tracing-opentelemetry` in the *application's* graph — and `router()` is
+  the API, so a service that wants request spans mounts it in its own axum
+  app. TLS went the other way and is worth contrasting: it is *also* opt-in
+  and off by default, so a deployment with a terminator in front installs a
+  binary containing no TLS code — but a client certificate cannot be
+  delegated to a terminator at all, because what a terminator passes on is a
+  header, and a header is a claim.
+- **Free-threaded CPython is declared, on narrower ground than the
+  declaration sounds.** One interpreter (3.14t), one platform (manylinux
+  `x86_64`/`aarch64`), ten repeated runs of the threading and shutdown
+  suites: evidence, not proof. `cp313t` does not exist — PyO3 0.29 dropped
+  it when CPython promoted free-threading to supported in 3.14.
 
-- **The remote stores in the wheel** *(0.6, demand-driven)*. etcd,
-  Consul, Vault, NATS, Redis, S3 and Firestore are a gRPC stack, the AWS
-  SDK and three HTTP clients between them. A wheel is built per platform,
-  so every one of those would ride into every wheel for every user —
-  including the ones reading a single TOML file. The shape when it comes
-  is an opt-in wheel (`dynamic-config-py[etcd]`, its own build), not a
-  flag on this one.
-- **A tokio runtime in the wheel** *(follows the stores, not on its own)*.
-  The Rust `tokio` feature routes the crate's *own* async loads into
-  tokio's blocking pool; this binding never takes that path, because a
-  Python loop can await a Python future and nothing else. Enabling it
-  today would add a runtime no code enters. What answers the same
-  question — which pool pays for the blocking half — is `set_executor`,
-  which shipped. The async store clients are the one thing that would
-  make a tokio build mean something.
-- **`RemoteSource` implemented in Python** *(needs a design pass)*. A
-  Python object on the fetch path means the GIL is held across a network
-  call and a Python exception has to become a Rust error somewhere
-  sensible. Both are solvable; neither is solvable casually.
-- **Pydantic as a hard dependency** *(reversed — it is now optional)*.
-  The base install has none at all: a `dataclasses.dataclass` is a schema,
-  validated structurally, and `pip install dynamic-config-py[pydantic]`,
-  `[pydantic-settings]` or `[all]` buy the other kinds. Importing the
-  package with Pydantic uninstalled loads no Pydantic module, and CI
-  asserts that in a bare virtualenv rather than in a sentence.
-- **Direct `pydantic-core` coupling** *(refused)*. `model_validate` is the
-  public, stable entry point. Binding to internals would be version churn
-  for a cost that profiling says is not there — reloads are rare, and the
-  read path does not validate at all.
-- **`save` and JSON Schema from Python** *(refused)*. Pydantic already
-  serializes models and emits JSON Schema, better than a second
-  implementation would.
-- **Encrypted files** *(blocked on a Rust trait)*. `Decryptor` is a Rust
-  trait with no Python side, and shipping `age` to make one usable would
-  put a crypto stack in every wheel for a door only Rust can open.
-- **Free-threaded CPython support** *(0.6)*. The read path is lock-free
-  and the binding's state sits behind ordinary locks, so there is no
-  particular reason to expect trouble — but that is not an audit of the
-  convert-validate-swap step, and declaring support without one is a
-  promise made on optimism.
-- **A `pydantic-settings` source shim** *(refused — but support shipped,
-  the other way round)*. Wiring in as a `PydanticBaseSettingsSource`
-  would inherit that library's lifecycle — read once, at construction —
-  and lose the reloading that is the point. So the support goes the
-  other direction: a `BaseSettings` class is a schema like any other
-  model, and `DynamicConfig.from_settings(...)` reads its
-  `SettingsConfigDict` and rebuilds the declaration as engine sources
-  (`toml_file`/`json_file`/`yaml_file` become files, `env_file` becomes
-  the dotenv layer, `env_prefix` becomes a binding per leaf field so
-  `APP_PORT` stays `APP_PORT` rather than becoming `APP_<KEY>_PORT`).
-  What has no engine equivalent — `secrets_dir`, `cli_parse_args`, an
-  overridden `settings_customise_sources` — is refused at the call
-  rather than dropped, and a settings class used *without*
-  `from_settings` warns if it declares sourcing, because an `env_prefix`
-  that silently reads nothing is the failure mode worth spending a
-  warning on. A `secrets_dir` equivalent — a directory of single-value
-  files, which is how Docker and Kubernetes mount secrets — is a
-  reasonable engine source to add later; it is the only translation this
-  had to give up.
+**Deliberately still out**, each with a reason that is not "later": a
+[`WriteDurability` mode](#writedurability-as-api-own) nobody has measured a
+need for, the [runtime-agnostic S3 sleep](#runtime-agnostic-s3-watch-sleep-own)
+that is blocked on the AWS SDK, [serde_yaml](#serde_yamls-future-own) which
+moves when figment moves, [a ninth store](#a-store-nobody-has-asked-for-yet-own)
+nobody has asked for, [msgspec as a fifth Python
+schema](#msgspec-as-a-python-schema-own) waiting on somebody who actually
+wants it, and [a book per crate](#one-book-or-a-book-per-crate-own) — where
+the answer is probably per-crate entry *points* rather than fourteen books.
 
-The Python chapter's [Limitations](book/src/python/limitations.md) says
-the same things to a user rather than to a maintainer; this list is the
-one that decides what a later release picks up.
+---
 
-**0.6 and later, pulled by demand:** free-threaded CPython support for
-the wheels (after that audit), remote stores as an opt-in Python extra
-with the tokio runtime they need, `RemoteSource` from Python once its
-design pass happens, `proc_macro_crate` rename, key
-aliases across sections, `WriteDurability`, the embedded no-alloc wait
-queue, the shared auth core and its dependents (`with_timeout` symmetry,
-`ErrorKind::Auth`), runtime-agnostic S3 sleep, multi-key remote
-documents, an eighth store when somebody asks, instruction-count
-benchmarks, fuzzing harnesses, serde_yaml's future as upstream decides
-it, and — far out, designed in the open first — the config server.
+## Telemetry
 
-## Layers
+### What a remote fetch does not yet report **[own]**
 
-### Key aliases across sections **[viper]**
-`alias("pool.size", "pool.max_size")` moves a path within one section. A value
-that moved *between* sections — `server.timeout` becoming `http.timeout` — is
-not expressible, because a `LoadSpec` resolves one section at a time.
+The reload path, the fetch path, the server's `/metrics` and the Python
+binding all landed; [the book](book/src/telemetry.md) is the surface and the
+changelog is the history. One piece is left, and it is now a wiring job
+rather than a design question.
 
-Doable by resolving the other section during the alias pass. Unclaimed, and
-worth a real case first: the cost is that a load then depends on a section the
-type does not own.
+**A watch loop's failed attempts do not reach `RemoteStatus`.** `apply`
+records a delivery, so a working watch keeps the status current — but a loop
+whose stream broke, whose blocking query is erroring or whose credential was
+refused delivers nothing, so `dynamic_config_remote_up` reports the last
+*delivery* rather than the last *attempt*, and a store that stopped answering
+an hour ago looks healthy until something calls `refresh_remote`.
+
+The door exists: `RemoteSink::failed(&error)`, fenced on the sink's
+generation exactly as `apply` is, moving only the failure streak and the last
+failure so the staleness clock keeps running. What remains is one call at
+each failure site in the seven network watch loops — Consul's retry branch,
+etcd's stream-error and range-read branches, Redis' failed fetch and dead
+subscription, NATS' stream error, and Vault, S3 and Firestore's poll
+failures — reached through one `reporting_to(sink)` builder option per store
+rather than a second `watch` method in seven crates. git needs none of it:
+its watch is a poll, and a poll is a fetch, which already records itself.
+
+---
+
+## Correctness
+
+An external review of the 0.5 branch produced four "P0"s. Each was checked
+against the code before it was written down: two were real defects and one
+was a contract that existed in a comment but not in the public
+documentation — all three landed in 0.6. The fourth was a design decision
+that had already been made, documented and tested, and it is kept here
+because "asked and answered" is worth writing down once.
+
+### `changes()` before `init()` — asked and answered **[own]**
+
+The review asks for the first install *not* to wake a handle taken before
+`init()`. That behaviour is deliberate, documented at `dynamic.rs:221`
+("a handle taken before `init` sees the first install as its first
+change — *wake me when configuration exists*"), and pinned by two tests
+(`runtime_agnostic.rs:95`, `dynamic.rs:274`). It stays.
+
+The alternative — first install is not a change — makes "wait until
+configuration exists" unwritable without a second primitive, which is a
+worse trade for the shape people actually have.
 
 ---
 
 ## Remote stores
-
-### Reading several keys as one document **[own]**
-Every store crate reads one key. A deployment that splits configuration across a
-prefix — `myapp/db`, `myapp/server` — installs one source per section, which
-works and is a little tedious.
-
-Merging a prefix into one document is easy for etcd, Consul and Redis, awkward
-for Vault and Firestore, and needs an ordering between keys defined before it
-means anything. Possible, unclaimed.
 
 ### A store nobody has asked for yet **[own]**
 `RemoteSource` and `AsyncRemoteSource` are public, so a new store is a crate
@@ -218,28 +154,61 @@ and an eighth done casually would be worse than none.
 
 ---
 
+## Documentation
+
+### One book, or a book per crate **[own]**
+
+Sixteen crates share one mdBook, and the chapters that are *about a crate*
+rather than about the engine are already the majority of it: eight store
+pages, the config server and its threat model, the CLI, ten Python pages.
+They are correct and they are in the wrong place — a reader who has added
+`dynamic-config-vault` to a project does not want the engine's builder tour
+first, and a store's own README is a paragraph pointing at a page in
+somebody else's book.
+
+**What a per-crate book would buy.** docs.rs already builds one thing per
+crate; a book beside it would match how the crates are actually consumed
+(one store at a time), let a store's chapter carry its own version, and stop
+the root book growing a section per crate forever.
+
+**What it would cost, and this is the decision.** Fourteen mdBook builds in
+CI instead of one, fourteen link-check runs, and — the part that is not
+mechanical — the cross-references. Half the value in the store chapters is
+that they can say *this is the same `TlsConfig` every other store takes* and
+link to it; split, that becomes an inter-book link that no tool checks and
+that breaks silently when a page is renamed. The Python pages are worse:
+they are the same engine described for another language, and half of what
+they say is "as the Rust side does, here".
+
+**The shape that is probably right** is neither: keep one book and make the
+per-crate entry points real. A `book/src/crates/{name}.md` per crate, linked
+from that crate's README as its front door, holding what is specific to it
+and linking inward for what is shared — so a reader arriving from crates.io
+lands on their crate and not on chapter one, without splitting a link graph
+that is doing real work. It is worth doing when a store's chapter is long
+enough that this is not just a redirect; today two of them are.
+
+---
+
 ## The longer arc
 
 ### Instruction counts, not just wall clock **[own]**
 
-The criterion suite that landed in 0.4 measures time, which a shared
-runner measures badly — that is why the bench job is not a regression
-gate. iai-callgrind counts *instructions* instead, which is stable enough
-to gate on; the cost is valgrind on the runner and a second harness to
-keep honest. Worth it the first time a performance regression gets
-through the eye test. Cross-library comparisons stay out of CI either
-way, and in a written-up experiment — they rot too fast to gate on.
+Wall-clock benchmarks on a shared runner cannot gate a regression: the noise
+is larger than the change worth catching. `iai-callgrind` counts instructions
+under valgrind, which is deterministic enough to fail a pull request.
 
-### A config server **[own]**
+Not landed, and the reason is not "valgrind was missing" — it is that **the
+baseline cannot be produced from a laptop**. iai-callgrind's whole value is
+comparison against a committed baseline; it stores one under `target/`, which
+does not survive between CI runs. Wired up without one, every run would be a
+first run: it would print numbers and never fail. That is exactly the
+benchmark that silently does nothing, and it would cost a lockfile entry and
+a `cargo deny` review to have it.
 
-The other half of the distribution story, in the spirit of Spring Cloud Config Server:
-a small service that owns the files (or fronts a store), serves resolved
-sections over HTTP, and pushes changes to subscribed clients — so a fleet
-of services shares one source of truth without each carrying store
-credentials. The client side is already here (`RemoteSource` + a watch
-loop); the server would be a new crate with its own threat model (authn,
-who may read which section, audit). Far future, and worth designing in the
-open before building.
+What makes it landable is one maintainer action: a CI run on a branch that
+installs valgrind, runs `cargo bench --bench instructions --save-baseline
+main`, and commits what it produced.
 
 ### The road to 1.0 is stabilisation, not features **[own]**
 
@@ -248,64 +217,59 @@ API surface is now wide enough that its cost compounds. Before 1.0: a
 deliberate quiet period — 0.3 was the API-review release (the figment
 leak pass; both of its fixes shipped in 0.4, and its keep-decisions live
 in the stability-tiers chapter and the builder tour), 0.4 froze the shape
-of the engine, and 0.5 spends it on the bindings rather than widening the
-Rust surface again. Then: real external users, then a freeze candidate.
+of the engine, 0.5 spent it on the bindings rather than widening the Rust
+surface again, and 0.6 clears the backlog so that what remains is a
+*decision* rather than a queue. Then: real external users, then a freeze
+candidate.
 New capability proposals queue behind stability during that window. The problem worth
 solving by then is not a missing feature; it is that nothing this
 sophisticated has been beaten up by strangers yet.
 
-### A real no-alloc wait queue for the embedded crate **[own]**
-`ConfigCell<T, const WAITERS>` sizes the parking lot, but N > WAITERS still
-degrades to wake-churn (documented). An intrusive list would fix it without
-an allocator; it also drags `unsafe` into a crate that forbids it. That
-trade deserves its own design pass.
+### msgspec as a Python schema **[own]**
 
-### Fuzzing the parsing surfaces **[scorecard]**
+The binding's schema surface is an adapter — `validate`, `field_names`,
+`secret_paths`, `is_instance` — and there are four implementations of it
+already: Pydantic, a Pydantic dataclass, a plain `dataclasses.dataclass`,
+and `Values`, which is no schema at all.
+[msgspec](https://github.com/jcrist/msgspec) is the obvious fifth: a
+`msgspec.Struct` is a declaration in the same shape as the other two typed
+ones, it validates on decode, and it is markedly faster than Pydantic at
+exactly the thing this engine asks a schema to do — turn one resolved
+mapping into one instance, once per reload.
 
-proptest already fuzzes the parsing surfaces on stable, but a property test
-is not what the ecosystem's tooling recognises as fuzzing: OSSF Scorecard
-scores the project zero on it. `cargo-fuzz` harnesses over the same
-surfaces — the `.env` parser, units, the redaction walker, the section
-mapper — would be recognised, and coverage-guided input generation does
-find what proptest's random generation does not. Demand-driven: the
-property tests carry the correctness argument today.
+**What makes it a decision rather than an afternoon.** The adapter's four
+questions map cleanly (`msgspec.convert` for the validate half,
+`msgspec.structs.fields` for the names), but two things do not:
+
+- **Secrets have no declaration.** Pydantic has `SecretStr`, a dataclass has
+  `field(metadata={"secret": True})`, and msgspec has neither — its
+  `Meta`/`Annotated` carries constraints, not a place for a library's own
+  flag. So either `Annotated[str, Meta(extra={"secret": True})]` becomes the
+  spelling, which is this package inventing a convention in somebody else's
+  namespace, or a msgspec configuration passes `secrets=[..]` the way a
+  `Values` one does. The second is honest and already exists; it is also a
+  second way to say a thing the other schemas say once.
+- **The error shape.** `InvalidError.errors` carries Pydantic's own report,
+  scrubbed of values, because a Python program branches on it. msgspec
+  raises a `ValidationError` with a message and no structured report, so a
+  msgspec configuration's `errors` would be empty — which is fine and has to
+  be *said*, or it reads as a bug.
+
+Neither is hard; both are decisions about a surface that is meant to look
+the same whichever schema you brought. Worth doing when somebody is
+actually reaching for msgspec — the extra is `dynamic-config-py[msgspec]`,
+the adapter is one file next to `_pydantic.py`, and the base install goes on
+depending on nothing.
 
 ### `WriteDurability` as API **[own]**
 0.1.0 fsyncs every atomic write, unconditionally. If someone measures real
 pain from that, a `Normal`/`Fsync` mode is the escape hatch — not before.
 
-### Shuttle, for what loom cannot reach **[own]**
-loom (landed in 0.3) proves the remote fence and the wake protocol. The
-residue is structural: group reload and the watch registry lean on
-process-wide statics, which loom's iteration model does not tolerate, and
-`ConfigCell` sits behind `arc-swap`, which loom cannot instrument.
-Shuttle runs real code unmodified and is the tool to revisit for those.
-
-### `proc_macro_crate` rename support **[own]**
-`::dynamic_config` is hardcoded in the expansion, so renaming the dependency
-breaks. `proc-macro-crate` fixes it at the cost of a parsing dependency in
-the macro crate.
-
 ### serde_yaml's future **[own]**
 Archived upstream (`0.9.34+deprecated`); figment pulls it regardless, so a
 local switch buys nothing. Track figment; move when it moves.
 
-### A shared auth core for the HTTP stores **[own]**
-Consul, Vault and Firestore now share the margin (`REFRESH_WITHIN`) but
-still triplicate the Session/Token machinery. Reconcile the semantics on
-paper first; extract second.
-
-### `with_timeout` symmetry across stores **[own]**
-The three ureq crates take `with_timeout`; etcd/NATS/S3 configure timeouts
-through their clients' own vocabulary. Either add pass-throughs or document
-the asymmetry per README — decide once someone actually trips on it.
-
 ### Runtime-agnostic S3 watch sleep **[own]**
 Blocked on the AWS SDK itself being tokio-bound; revisit if smithy's
 runtime abstraction ever makes executor-independence real.
-
-### `ErrorKind::Auth` **[own]**
-The stores classify 401/403 internally now; a public variant would let a
-caller treat "credentials are wrong" as a program-visible state. Decide the
-boundary with a real consumer in hand.
 

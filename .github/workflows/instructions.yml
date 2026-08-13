@@ -1,0 +1,119 @@
+name: Instruction counts
+
+# Instruction counts, from callgrind rather than a clock.
+#
+# `ci.yml`'s `bench` job measures wall clock and is deliberately not a gate: a
+# shared runner's variance is larger than the changes worth catching. This one
+# counts instructions, which are identical on identical code, so it *can* gate
+# — but only against a baseline produced on this same runner image, and
+# `target/` does not survive between runs.
+#
+# So there are two modes, and which one runs depends on whether a baseline has
+# been committed:
+#
+#   no baseline  →  measure, upload `iai-baseline` as an artefact, and warn
+#                   that the gate is not armed. A maintainer downloads it,
+#                   commits it under `dynamic-config/benches/baselines/`, and
+#                   from then on:
+#   baseline     →  restore it, compare, and fail on a regression past the
+#                   limits `benches/instructions.rs` sets (exit code 3).
+#
+# Not in `ci-ok` and not on every push: valgrind adds minutes, and a job that
+# cannot fail until somebody performs a manual step must not be able to block
+# a merge in the meantime.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dynamic-config/src/**"
+      - "dynamic-config/benches/**"
+      - "dynamic-config/Cargo.toml"
+      - ".github/workflows/instructions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  instructions:
+    name: instruction counts
+    runs-on: ubuntu-latest
+    # valgrind is slow, and each benchmark runs under it once. Twenty-five
+    # minutes is generous for five of them and still bounded.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: valgrind --version
+
+      # The runner binary and the library must be the *same* version — the
+      # runner refuses a mismatch rather than reporting wrong numbers, and it
+      # is the most common way a first setup fails. Reading the version out of
+      # the manifest rather than repeating it here means a dependency bump
+      # cannot leave this line behind.
+      - name: install the version-matched runner
+        run: |
+          version=$(
+            grep -m1 '^iai-callgrind = ' dynamic-config/Cargo.toml |
+              sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/'
+          )
+          if [ -z "$version" ]; then
+            echo "::error file=dynamic-config/Cargo.toml::could not read the iai-callgrind version"
+            exit 1
+          fi
+          echo "installing iai-callgrind-runner $version"
+          cargo install "iai-callgrind-runner@$version" --locked
+
+      # `--baseline` compares only *if* the baseline is there and says nothing
+      # when it is not, which is exactly how a gate becomes a decoration. The
+      # mode is therefore decided here, once, and announced.
+      - id: baseline
+        name: is there a committed baseline?
+        run: |
+          if [ -d dynamic-config/benches/baselines ] &&
+             [ -n "$(ls -A dynamic-config/benches/baselines)" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning file=dynamic-config/benches/instructions.rs::no committed baseline under dynamic-config/benches/baselines — this run measures but cannot fail. Download the iai-baseline artefact and commit it to arm the gate."
+          fi
+
+      # The committed baseline is a verbatim copy of what `--save-baseline`
+      # wrote, so restoring it is a copy back into the tree iai-callgrind
+      # expects: target/iai/$PACKAGE/$BENCH_FILE/$GROUP/$FUNCTION.$ID.
+      - name: restore the baseline
+        if: steps.baseline.outputs.armed == 'true'
+        run: |
+          mkdir -p target/iai
+          cp -r dynamic-config/benches/baselines/. target/iai/
+          find target/iai -maxdepth 4 -type d | sort
+
+      - name: compare against the baseline
+        if: steps.baseline.outputs.armed == 'true'
+        # Exit code 3 is "one or more regressions occurred", against the
+        # per-group limits `benches/instructions.rs` declares. Nothing here
+        # names a threshold: they are a claim about the code and live with it.
+        run: >
+          cargo bench -p dynamic-config --features json,toml
+          --bench instructions -- --baseline=main
+
+      - name: measure, so a baseline can be committed
+        if: steps.baseline.outputs.armed != 'true'
+        run: >
+          cargo bench -p dynamic-config --features json,toml
+          --bench instructions -- --save-baseline=main
+
+      # Uploaded in both modes: in the unarmed one it is the thing a maintainer
+      # commits, and in the armed one it is what a reviewer reads when a
+      # regression is deliberate and the baseline has to move with it.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: iai-baseline
+          path: target/iai
+          if-no-files-found: error

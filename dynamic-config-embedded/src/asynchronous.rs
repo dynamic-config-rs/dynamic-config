@@ -4,11 +4,50 @@
 //! the tasks waiting on it. What differs is the storage — a `Vec<Waker>` needs
 //! an allocator, so this keeps a fixed number of slots in a critical section.
 //!
-//! [`WAITERS`] is the number. Four is chosen for the shape of the problem
-//! rather than as a guess: a device has a handful of tasks that care about
-//! configuration, not a handful of thousands. A fifth waiter replaces the
-//! oldest rather than being dropped — a task that is never woken is a bug that
-//! shows up as a hang, and one that is woken early merely polls again.
+//! [`DEFAULT_WAITERS`] is the number, and it is a type parameter because the
+//! right number is a property of the firmware, not of this crate: a device's
+//! tasks are known at compile time, so the count of them that can await a
+//! configuration is known at compile time too. That is why there is no queue
+//! here and no plan for one — see the module's `Beyond the budget` note below.
+//!
+//! Four is the default for the shape of the problem rather than as a guess: a
+//! device has a handful of tasks that care about configuration, not a handful
+//! of thousands. A fifth waiter replaces the occupant of a slot rather than
+//! being dropped — a task that is never woken is a bug that shows up as a hang,
+//! and one that is woken early merely polls again.
+//!
+//! # Beyond the budget
+//!
+//! With more waiting tasks than slots there is no honest outcome, only a choice
+//! of bad ones: a fixed array cannot park what does not fit. Dropping a waker
+//! hangs a task with no diagnostic; refusing the registration hangs it too,
+//! because a `Future` that returns `Pending` without a registered waker is one
+//! nobody will poll again. So this evicts and wakes, which loses no wake-up —
+//! and, measured, costs a device its idle loop: five tasks on a four-slot cell
+//! wake each other without end, with no configuration change to show for it.
+//!
+//! That is a livelock, not mere churn, and the only fix is to not be over
+//! budget. [`ConfigCell::waiter_evictions`](crate::ConfigCell::waiter_evictions)
+//! is how a firmware finds out that it is — non-zero means `WAITERS` is too
+//! small, and it is a number a lab bench can read long before a battery does.
+//!
+//! # Interrupts
+//!
+//! Every read and write of the state below happens inside
+//! `critical_section::with`, so registering a waker, storing a configuration
+//! and reading one are all sound from an interrupt handler. Two rules make
+//! that true, and both are load-bearing:
+//!
+//! - no borrow of the `RefCell` outlives its critical section, so an interrupt
+//!   that lands between two of them finds nothing borrowed;
+//! - no `Waker` is woken while the section is held. A `wake` implementation
+//!   belongs to the executor and may do anything — including storing a
+//!   configuration or polling the task it just woke, on this core, before it
+//!   returns. Waking inside the section would re-enter the `RefCell` and panic.
+//!
+//! The cost is the length of the section: a scan of `WAITERS` slots and at most
+//! one `Waker` clone, which is two word stores. Nothing here parses, and
+//! nothing here waits.
 
 use core::cell::RefCell;
 use core::future::Future;
@@ -28,6 +67,11 @@ pub(crate) struct Notify<const WAITERS: usize> {
 #[derive(Debug)]
 struct State<const WAITERS: usize> {
     generation: u32,
+    /// Registrations that had to displace another waiter, saturating. Four
+    /// bytes per cell, and the only way a firmware learns that `WAITERS` is
+    /// too small before the symptom — a device that never idles — reaches a
+    /// battery.
+    evictions: u32,
     waiting: [Option<Waker>; WAITERS],
 }
 
@@ -36,6 +80,7 @@ impl<const WAITERS: usize> Notify<WAITERS> {
         Self {
             inner: Mutex::new(RefCell::new(State {
                 generation: 0,
+                evictions: 0,
                 waiting: [const { None }; WAITERS],
             })),
         }
@@ -43,6 +88,10 @@ impl<const WAITERS: usize> Notify<WAITERS> {
 
     pub(crate) fn generation(&self) -> u32 {
         critical_section::with(|token| self.inner.borrow(token).borrow().generation)
+    }
+
+    pub(crate) fn evictions(&self) -> u32 {
+        critical_section::with(|token| self.inner.borrow(token).borrow().evictions)
     }
 
     /// Records a new configuration and wakes everything waiting.
@@ -93,12 +142,24 @@ impl<const WAITERS: usize> Notify<WAITERS> {
             // nobody will ever poll again, and that is a hang. Woken, it
             // polls, sees no change, and re-registers.
             //
+            // Refusing this registration instead would be the same hang with
+            // a different name: `poll` would return `Pending` with no waker
+            // anywhere, and nothing would ever poll the task again.
+            //
             // With a *steady state* of more waiters than slots, that
-            // re-registration evicts somebody else and the churn never
-            // settles: the executor stays busy waking and re-parking, and a
-            // battery device never reaches its idle loop. That is why the
-            // slot count is a type parameter — size it to the real number of
-            // waiting tasks. A true no-alloc wait queue is on the roadmap.
+            // re-registration evicts somebody else and it never settles:
+            // measured, five tasks on a four-slot cell trade wake-ups for as
+            // long as anyone watches, with no configuration change between
+            // them, and the executor never reaches its idle loop. No wake-up
+            // is lost — the cost is entirely power. That is why the slot count
+            // is a type parameter: size it to the real number of waiting
+            // tasks, which on a device is a number the firmware knows.
+            //
+            // The counter is what makes that diagnosable instead of a mystery
+            // brown-out. Saturating, because the question it answers is "did
+            // this ever happen", and a wrap could answer "no" to it.
+            state.evictions = state.evictions.saturating_add(1);
+
             state.waiting[0].replace(waker.clone())
         });
 

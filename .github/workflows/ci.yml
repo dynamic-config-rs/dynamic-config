@@ -61,10 +61,17 @@ jobs:
       - run: >
           cargo clippy --workspace --all-targets --all-features
           --exclude dynamic-config-python
+          --exclude dynamic-config-python-remote
       - run: >
           cargo clippy --workspace --all-targets --no-default-features
           --exclude dynamic-config-python
+          --exclude dynamic-config-python-remote
       - run: cargo clippy -p dynamic-config-python --lib
+      # And the remote wheel's Rust half, excluded from the sweeps for the
+      # same reason and otherwise the one crate in this workspace with no
+      # lint gate at all. `justfile` has carried both lines since the crate
+      # landed; this is CI catching up to the gate `just check` already is.
+      - run: cargo clippy -p dynamic-config-python-remote --lib
 
   test:
     strategy:
@@ -97,12 +104,41 @@ jobs:
           --exclude dynamic-config-firestore
           --exclude dynamic-config-embedded
           --exclude dynamic-config-python
+          --exclude dynamic-config-python-remote
       # `no_std` and the workspace's `--features full` do not mix: this crate
       # has its own features and no `full`.
       - run: cargo test -p dynamic-config-embedded --features std,async
       # The examples are documentation people run; a stale one is worse than a
       # missing one.
       - run: cargo build -p dynamic-config --features full --examples
+      # The git store's examples need no server, and the config server's TLS
+      # example is behind `required-features`, so neither is reached by the
+      # workspace test run above.
+      - run: cargo build -p dynamic-config-git --examples
+      - run: cargo build -p dynamic-config-server --all-features --examples
+      # The config server's own features are opt-in, so the workspace run
+      # above — which asks for `full`, a feature this crate does not have —
+      # tests it with *none* of them: `tests/tls.rs` and `tests/client.rs`
+      # are `#![cfg(feature = ...)]` in their entirety and compile to
+      # nothing. The suite that asserts a handshake still demands a
+      # certificate is exactly the one that was not running.
+      #
+      # `justfile` has had this line since the crate landed; this is CI
+      # catching up to it.
+      #
+      # Linux only, and stated rather than assumed: what these suites prove
+      # — that a handshake demands a certificate, that a section that is not
+      # yours is the same 404 — is the same on every platform, and the one
+      # part that is not (the refusal to read a world-readable key) is
+      # already `#[cfg(unix)]`. The three-runner matrix exists for the
+      # *watcher*, which this crate does not own.
+      - if: runner.os == 'Linux'
+        run: cargo test -p dynamic-config-server --all-features
+      # One of them is *run*: `ini_provider` is the book's worked answer to
+      # "can I plug in a parser for a format you do not read", and a book
+      # snippet whose output no longer matches is worse than no snippet. It
+      # needs no setup and writes nothing.
+      - run: cargo run -p dynamic-config --example ini_provider --features figment,json
       # The compile-fail diagnostics that only exist when a feature is *off*
       # cannot be seen by a build that has it on.
       - run: cargo test -p dynamic-config --no-default-features --features json --test ui
@@ -120,6 +156,7 @@ jobs:
           --exclude dynamic-config-firestore
           --exclude dynamic-config-embedded
           --exclude dynamic-config-python
+          --exclude dynamic-config-python-remote
           -- --test-threads=1
         if: matrix.os == 'ubuntu-latest'
       # Doctests document the default feature set, so they are skipped when it
@@ -304,7 +341,9 @@ jobs:
         working-directory: dynamic-config-python
       # The stubs are shipped, so they are checked: `current()` has to
       # come back as the caller's model rather than as `Any`.
-      - run: mypy --strict python/dynamic_config/
+      # The package, and a file written the way a *caller* writes one:
+      # types that regress for a user are invisible to a test suite.
+      - run: mypy --strict python/dynamic_config/ tests/typing/
         working-directory: dynamic-config-python
       # Lint and format, over the package, the suite and the examples —
       # an example is code people copy, so it is held to the same rules.
@@ -323,6 +362,170 @@ jobs:
             python "$example" > /dev/null
           done
 
+  python-free-threaded:
+    name: the Python bindings, without a GIL
+    runs-on: ubuntu-latest
+    # Ten repeats of the concurrency suite on top of the whole suite; a hung
+    # job should fail rather than sit on a runner.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          # 3.14t and not 3.13t: PyO3 0.29 dropped 3.13t, following CPython,
+          # which declared free-threading supported rather than experimental in
+          # 3.14. A 3.13t row here would not build.
+          python-version: "3.14t"
+      # A `t` interpreter that turned its GIL back on for some unrelated reason
+      # would make every assertion below pass for the wrong reason. Check the
+      # premise before relying on it.
+      - name: the interpreter really has no GIL
+        run: |
+          python -VV
+          python -c "
+          import sys, sysconfig
+          assert sysconfig.get_config_var('Py_GIL_DISABLED'), 'not a free-threaded build'
+          assert not sys._is_gil_enabled(), 'the GIL is on before anything was imported'
+          "
+      - run: pip install maturin pytest pytest-asyncio pydantic pydantic-settings fastapi flask django httpx
+      # `-i python` is the part that does the work, and it is not optional:
+      # without it maturin builds an abi3 wheel against no interpreter in
+      # particular and never looks at the one on PATH. Pointed at a
+      # `Py_GIL_DISABLED` interpreter it emits a version-specific `cp314t`
+      # wheel instead, because abi3 has no free-threaded form.
+      #
+      # `--no-default-features` switches off the `abi3` Cargo feature as well.
+      # That does not change the tag — maturin decides that from the
+      # interpreter — but it means pyo3 is never *asked* for abi3, so the
+      # build does not depend on pyo3's documented-as-backward-compatible
+      # fallback from abi3 to a free-threaded build.
+      - run: maturin build --no-default-features -i python --out dist
+        working-directory: dynamic-config-python
+      - name: the wheel is tagged for this interpreter, not abi3
+        working-directory: dynamic-config-python
+        run: |
+          ls dist
+          if ls dist/*abi3*.whl >/dev/null 2>&1; then
+            echo "::error::the free-threaded build produced an abi3 wheel"
+            exit 1
+          fi
+          ls dist/*cp314-cp314t*.whl >/dev/null
+      - run: pip install --no-index --find-links dist dynamic-config-py
+        working-directory: dynamic-config-python
+      # The declaration, checked from outside the suite too: a module without
+      # `Py_mod_gil = Py_MOD_GIL_NOT_USED` makes CPython re-enable the GIL for
+      # the whole process at import, and everything after it would then be
+      # measuring a GIL build wearing a `t`.
+      - name: importing the extension does not re-enable the GIL
+        run: |
+          python -c "
+          import sys
+          import dynamic_config
+          assert not sys._is_gil_enabled(), 'importing dynamic_config re-enabled the GIL'
+          "
+      - run: python -m pytest tests -q
+        working-directory: dynamic-config-python
+      # The races that matter are not deterministic, and a single green run of
+      # them is an anecdote. Ten is not proof either, but it is the floor.
+      - name: the concurrency suite, ten times over
+        working-directory: dynamic-config-python
+        run: |
+          for iteration in $(seq 1 10); do
+            echo "── iteration $iteration"
+            python -m pytest tests/test_threading.py tests/test_shutdown.py \
+              tests/test_free_threaded.py -q
+          done
+
+  python-remote:
+    name: the remote wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the ceiling. The middle versions are covered by the
+        # base package's job: this wheel's Python half is a thin facade over
+        # store objects, and what it can break is packaging, not syntax.
+        python: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The two wheels version independently of the workspace but not of
+      # each other: the extra `dynamic-config-py[remote]` resolves to a
+      # distribution that requires the base one, so a hand edit that moves
+      # only one of them is a release that cannot install.
+      - name: the two Python packages agree on a version
+        run: |
+          base=$(grep -m1 '^version' dynamic-config-python/Cargo.toml)
+          remote=$(grep -m1 '^version' dynamic-config-python-remote/Cargo.toml)
+          if [ "$base" != "$remote" ]; then
+            echo "::error::the Python packages disagree: base $base, remote $remote"
+            exit 1
+          fi
+      # The remote wheel carries the etcd client, which compiles its gRPC
+      # stubs at build time and needs the `protoc` binary the runner image
+      # does not carry. The base wheel's job needs none of this: it carries
+      # no store.
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - run: pip install maturin pytest pytest-asyncio mypy ruff
+      # A target directory each, and it is not a nicety: both wheels' cdylib
+      # is `[lib] name = "_core"`, so they write the same `lib_core.so`. Two
+      # builds sharing one target directory make the second a cache hit on
+      # the first's artefact, and the wheel then carries the *other*
+      # package's extension module — which fails as a missing attribute, a
+      # long way from the cause.
+      - run: maturin build --out dist
+        working-directory: dynamic-config-python
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/python
+      - run: maturin build --out dist
+        working-directory: dynamic-config-python-remote
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/python-remote
+      # Both wheels, installed the way a user installs them.
+      # `../` because this step runs in the remote wheel's directory: the base
+      # wheel's `dist` is its sibling, and pip *warns* about a find-links path
+      # that does not exist rather than failing on it — so the mistake shows
+      # up as "no matching distribution" for a wheel that was built two steps
+      # earlier.
+      - run: pip install --no-index --find-links ../dynamic-config-python/dist --find-links dist dynamic-config-py-remote
+        working-directory: dynamic-config-python-remote
+      # The container-backed cases skip themselves when there is no Docker
+      # daemon; everything else runs against scripted servers.
+      - run: python -m pytest tests -q
+        working-directory: dynamic-config-python-remote
+      - run: mypy --strict python/
+        working-directory: dynamic-config-python-remote
+      - run: ruff check .
+        working-directory: dynamic-config-python-remote
+      - run: ruff format --check .
+        working-directory: dynamic-config-python-remote
+      # The base install must not have gained a remote dependency: the
+      # stores are an extra, and an extra that is not opt-in is not one.
+      - name: the base wheel still imports without this one
+        run: |
+          python -m venv /tmp/base-only
+          /tmp/base-only/bin/pip install --quiet --no-index --find-links dynamic-config-python/dist dynamic-config-py
+          /tmp/base-only/bin/python -c "
+          import dynamic_config
+          try:
+              import dynamic_config.remote
+          except ImportError as error:
+              assert 'remote' in str(error), error
+          else:
+              raise SystemExit('dynamic_config.remote imported without the extra')
+          "
+
   loom:
     name: loom model checking
     runs-on: ubuntu-latest
@@ -340,6 +543,53 @@ jobs:
       # can drift.
       - run: RUSTFLAGS="--cfg loom" cargo test -p dynamic-config --no-default-features --features json,async --test loom --release
 
+  shuttle:
+    name: shuttle model checking
+    runs-on: ubuntu-latest
+    # A hung job should fail, not sit on a runner for six hours.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # What loom cannot reach: `ConfigCell` sits behind arc-swap, which loom
+      # cannot instrument at all, and the hook list and group reload live in
+      # `static`s that loom's iteration model does not tolerate.
+      #
+      # A randomised scheduler in a merge gate would normally be a flaky gate.
+      # This one is not: the models call `check_random_with_seed` with a fixed
+      # seed, so every run explores the same 200,000 schedules and the job is a
+      # regression test rather than a search. Searching is `just shuttle-soak`,
+      # by hand, with a drawn seed that the harness prints.
+      - run: RUSTFLAGS="--cfg shuttle" cargo test -p dynamic-config --no-default-features --features json,async --test shuttle --release
+
+  fuzz-build:
+    name: the fuzz targets still compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Nightly, because libFuzzer arrives through `-Z sanitizer`. Dev-only
+      # tooling: `fuzz/` is its own workspace and nothing in the crates'
+      # 1.71 floor depends on it. `docs` already gates on nightly, so this
+      # takes on no risk the gate did not already carry.
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      # Building, not running. A fuzz *run* belongs on a schedule
+      # (`fuzz.yml`): it is unbounded by nature, and a crash it finds is
+      # rarely the fault of the pull request it would block. What does
+      # happen — a target that stops compiling because the API under it
+      # moved — is caught here, deterministically, on every change.
+      - run: cargo fuzz build
+        working-directory: fuzz
+
   bench:
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
@@ -355,6 +605,15 @@ jobs:
       # wants to check them. `--quick` trades criterion's full sampling for a
       # bounded run; the hand-rolled targets ignore the flag.
       - run: cargo bench -p dynamic-config --features json -- --quick
+      # `instructions` is excluded from the line above by its `required-features`
+      # and could not run here anyway: it needs valgrind and a version-matched
+      # `iai-callgrind-runner`, which is what `instructions.yml` carries. What
+      # belongs in every push is that the harness still *compiles* — a bench
+      # that stopped building should fail here, not in a workflow nobody runs
+      # until they need a number from it.
+      - run: >
+          cargo bench -p dynamic-config --features json,toml
+          --bench instructions --no-run
 
   msrv:
     strategy:
@@ -374,9 +633,11 @@ jobs:
           # translation machinery reaches `sha2 0.11`, which is edition 2024.
           - rust: "1.85"
             features: "json,age"
-          # The features that add no dependency must not move the floor at all.
+          # The features that add no dependency must not move the floor at all
+          # — `telemetry` is one of them: an exposition format is a wire
+          # encoding, not a crate.
           - rust: "1.71"
-            features: "json,dotenv,figment"
+            features: "json,dotenv,figment,telemetry"
           # `watch` does more: notify 8 declares 1.85 through notify-types.
           - rust: "1.85"
             features: "full"
@@ -397,10 +658,29 @@ jobs:
             package: dynamic-config-s3
           - rust: "1.85"
             package: dynamic-config-firestore
+          # What the store crates share holds nothing but `std`, so it must
+          # never be the thing that raises one of their floors.
+          - rust: "1.71"
+            package: dynamic-config-store-core
+          - rust: "1.85"
+            package: dynamic-config-git
+          # axum 0.8 declares 1.80, and a server carries a web framework.
+          - rust: "1.80"
+            package: dynamic-config-server
+          # TLS is off by default, so the floor has to be checked with it on
+          # too — rustls and tokio-rustls both declare 1.71, and this row is
+          # what keeps that true rather than assumed.
+          - rust: "1.80"
+            package: dynamic-config-server
+            flags: "--all-features"
           - rust: "1.85"
             package: dynamic-config-cli
           - rust: "1.85"
             package: dynamic-config-python
+          # The remote wheel carries all seven store clients, so it inherits
+          # the highest floor among them rather than PyO3's.
+          - rust: "1.88"
+            package: dynamic-config-python-remote
           - rust: "1.83"
             package: dynamic-config-embedded
             flags: "--no-default-features --features json,async"
@@ -469,6 +749,7 @@ jobs:
             AGENTS.md CHANGELOG.md docs/*.md scripts/README.md
             dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
             book/src/*.md book/src/remote-stores/*.md book/src/python/*.md
+            book/src/config-server/*.md
             .claude/skills/*/SKILL.md .github/ISSUE_TEMPLATE/*.md
           fail: true
 
@@ -527,6 +808,7 @@ jobs:
           --exclude dynamic-config-redis --exclude dynamic-config-s3
           --exclude dynamic-config-firestore --exclude dynamic-config-embedded
           --exclude dynamic-config-python
+          --exclude dynamic-config-python-remote
           --fail-under-lines 80
           --lcov --output-path lcov.info
       - name: summary
@@ -569,7 +851,11 @@ jobs:
       - features
       - loader
       - loom
+      - shuttle
+      - fuzz-build
       - python
+      - python-free-threaded
+      - python-remote
       - bench
       - coverage
       - msrv

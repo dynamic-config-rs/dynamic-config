@@ -1,6 +1,6 @@
 # Examples
 
-Twenty-six of them, each showing one idea. All run from the workspace root.
+Twenty-seven of them, each showing one idea. All run from the workspace root.
 
 ## Getting started
 
@@ -9,6 +9,7 @@ Twenty-six of them, each showing one idea. All run from the workspace root.
 | [`basic`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/basic.rs) | `json` | Load once, read the snapshot. |
 | [`sections`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/sections.rs) | `json`, `watch` | Several config types over one set of files, each owning its own key, files and watcher. |
 | [`errors`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/errors.rs) | `json` | Every `ErrorKind`, what each one calls for, and reading `path` and `origin`. |
+| [`document_shape`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/document_shape.rs) | `json` | A file with no section header, a key the struct does not name, two files holding half a struct each, and a field nothing supplies — the four questions in [Document Shape](document-shape.md), run. |
 
 ## Where values come from
 
@@ -65,6 +66,7 @@ Twenty-six of them, each showing one idea. All run from the workspace root.
 
 ```sh
 cargo run -p dynamic-config --example errors      --features json
+cargo run -p dynamic-config --example document_shape --features json
 cargo run -p dynamic-config --example layers      --features json
 cargo run -p dynamic-config --example cli         --features clap,json -- --check
 cargo run -p dynamic-config --example hot_reload  --features watch,toml

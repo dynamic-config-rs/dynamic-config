@@ -17,13 +17,16 @@ fmt:
 # Clippy with warnings denied, at both ends of the feature range.
 lint:
     cargo clippy --workspace --all-targets --all-features \
-        --exclude dynamic-config-python -- -D warnings
+        --exclude dynamic-config-python \
+        --exclude dynamic-config-python-remote -- -D warnings
     cargo clippy --workspace --all-targets --no-default-features \
-        --exclude dynamic-config-python -- -D warnings
-    # Its own line, lib only: an extension module links no libpython, so
+        --exclude dynamic-config-python \
+        --exclude dynamic-config-python-remote -- -D warnings
+    # Their own lines, lib only: an extension module links no libpython, so
     # it has no test target to build — and clippy over `--all-targets`
     # would try.
     cargo clippy -p dynamic-config-python --lib -- -D warnings
+    cargo clippy -p dynamic-config-python-remote --lib -- -D warnings
 
 # The whole suite, plus the two configurations that only exist with features
 # off. The container crates are excluded — their tests drive real servers and
@@ -34,7 +37,12 @@ test:
         --exclude dynamic-config-nats --exclude dynamic-config-vault \
         --exclude dynamic-config-redis --exclude dynamic-config-s3 \
         --exclude dynamic-config-firestore --exclude dynamic-config-embedded \
-        --exclude dynamic-config-python
+        --exclude dynamic-config-python \
+        --exclude dynamic-config-python-remote
+    # The server's TLS suite needs its own line: it has no `full` feature, so
+    # the workspace run above builds it with defaults and never compiles the
+    # handshake, the key-permission refusal or the mTLS tests.
+    cargo test -p dynamic-config-server --all-features
     cargo test -p dynamic-config --no-default-features --lib --tests
     cargo test -p dynamic-config --no-default-features --features json --test ui
     cargo test -p dynamic-config --no-default-features --features async,json
@@ -45,19 +53,58 @@ mocks:
     cargo test -p dynamic-config-consul --test mock_agent
     cargo test -p dynamic-config-vault --test mock_vault
     cargo test -p dynamic-config-firestore --test mock_firestore
+    # The credential-redaction and auth-classification unit tests live in
+    # each store's `src/lib.rs` and need no server — they belong in the
+    # fast gate, not behind Docker.
+    cargo test -p dynamic-config-etcd --lib
+    cargo test -p dynamic-config-nats --lib
+    cargo test -p dynamic-config-redis --lib
+    cargo test -p dynamic-config-s3 --lib
 
 # The Python bindings: build the extension into a virtualenv, then run
 # the suite, the type checker and the linter against it. Needs a venv
 # (`python -m venv .venv && . .venv/bin/activate && pip install -e
 # 'dynamic-config-python[dev]'`, or the same list by hand: maturin
 # pytest pytest-asyncio pydantic pydantic-settings mypy ruff).
+# `CARGO_TARGET_DIR` per recipe, and it is not a nicety: both wheels' cdylib
+# is `[lib] name = "_core"`, so they write the same `lib_core.so`. Sharing a
+# target directory makes the second `maturin develop` report "Finished in
+# 0.14s" and install the *first* wheel's extension into the second package —
+# which fails as `no attribute 'EtcdStore'`, a long way from the cause.
 python:
-    cd dynamic-config-python && maturin develop
+    cd dynamic-config-python && CARGO_TARGET_DIR=../target/python maturin develop
     cd dynamic-config-python && python -m pytest tests -q
-    cd dynamic-config-python && mypy --strict python/dynamic_config/
+    cd dynamic-config-python && mypy --strict python/dynamic_config/ tests/typing/
     cd dynamic-config-python && ruff check .
     cd dynamic-config-python && ruff format --check .
     cd dynamic-config-python && for example in examples/[0-9]*.py; do echo "→ $example"; python "$example" > /dev/null || exit 1; done
+
+# The opt-in remote wheel: the same gate, pointed at the other directory.
+# It is a second extension module rather than a feature of the first — a
+# wheel is built per platform, so the store clients cannot ride in the
+# install that reads one TOML file. Needs `just python` to have run: the
+# tests import the base package.
+python-remote:
+    cd dynamic-config-python-remote && CARGO_TARGET_DIR=../target/python-remote maturin develop
+    cd dynamic-config-python-remote && python -m pytest tests -q
+    cd dynamic-config-python-remote && mypy --strict python/
+    cd dynamic-config-python-remote && ruff check .
+    cd dynamic-config-python-remote && ruff format --check .
+
+# The same suite on a free-threaded interpreter. A separate recipe because
+# it needs a separate venv: `Py_GIL_DISABLED` is not abi3, so the wheel is
+# built with `--no-default-features` and is version-specific — it cannot
+# share an install with the abi3 one. Point VENV at a 3.14t venv
+# (`uv python install 3.14t && uv venv --python 3.14t /tmp/ft`).
+#
+# The ten repeats are the point: the races the audit is about are timing
+# dependent, and one green run of them is an anecdote.
+python-free-threaded VENV:
+    {{VENV}}/bin/python -c "import sys, sysconfig; assert sysconfig.get_config_var('Py_GIL_DISABLED'), 'not a free-threaded interpreter'"
+    cd dynamic-config-python && VIRTUAL_ENV={{VENV}} CARGO_TARGET_DIR=../target/python-free-threaded {{VENV}}/bin/maturin develop --no-default-features
+    {{VENV}}/bin/python -c "import sys, dynamic_config; assert not sys._is_gil_enabled(), 'importing dynamic_config re-enabled the GIL'"
+    cd dynamic-config-python && {{VENV}}/bin/python -m pytest tests -q
+    cd dynamic-config-python && for i in $(seq 1 10); do echo "→ iteration $i"; {{VENV}}/bin/python -m pytest tests/test_threading.py tests/test_shutdown.py tests/test_free_threaded.py -q || exit 1; done
 
 # What a Python read costs, next to the things it is claimed to cost
 # like. Not a gate — a shared runner cannot tell an attribute lookup from
@@ -65,12 +112,60 @@ python:
 python-bench:
     cd dynamic-config-python && python benchmarks/read_path.py
 
+# Instruction counts, which unlike wall clock are stable enough to gate on.
+# Needs valgrind and `iai-callgrind-runner` at EXACTLY the version of the
+# `iai-callgrind` dev-dependency — the runner refuses a mismatch rather
+# than reporting wrong numbers. See CONTRIBUTING.md.
+instructions:
+    cargo bench -p dynamic-config --features json,toml --bench instructions
+
+# The same harness, compiled but not run — which is all the ordinary gate
+# can do without valgrind, and enough to catch a bench that stopped
+# building.
+instructions-check:
+    cargo bench -p dynamic-config --features json,toml --bench instructions --no-run
+
 # The loom models: every interleaving of the remote fence and the wake
 # protocol, on the real code (`src/sync.rs` swaps the primitives). Only the
 # `loom` test target builds under `--cfg loom` — the runtimes the examples
 # use have their own loom wiring the flag alone does not satisfy.
 loom:
     RUSTFLAGS="--cfg loom" cargo test -p dynamic-config --no-default-features --features json,async --test loom --release
+
+# The shuttle models: the residue loom cannot reach — `ConfigCell` behind
+# arc-swap, the hook list, group reload, and a `static` cell awaited through
+# `changes()`. Randomised scheduling, but from a *fixed* seed, so a run is
+# reproducible and CI can gate on it. `SHUTTLE_SEED` and `SHUTTLE_ITERATIONS`
+# override; `just shuttle-soak` is the search.
+shuttle:
+    RUSTFLAGS="--cfg shuttle" cargo test -p dynamic-config --no-default-features --features json,async --test shuttle --release
+
+# The same models, searching instead of regressing: a drawn seed (printed, so
+# a failure is replayable) and forty times the schedules. Minutes, not
+# seconds — run it when changing anything in `cell.rs`, `group.rs` or
+# `asynchronous.rs`, not on every commit.
+shuttle-soak:
+    SHUTTLE_SEED=random SHUTTLE_ITERATIONS=2000000 RUSTFLAGS="--cfg shuttle" \
+        cargo test -p dynamic-config --no-default-features --features json,async \
+        --test shuttle --release -- --nocapture
+
+# The fuzz targets compile — exactly what CI gates on. The *running* is on a
+# schedule (`.github/workflows/fuzz.yml`), because a fuzz run is unbounded
+# and a crash it finds is rarely the fault of the change in front of it.
+# Needs nightly and cargo-fuzz (`cargo install cargo-fuzz`); `fuzz/` is its
+# own workspace, so none of this touches the crates' lockfile or MSRV.
+fuzz-build:
+    cd fuzz && cargo +nightly fuzz build
+
+# Each fuzz target, bounded. `just fuzz 300` to go longer.
+fuzz seconds="60":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd fuzz
+    for target in units redaction value_paths dotenv sections; do
+      printf '\n\033[1m── %s\033[0m\n' "$target"
+      cargo +nightly fuzz run "$target" -- -max_total_time={{ seconds }} -print_final_stats=1
+    done
 
 # Every benchmark, the way CI runs them: the hand-rolled read path, the
 # criterion suite (reads, readers-during-reload, reload latency, load
@@ -110,7 +205,7 @@ msrv:
     cargo +stable generate-lockfile
     cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,toml,yaml
     cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,async,tracing,clap
-    cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,dotenv,figment
+    cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,dotenv,figment,telemetry
     cargo +1.74 check -p dynamic-config --locked --no-default-features --features json,schema
     cargo +1.85 check -p dynamic-config --locked --no-default-features --features json,age
     cargo +1.85 check -p dynamic-config --locked --no-default-features --features full
@@ -121,8 +216,13 @@ msrv:
     cargo +1.88 check -p dynamic-config-redis --locked
     cargo +1.88 check -p dynamic-config-s3 --locked
     cargo +1.85 check -p dynamic-config-firestore --locked
+    cargo +1.71 check -p dynamic-config-store-core --locked
+    cargo +1.85 check -p dynamic-config-git --locked
+    cargo +1.80 check -p dynamic-config-server --locked
+    cargo +1.80 check -p dynamic-config-server --locked --all-features
     cargo +1.85 check -p dynamic-config-cli --locked
     cargo +1.85 check -p dynamic-config-python --locked
+    cargo +1.88 check -p dynamic-config-python-remote --locked
     cargo +1.83 check -p dynamic-config-embedded --locked --no-default-features --features json,async
 
 # Every pairwise feature combination compiles — CI's `features` job.
@@ -158,7 +258,10 @@ examples:
     cargo build --examples -p dynamic-config-etcd -p dynamic-config-consul \
                 -p dynamic-config-nats -p dynamic-config-vault \
                 -p dynamic-config-redis -p dynamic-config-s3 \
-                -p dynamic-config-firestore
+                -p dynamic-config-firestore -p dynamic-config-git
+    # The server's TLS example is behind `required-features`, so it is
+    # reached by neither the line above nor the workspace test run.
+    cargo build -p dynamic-config-server --all-features --examples
 
 # The book, the way CI builds it before publishing to Pages. Needs mdbook
 # (`cargo install mdbook`).

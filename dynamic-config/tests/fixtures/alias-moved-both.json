@@ -1,0 +1,10 @@
+{
+  "db": {
+    "host": "localhost",
+    "timeout_secs": 30
+  },
+  "server": {
+    "port": 8080,
+    "timeout_secs": 5
+  }
+}

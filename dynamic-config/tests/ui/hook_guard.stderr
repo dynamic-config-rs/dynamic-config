@@ -1,0 +1,28 @@
+error: unused `HookGuard` that must be used
+  --> tests/ui/hook_guard.rs:27:5
+   |
+27 |     instance.on_reload_scoped(|_, _| {});
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: dropping the guard unregisters the hook immediately; bind it for as long as the hook should fire, or register a permanent hook with `on_reload`
+note: the lint level is defined here
+  --> tests/ui/hook_guard.rs:13:9
+   |
+13 | #![deny(unused_must_use)]
+   |         ^^^^^^^^^^^^^^^
+help: use `let _ = ...` to ignore the resulting value
+   |
+27 |     let _ = instance.on_reload_scoped(|_, _| {});
+   |     +++++++
+
+error: unused `HookGuard` that must be used
+  --> tests/ui/hook_guard.rs:28:5
+   |
+28 |     instance.on_reload_with_scoped(|_| {});
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: dropping the guard unregisters the hook immediately; bind it for as long as the hook should fire, or register a permanent hook with `on_reload`
+help: use `let _ = ...` to ignore the resulting value
+   |
+28 |     let _ = instance.on_reload_with_scoped(|_| {});
+   |     +++++++

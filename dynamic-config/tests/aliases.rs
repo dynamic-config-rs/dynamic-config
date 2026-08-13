@@ -136,6 +136,176 @@ fn a_path_that_names_nothing_is_refused() {
         Refused::alias("same", "same").is_err(),
         "an alias to itself resolves to nothing new"
     );
+    assert!(
+        Refused::alias("pool.size", "other::max_size").is_err(),
+        "the new path is always in this configuration's own section"
+    );
+    assert!(
+        Refused::set_default("other::max_size", 8u16).is_err(),
+        "a section qualifier is meaningless in an ordinary path"
+    );
+}
+
+/// A section-qualified old path: the key moved out of `[db]` into `[server]`.
+///
+/// One type per test, as everywhere here; the fixtures are read-only and
+/// shared.
+macro_rules! server_config {
+    ($name:ident) => {
+        #[dynamic_config]
+        #[derive(Debug, Deserialize)]
+        struct $name {
+            #[allow(dead_code)]
+            port: u16,
+            #[allow(dead_code)]
+            timeout_secs: u64,
+        }
+    };
+}
+
+server_config!(Moved);
+server_config!(Overtaken);
+server_config!(TracedAcross);
+server_config!(Explained);
+server_config!(Strayed);
+server_config!(Chained2);
+
+#[test]
+fn a_key_that_moved_to_another_section_still_resolves() {
+    let builder = || Moved::builder("server").file("tests/fixtures/alias-moved.json");
+
+    assert!(
+        builder().load().is_err(),
+        "`timeout_secs` is not in the `server` section"
+    );
+
+    Moved::alias("db::timeout_secs", "timeout_secs").unwrap();
+
+    assert_eq!(
+        builder()
+            .load()
+            .expect("the alias reaches the section the key moved out of")
+            .timeout_secs,
+        30
+    );
+}
+
+#[test]
+fn a_cross_section_alias_fills_a_gap_rather_than_overriding() {
+    Overtaken::alias("db::timeout_secs", "timeout_secs").unwrap();
+
+    assert_eq!(
+        Overtaken::builder("server")
+            .file("tests/fixtures/alias-moved-both.json")
+            .load()
+            .unwrap()
+            .timeout_secs,
+        5,
+        "a section that has been migrated wins over one that has not"
+    );
+}
+
+/// The same promise the in-section alias makes: the trace names the file to
+/// edit, not the mechanism that carried the value — even though here the alias
+/// is what created the destination and there is no other provider under it.
+#[test]
+fn a_cross_section_alias_traces_to_the_file_holding_the_old_spelling() {
+    TracedAcross::alias("db::timeout_secs", "timeout_secs").unwrap();
+
+    let origin = TracedAcross::builder("server")
+        .file("tests/fixtures/alias-moved.json")
+        .source_of("timeout_secs")
+        .unwrap()
+        .expect("the alias supplies it");
+
+    assert!(
+        format!("{origin}").contains("alias-moved.json"),
+        "the file to edit: {origin}"
+    );
+}
+
+/// The second dimension a cross-section alias adds is *which* spelling, in
+/// which section — so the alias row names the old path next to the file.
+#[test]
+fn explaining_a_cross_section_alias_names_both_hops() {
+    Explained::alias("db::timeout_secs", "timeout_secs").unwrap();
+
+    let explanation = Explained::builder("server")
+        .file("tests/fixtures/alias-moved.json")
+        .explain("timeout_secs")
+        .unwrap();
+
+    let winner = explanation.winner().expect("the alias wins");
+
+    assert_eq!(winner.layer, "alias", "{explanation}");
+    assert_eq!(
+        winner.aliased_from.as_deref(),
+        Some("db::timeout_secs"),
+        "{explanation}"
+    );
+
+    let rendered = explanation.to_string();
+
+    assert!(rendered.contains("db::timeout_secs"), "{rendered}");
+    assert!(rendered.contains("alias-moved.json"), "{rendered}");
+}
+
+/// The old key is in another section, so it is not a key this one may have.
+#[test]
+fn the_other_sections_name_is_not_a_known_key_here() {
+    Strayed::alias("db::timeout_secs", "timeout_secs").unwrap();
+
+    let report = Strayed::builder("server")
+        .file("tests/fixtures/alias-moved-stray.json")
+        .check()
+        .expect("checking resolves");
+
+    assert!(
+        report.unknown.iter().any(|unknown| unknown.path == "db"),
+        "a stray `db` table in `[server]` is still a typo: {report}"
+    );
+}
+
+/// A qualified old path can head a chain — `db::timeout_secs` to `mid`, `mid`
+/// to the field — and nothing can point back at it, which is what keeps a
+/// cross-section rename to one hop without a depth counter.
+#[test]
+fn a_cross_section_alias_can_head_a_chain() {
+    Chained2::alias("db::timeout_secs", "mid").unwrap();
+    Chained2::alias("mid", "timeout_secs").unwrap();
+
+    assert_eq!(
+        Chained2::builder("server")
+            .file("tests/fixtures/alias-moved.json")
+            .load()
+            .expect("the chain carries the value")
+            .timeout_secs,
+        30
+    );
+}
+
+/// The boundary, stated as a test: an alias reaches into the documents *this*
+/// load reads. A section that lives somewhere this builder never looks is not
+/// a rename away — it is a second configuration — and the load carries on
+/// without it rather than failing.
+#[test]
+fn a_section_this_load_never_reads_supplies_nothing() {
+    #[dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Elsewhere {
+        #[allow(dead_code)]
+        port: u16,
+        timeout_secs: Option<u64>,
+    }
+
+    Elsewhere::alias("absent::timeout_secs", "timeout_secs").unwrap();
+
+    let loaded = Elsewhere::builder("server")
+        .file("tests/fixtures/alias-moved.json")
+        .load()
+        .expect("a dead alias is not a failure");
+
+    assert_eq!(loaded.timeout_secs, None);
 }
 
 /// The inversion this pins: a runtime default supplying the new path used to
@@ -200,4 +370,28 @@ fn chains_resolve_and_cycles_are_refused() {
     let error = Chained::alias("b", "a").expect_err("a cycle must be refused");
     assert!(error.to_string().contains("cycle"), "{error}");
     Chained::clear_aliases();
+}
+
+/// The alias layer carries its supplier's provenance, so a path filled from
+/// the *defaults* layer still looks like a default afterwards — and the pass's
+/// old "a filled gap counts as supplied" bound then never terminated. The
+/// bound is now what the pass itself filled.
+#[test]
+fn an_alias_fed_by_a_runtime_default_terminates() {
+    #[dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct DefaultedSource {
+        max_size: u16,
+    }
+
+    // The old spelling is all the defaults layer knows.
+    DefaultedSource::set_default("size", 8u16).unwrap();
+    DefaultedSource::alias("size", "max_size").unwrap();
+
+    let loaded = DefaultedSource::builder("db").load();
+
+    DefaultedSource::clear_aliases();
+    DefaultedSource::clear_defaults();
+
+    assert_eq!(loaded.expect("the alias carries the default").max_size, 8);
 }

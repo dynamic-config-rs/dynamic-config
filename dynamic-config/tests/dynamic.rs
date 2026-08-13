@@ -341,3 +341,30 @@ fn adopting_a_generated_builder_does_not_capture_the_type_surface() {
     );
     assert_eq!(instance.current().expect("still the instance's").port, 4100);
 }
+
+/// An instance's `current()` is an `Option` — there is no type name to panic
+/// with — so the split pair ends in an `expect` that the joined form removes,
+/// and what it returns is the install's own snapshot.
+#[test]
+fn init_and_current_hands_an_instance_its_snapshot_without_an_expect() {
+    write_tenant("tests/scratch/dyn-paired.json", "paired", 4300);
+
+    let instance =
+        Dynamic::new(Builder::<Tenant>::new("tenant").file("tests/scratch/dyn-paired.json"));
+    let tenant = instance
+        .init_and_current()
+        .expect("the source reads cleanly");
+
+    assert_eq!(tenant.name, "paired");
+    assert!(
+        Arc::ptr_eq(&tenant, &instance.current().expect("installed above")),
+        "the instance's own snapshot, not a second load of it"
+    );
+
+    // And it stays this call's snapshot when the instance moves on.
+    write_tenant("tests/scratch/dyn-paired.json", "paired", 4400);
+    instance.reload().expect("and reloads");
+
+    assert_eq!(tenant.port, 4300);
+    assert_eq!(instance.current().expect("installed").port, 4400);
+}

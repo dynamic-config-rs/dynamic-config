@@ -1,0 +1,111 @@
+name: Fuzz
+
+# Coverage-guided fuzzing, on a schedule rather than on every change.
+#
+# A fuzz run is unbounded by nature, and a merge gate is not the place for
+# one: a crash found here is a real bug, but it is a bug the pull request in
+# front of it probably did not introduce, and a gate that fails for somebody
+# else's commit stops being read. `ci.yml`'s `fuzz-build` job is the part
+# that belongs in the gate — it catches a target that stopped compiling,
+# which is the failure that actually happens.
+#
+# Bounded twice over: `-max_total_time` per target, and `timeout-minutes` on
+# the job in case libFuzzer itself wedges.
+on:
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: seconds to fuzz each target
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    # Each target is bounded by `-max_total_time`; this is the backstop for
+    # a run that never reaches its own limit.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [units, redaction, value_paths, dotenv, sections]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # cargo-fuzz needs nightly: libFuzzer arrives through `-Z sanitizer`.
+      # Dev-only tooling, so it is nowhere near the 1.71 floor the crates
+      # themselves hold.
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      # No seed corpus. The library's `tests/fixtures/` holds JSON and TOML
+      # documents, and none of these targets reads a document: `units` takes a
+      # value string, and the rest take an `arbitrary`-encoded struct, for
+      # which a TOML file is not a useful starting point — it is noise that
+      # costs the generator its first minute. `dotenv` is the near miss, and
+      # the `.env` files the suites use are written at run time into an
+      # ignored directory, so there is nothing checked in to seed it from
+      # either; its generator builds lines instead. When a target that does
+      # read documents lands, it should seed from the fixtures.
+      # The dispatch input reaches the shell through the environment and is
+      # range-checked before it is used: an expression interpolated straight
+      # into `run:` is a command injection even when only a maintainer can
+      # set it, and "only a maintainer" is not an access-control model.
+      - name: fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        env:
+          TARGET: ${{ matrix.target }}
+          SECONDS_INPUT: ${{ github.event.inputs.seconds }}
+        run: |
+          seconds="${SECONDS_INPUT:-300}"
+          case "$seconds" in
+            ''|*[!0-9]*) echo "seconds must be a positive integer"; exit 1 ;;
+          esac
+          if [ "$seconds" -gt 1200 ]; then
+            echo "seconds is capped at 1200; the job's own timeout is 30 minutes"
+            exit 1
+          fi
+          cargo fuzz run "$TARGET" -- -max_total_time="$seconds" -print_final_stats=1
+      # Only on a crash: `artifacts/` is where cargo-fuzz writes the input
+      # that reproduced it, and an unreproducible fuzz failure is noise.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts
+          retention-days: 30
+      - name: what to do with that artifact
+        if: failure()
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          {
+            echo "## \`$TARGET\` crashed"
+            echo
+            echo "Download the \`crash-$TARGET\` artifact, then:"
+            echo
+            echo '```sh'
+            echo "cd fuzz"
+            echo "cargo +nightly fuzz run $TARGET artifacts/$TARGET/<file>"
+            echo "cargo +nightly fuzz tmin $TARGET artifacts/$TARGET/<file>"
+            echo '```'
+            echo
+            echo "The minimised input becomes a named #[test] in the suite that"
+            echo "owns that parser. The corpus is not the test suite."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -43,6 +43,11 @@ nothing.
 **`on_reload_scoped(..) -> HookGuard`** — the same, until the guard drops.
 For subsystems with a shorter life than the process.
 
+**`on_reload_with(event)`** — the same list, told *why*. See
+[Why a reload happened](#why-a-reload-happened) below; it is the form to
+reach for when the reaction depends on what moved the configuration rather
+than only on what the configuration now says.
+
 **`changes()`** — the awaitable form, with the `async` feature. A task that
 would rather await than be called back:
 
@@ -95,6 +100,118 @@ runs. By default it is a thread per load; the `tokio` feature routes it to
 the blocking pool; anything else can be installed by hand. Reloads are rare
 by design, so the default is fine until measured otherwise.
 
+## Why a reload happened
+
+`on_reload(old, new)` hands you two snapshots and nothing else, which means
+a hook cannot tell an edited file from a manual `reload()` from a document a
+remote store pushed. By the time the callback runs they are the same swap.
+The reason has to be recorded where the reload was *triggered*, so that is
+where it is recorded, and `on_reload_with` is the form that receives it:
+
+```rust
+use dynamic_config::ReloadReason;
+
+DbConfig::on_reload_with(|event| {
+    match &event.reason {
+        // The path is what opened the debounce window — the trigger, not
+        // the diff. `changed_paths(old, new)` is the diff.
+        ReloadReason::FileChanged(path) => {
+            tracing::info!(file = %path.display(), generation = event.meta.generation, "reloaded");
+        }
+        // Nothing was serving before this; `event.previous` is `None`.
+        ReloadReason::Initial => tracing::info!("configuration is live"),
+        // The sources would not load and the cache stood in.
+        ReloadReason::Recovered => alert("running on the last known good configuration"),
+        _ => {}
+    }
+});
+```
+
+| Reason | Produced by |
+|---|---|
+| `Initial` | `builder.init()` — the call that establishes a configuration. |
+| `FileChanged(path)` | The file watcher. The path is the one whose event opened the debounce window. |
+| `RemoteChanged` | `RemoteSink::apply(..)` — a store's watch loop pushed a document. |
+| `Manual` | The program: `reload()`, `replace(..)`, `ConfigCell::store`, a `ReloadGroup` commit. |
+| `Recovered` | `init()` fell back to the last-known-good cache. |
+
+`ReloadReason` is `#[non_exhaustive]`, so a `_` arm is required and a new
+variant will not break the match. `reason.as_str()` is the category without
+the path — the shape a metric dimension wants, since a file path is
+unbounded cardinality and `"file-changed"` is not.
+
+Two differences from the pair form are worth stating plainly:
+
+- **The first install fires an event.** `previous` is `None`, because there
+  was no configuration before it. `on_reload` cannot say that — its
+  signature has nowhere to put it — so it stays silent for `init()`, and
+  that has not changed.
+- **`{:?}` on an event prints no configuration.** The reason, the
+  generation, and whether there was a previous snapshot; never `T`. An event
+  is a diagnostic, a `{:?}` of one lands in a log, and a configuration holds
+  passwords. Reach for `event.current` when you want the values.
+
+Everything else is identical: one list, one registration order, the same
+panic isolation, and the same absence of a defined order across overlapping
+reloads.
+
+A program that detects its own changes — a store this crate has no adapter
+for, a control plane pushing over a socket — can label its own reloads with
+`builder.reload_with(reason)`.
+
+## Operating a configuration
+
+`status()` answers the questions that arrive at three in the morning, in one
+struct and without touching a source:
+
+```rust
+let status = DbConfig::status();
+
+status.generation;            // which generation is live
+status.stale_for();           // how long ago it landed
+status.last_reason;           // why it landed
+status.consecutive_failures;  // failures since one worked — zero is healthy
+status.last_failure;          // when the last one was, its kind and key path
+```
+
+It is a handful of atomic loads. Nothing is re-read, nothing is recomputed,
+nothing can block — so an exporter may call it per scrape:
+
+```rust
+// the application's own HTTP surface, where the authentication already is
+router.route("/internal/config", get(|| async {
+    let status = DbConfig::status();
+    format!("generation {} healthy {}", status.generation, status.is_healthy())
+}));
+```
+
+Three things it deliberately is not.
+
+**It is not a value leak.** A status carries key paths, counts, timestamps,
+generations and error kinds — never a configured value. `last_failure` keeps
+the failure's `ErrorKind` and the key path it was reported at, and not its
+message: an error's `Display` is value-free by policy, but a struct that
+*stores* free text is one careless construction away from carrying a value
+into every log that prints a status. This is the crate's rule everywhere,
+and a status struct is exactly the thing somebody `{:?}`s into a log.
+
+**It is not a second source of truth.** Every field is recorded where it
+happens. There is no `last_success` because an install *is* the success —
+`loaded_at` is when the last one was — and no source list, because "which
+sources would be read" is a question about the *next* load, which
+[`check()`](validation-diagnostics.md) answers against the sources rather
+than from a cache of them that could go stale.
+
+**It is not a CLI subcommand.** `dynamic-config status` would need a channel
+into a running process — a socket, a pid file — which is a different product
+with its own threat model. The exporter above is the honest answer, and it
+belongs to the application. What the CLI can answer is *what would load now,
+here*, and that is [`dynamic-config check`](cli.md).
+
+Like `meta()`, a status is assembled from several loads, so a reload landing
+mid-call can leave one field an install ahead of another. It is for
+operators, not for correctness.
+
 ## Watching the watcher
 
 With the `tracing` feature, every watcher reload is a `config_reload` span
@@ -128,3 +245,19 @@ DbConfig::on_reload(|old, new| {
   and uses that snapshot to the end; it does not need to know reloads exist.
   The lifecycle above is for the handful of places that own long-lived
   resources.
+
+## When a reload fails, and whether to keep trying
+
+A watch loop that treats every failure alike either gives up on something
+temporary or hammers something permanent. The error's kind is the
+distinction:
+
+| Kind | What it means for the loop |
+|---|---|
+| `Remote` | the store is unreachable, or answered badly — **back off and retry**; this often fixes itself |
+| `Auth` | a credential was rejected or could not be obtained — **stop and report**; waiting will not fix it |
+| `Io`, `Parse`, `Invalid` | the source is there and wrong — the previous snapshot keeps serving, and somebody has to edit something |
+
+`ErrorKind::Auth` exists for exactly this decision. Before it, "the token
+expired" and "the network is down" arrived as the same kind, and a loop
+could only guess.

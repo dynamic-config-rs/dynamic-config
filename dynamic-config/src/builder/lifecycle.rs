@@ -11,6 +11,7 @@ use std::path::Path;
 
 use crate::cache::{CacheMode, Recovery};
 use crate::error::{Error, ErrorKind};
+use crate::reload::ReloadReason;
 
 use super::Builder;
 
@@ -39,6 +40,44 @@ impl<T: DeserializeOwned> Builder<T> {
     /// [`Builder::new`] rather than a generated `builder()`, the fact that
     /// there is no storage to install into.
     pub fn init(&self) -> Result<(), Error> {
+        self.install().map(|_| ())
+    }
+
+    /// [`init`](Self::init), handing back the snapshot it installed.
+    ///
+    /// The two calls always pair — install a configuration, then read it —
+    /// and writing them apart means naming the type twice and reading the
+    /// second line to learn that the first worked:
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "json")] {
+    /// # use serde::Deserialize;
+    /// # #[dynamic_config::dynamic_config]
+    /// # #[derive(Deserialize)]
+    /// # struct ServerConfig { host: String }
+    /// let config = ServerConfig::builder("server")
+    ///     .file("config.json")
+    ///     .init_and_current()?;
+    ///
+    /// println!("{}", config.host);
+    /// # }
+    /// # Ok::<(), dynamic_config::Error>(())
+    /// ```
+    ///
+    /// The snapshot is the one *this* call installed. A reload landing
+    /// between the install and the return would change what `current()`
+    /// answers; it does not change what this returns, which is the
+    /// configuration the program was started with.
+    ///
+    /// # Errors
+    ///
+    /// Exactly [`init`](Self::init)'s.
+    pub fn init_and_current(&self) -> Result<std::sync::Arc<T>, Error> {
+        self.install()
+    }
+
+    /// The whole of `init`, with the installed snapshot still in hand.
+    fn install(&self) -> Result<std::sync::Arc<T>, Error> {
         // Before the installer check: "your cache cannot redact" is the more
         // specific mistake, and the more dangerous one to leave unexplained.
         self.check_cache_mode()?;
@@ -54,26 +93,34 @@ impl<T: DeserializeOwned> Builder<T> {
 
         let outcome = match self.load() {
             Ok(value) => {
-                install.install(value);
+                let installed = install.install(value, ReloadReason::Initial);
                 self.write_cache();
 
-                Ok(())
+                Ok(installed)
             }
-            Err(failure) => {
-                let recovered = self.recover(failure)?;
+            // Every exit from here that does not install has to say so: the
+            // recovery is the one place a failed load can still succeed, so
+            // "the load failed" is not yet the answer, and recording it here
+            // would count a start that worked as a failure.
+            Err(failure) => self
+                .recover(failure)
+                .and_then(|recovered| {
+                    if let Some(check) = &self.validate {
+                        check(&recovered)?;
+                    }
 
-                if let Some(check) = &self.validate {
-                    check(&recovered)?;
-                }
+                    let installed = install.install(recovered, ReloadReason::Recovered);
+                    crate::log::warning!(
+                        "{}: started from the last known good configuration",
+                        self.key
+                    );
 
-                install.install(recovered);
-                crate::log::warning!(
-                    "{}: started from the last known good configuration",
-                    self.key
-                );
-
-                Ok(())
-            }
+                    Ok(installed)
+                })
+                .map_err(|error| {
+                    install.record_failure(&error);
+                    error
+                }),
         };
 
         if outcome.is_ok() {
@@ -104,11 +151,16 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        let value = self.load()?;
+        let value = self.load().map_err(|error| {
+            install.record_failure(&error);
+            error
+        })?;
 
         let install = install.clone();
 
-        Ok(Box::new(move || install.install(value)))
+        Ok(Box::new(move || {
+            install.install(value, ReloadReason::Manual);
+        }))
     }
 
     /// Refuses a redaction-dependent cache mode on a builder that cannot
@@ -119,9 +171,13 @@ impl<T: DeserializeOwned> Builder<T> {
                 return Err(Error::new(
                     ErrorKind::Backend,
                     "a redacted or fingerprint cache needs to know which \
-                     fields are secret, and only the generated `builder()` on \
-                     a `#[dynamic_config]` type knows; use that, or \
-                     `CacheMode::Full`, spelled out",
+                     fields are secret, and nothing here has said. A \
+                     `#[dynamic_config]` type's generated `builder()` says \
+                     it from the declaration; a configuration with no \
+                     declaration says it with `.secrets([..])` — the Python \
+                     binding spells that `DynamicConfig(..., secrets=[..])`. \
+                     Or ask for `CacheMode::Full`, which redacts nothing and \
+                     says so",
                 ));
             }
         }
@@ -143,7 +199,8 @@ impl<T: DeserializeOwned> Builder<T> {
         if !matches!(mode, CacheMode::Full) && self.secrets.is_none() {
             crate::log::warning!(
                 "{}: not writing the cache at {path}: a redaction-dependent \
-                 mode needs the generated builder's secret knowledge",
+                 mode needs to know which fields are secret, and nothing \
+                 has said — declare them, or pass them to `.secrets([..])`",
                 self.key
             );
 
@@ -252,6 +309,24 @@ impl<T: DeserializeOwned> Builder<T> {
     /// The same failures as [`load`](Self::load); a builder with no
     /// installer has nothing to reload into.
     pub fn reload(&self) -> Result<(), Error> {
+        self.reload_with(ReloadReason::Manual)
+    }
+
+    /// [`reload`](Self::reload), stating why.
+    ///
+    /// The reason reaches the reload hooks registered through
+    /// `on_reload_with` and the `last_reason` in
+    /// [`ConfigCell::status`](crate::ConfigCell::status). Everything else is
+    /// identical — this is `reload` with the label it would otherwise have
+    /// to guess. Programs that detect their own changes (a store this crate
+    /// has no adapter for, a control plane pushing over a socket) have
+    /// somewhere to say so; a plain `reload()` is
+    /// [`Manual`](crate::ReloadReason::Manual).
+    ///
+    /// # Errors
+    ///
+    /// The same failures as [`reload`](Self::reload).
+    pub fn reload_with(&self, reason: crate::ReloadReason) -> Result<(), Error> {
         let Some(install) = self.install.as_ref() else {
             return Err(Error::new(
                 ErrorKind::Backend,
@@ -260,7 +335,12 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        install.install(self.load()?);
+        let value = self.load().map_err(|error| {
+            install.record_failure(&error);
+            error
+        })?;
+
+        install.install(value, reason);
         self.write_cache();
 
         Ok(())
@@ -294,5 +374,20 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
         let this = self.clone();
 
         crate::asynchronous::off_thread(move || this.init()).await
+    }
+
+    /// [`init_and_current`](Self::init_and_current), off the async executor.
+    ///
+    /// The pair is what an async `main` writes at startup, and it is where
+    /// splitting it costs most: `init_async().await?` on one line and the
+    /// type named again on the next.
+    ///
+    /// # Errors
+    ///
+    /// The same failures as [`init`](Self::init).
+    pub async fn init_and_current_async(&self) -> Result<std::sync::Arc<T>, Error> {
+        let this = self.clone();
+
+        crate::asynchronous::off_thread(move || this.init_and_current()).await
     }
 }

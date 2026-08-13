@@ -65,7 +65,7 @@ the map.
 ### Layers
 
 ```text
-defaults < files < remote < .env < APP_DB_* < bind_env < flags < overrides
+defaults < files < remote < secrets_dir < .env < APP_DB_* < bind_env < flags < overrides
 ```
 
 | | |

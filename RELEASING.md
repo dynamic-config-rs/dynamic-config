@@ -1,8 +1,15 @@
 # Releasing
 
-Twelve crates. Ten publish to crates.io in three waves, versioned
-together; the Python wheels follow in a fourth, on a version of their
+Sixteen crates. Fourteen publish to crates.io in four waves, versioned
+together; the Python wheels follow in a fifth, on a version of their
 own.
+
+The waves are dependency order: the macro and the `no_std` crate, then
+the engine, then `dynamic-config-store-core` — which every store crate
+depends on — then the stores, the server and the CLI. A crate cannot be
+`publish = false` and be depended on by a published one: cargo resolves a
+path dependency of a published crate from the registry, so packaging
+fails before the release does.
 
 **`dynamic-config-python` versions independently.** It is excluded from
 `cargo release` (`[package.metadata.release] release = false`) and
@@ -24,6 +31,26 @@ git push origin dev && ./scripts/promote.sh
 
 A workspace release carries the wheels along automatically; the dispatch
 is for a Python-only one, where there are no crates to wait for.
+
+**Two distributions, one rotation.** `dynamic-config-python-remote` is a
+second wheel — `dynamic-config-py[remote]` resolves to it — and
+`release-python.sh` knows about one changelog:
+
+```sh
+changelog="dynamic-config-python/CHANGELOG.md"
+```
+
+So `dynamic-config-python-remote/CHANGELOG.md` is rotated by nobody:
+`cargo release` skips the crate (`release = false`) and the Python flow
+does not name it. **Move its `## [Unreleased]` block under the new version
+heading by hand before tagging**, the way the file's own template asks —
+otherwise a wheel ships to PyPI with a changelog saying nothing has been
+released. CI already checks that the two `Cargo.toml` versions agree, which
+is the adjacent mistake and not this one.
+
+Whether the two wheels should version together at all — and therefore
+whether `release-python.sh` should take a list of changelogs — is an open
+decision, not an oversight; the check above is what holds until it is made.
 
 ```text
 dynamic-config-macros          first, always

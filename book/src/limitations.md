@@ -66,6 +66,40 @@ underneath everything that reads well today.
 `Source::provider` plus `profile_env` genuinely cannot express what you are
 after.
 
+### A swappable loader backend
+
+"Make figment a plug-in" reads like extracting a `Loader` trait. It is not,
+and the reason is worth writing down once rather than re-deriving.
+
+figment reaches nineteen modules here, and not as a parser. `Snapshot` holds
+figment's tree. Sections *are* figment profiles. Provenance *is* figment
+metadata, converted at the one moment the figment that knew is still alive —
+which is what `explain`, `check` and `source_of` read to say which layer
+answered. Every layer, `.env` and the environment included, is a figment
+provider in one table. A trait extracted across that seam would either carry
+`Metadata` and `Profile` in its own signature — leaking exactly what the
+[`figment` feature](stability-tiers.md#the-figment-feature-is-a-coupling-on-purpose)
+exists to keep optional — or drop provenance, which is most of what this crate
+sells.
+
+The two things people actually want from it already exist and are narrower:
+
+- **A format this crate does not read** is
+  [`Source::provider`](sources-and-precedence.md#bringing-your-own-figment-provider):
+  three methods, and it has carried the section and provenance contracts since
+  0.2.
+- **Documents to combine before the loader sees them** — a store crate reading
+  a prefix, a tool folding a fragment directory into one file — is
+  `Value::parse` / `merge` / `overlapping_paths` / `render`, described in
+  [Writing a Store](remote-stores/writing-a-store.md#several-keys-as-one-document).
+  It hands over the parsing this crate already compiles, so nothing outside has
+  to take `serde_json`, `toml` and `serde_yaml` as direct dependencies to
+  re-do it.
+
+**What would reopen it:** a backend that resolves layered providers, profile
+selection and loose environment typing *and* carries provenance — at which
+point the argument is about which backend, not about whether there is a seam.
+
 ### Case-insensitive keys
 
 Viper lowercases everything. It hides typos — `Prot` and `port` become the same

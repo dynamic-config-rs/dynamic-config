@@ -156,10 +156,19 @@ jobs:
 
           sleep 45
 
+          # Every store crate depends on this one, so it is a wave of its
+          # own between the engine and them. It is published rather than
+          # `publish = false` because cargo refuses to package a published
+          # crate against a path dependency that is not on the registry.
+          publish dynamic-config-store-core
+
+          sleep 45
+
           for crate in dynamic-config-etcd dynamic-config-consul \
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
-                       dynamic-config-firestore dynamic-config-cli; do
+                       dynamic-config-firestore dynamic-config-git \
+                       dynamic-config-server dynamic-config-cli; do
             publish "$crate"
           done
         env:
@@ -213,24 +222,170 @@ jobs:
       # interpreter, which is the whole reason the remote stores stay out
       # of this crate: their clients would multiply this matrix by their
       # own build requirements.
+      # A target directory each, for both wheel builds below, and it is not
+      # a nicety: both extension modules are `[lib] name = "_core"`, so they
+      # write the same `lib_core.so`. Two builds sharing one target
+      # directory make the second a cache hit on the first's artefact, and
+      # the published wheel then carries the *other* package's extension —
+      # a release that installs and then fails on a missing attribute.
       - uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/python
         with:
           command: build
           args: --release --out dist --manifest-path dynamic-config-python/Cargo.toml
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
+      # The opt-in remote wheel, into the same `dist`: a separate
+      # distribution (`dynamic-config-py[remote]` resolves to it) built from
+      # the same matrix, because it is abi3 too. It is uploaded *after* the
+      # base wheel — `maturin upload dist/*` walks the directory in name
+      # order, and `dynamic_config_py-` sorts before `dynamic_config_py_remote`
+      # — so the extra never resolves to something whose requirement is not
+      # on PyPI yet.
+      #
+      # It carries `dynamic-config-etcd`, whose gRPC client compiles its
+      # stubs at build time and needs `protoc` — which no runner image has.
+      # Every other job in this repository installs it with `apt-get`; that
+      # would not work here, because the Linux rows of this matrix build
+      # *inside* the manylinux container and a package installed on the
+      # runner is not in it. So the two halves are installed separately:
+      # `before-script-linux` runs in the container, and the macOS and
+      # Windows rows are the runner itself.
+      - if: runner.os == 'macOS'
+        run: brew install protobuf
+      - if: runner.os == 'Windows'
+        run: choco install --no-progress -y protoc
+      - uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/python-remote
+        with:
+          command: build
+          args: --release --out dist --manifest-path dynamic-config-python-remote/Cargo.toml
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          # The container is whichever manylinux image maturin selects, and
+          # they are not one distribution: the x86_64 image is RPM-based and
+          # the cross image for aarch64 is Debian-based. Asking the package
+          # manager that is present is shorter than pinning the image.
+          #
+          # A packaged `protoc` is not enough on its own — the older images
+          # carry a protobuf 2 compiler, which cannot read the proto3 files
+          # `etcd-client` builds from — so the version is checked and the
+          # official release is fetched when it is too old. `uname -m` is
+          # the *host* architecture even for the aarch64 row, which
+          # cross-compiles, and that is the binary that has to run.
+          before-script-linux: |
+            set -eux
+            if command -v dnf >/dev/null 2>&1; then
+              dnf install -y protobuf-compiler unzip || true
+            elif command -v yum >/dev/null 2>&1; then
+              yum install -y protobuf-compiler unzip || true
+            else
+              apt-get update && apt-get install -y protobuf-compiler unzip
+            fi
+            if ! protoc --version 2>/dev/null | grep -qE 'libprotoc (3|[1-9][0-9])'; then
+              version=29.3
+              case "$(uname -m)" in
+                aarch64|arm64) arch=aarch_64 ;;
+                *) arch=x86_64 ;;
+              esac
+              curl -fsSL -o /tmp/protoc.zip \
+                "https://github.com/protocolbuffers/protobuf/releases/download/v${version}/protoc-${version}-linux-${arch}.zip"
+              unzip -o /tmp/protoc.zip -d /usr/local
+            fi
+            protoc --version
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist
 
+  free-threaded-wheels:
+    name: free-threaded wheels to PyPI
+    needs: [decide, publish]
+    # The same condition as `wheels`, and for the same reasons.
+    if: >-
+      always()
+      && needs.decide.result == 'success'
+      && needs.publish.result != 'failure'
+      && needs.publish.result != 'cancelled'
+      && (needs.decide.outputs.release == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux only, and deliberately. The manylinux images carry a
+          # `python3.14t` that maturin-action can be pointed at, which is the
+          # documented and exercised path; the macOS and Windows runners were
+          # not verified for a free-threaded interpreter when this landed, and
+          # a release job that fails on an unverified guess is worse than one
+          # platform's users building from source. Widening this is a matter
+          # of somebody running it once — the tag assertion below is what
+          # would catch a wrong guess.
+          - os: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+          - os: ubuntu-latest
+            target: aarch64
+            manylinux: auto
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # A separate job rather than a row in the matrix above, because it is a
+      # different *kind* of wheel: `Py_GIL_DISABLED` has no stable ABI, so this
+      # one is version-specific and tagged `cp314-cp314t`, where the base wheel
+      # covers 3.9 upwards on one file per platform.
+      #
+      # `-i python3.14t` is the part that does the work. Without it maturin
+      # builds abi3 against no interpreter in particular; pointed at a
+      # free-threaded one it emits the version-specific wheel.
+      # `--no-default-features` switches off the `abi3` Cargo feature as well,
+      # which does not change the tag but means pyo3 is never asked for abi3
+      # and the build does not lean on its compatibility fallback.
+      #
+      # One interpreter row, not two: PyO3 0.29 dropped 3.13t when CPython
+      # promoted free-threading from experimental to supported in 3.14, so a
+      # `cp313t` wheel is not buildable from this source at all.
+      #
+      # The remote wheel is deliberately not built here: it stays abi3-only
+      # until somebody asks for it without a GIL.
+      - uses: PyO3/maturin-action@e10f6c464b90acceb5f640d31beda6d586ba7b4a # v1
+        with:
+          command: build
+          args: >-
+            --release --out dist --no-default-features -i python3.14t
+            --manifest-path dynamic-config-python/Cargo.toml
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+      # maturin picks the tag from the interpreter it was pointed at, and a
+      # misconfiguration here is silent: an abi3 wheel with a `t` in its name
+      # would install and then crash. Assert the tag rather than trust it.
+      - name: the wheels are free-threaded and not abi3
+        run: |
+          ls dist
+          if ls dist/*abi3*.whl >/dev/null 2>&1; then
+            echo "::error::a free-threaded build produced an abi3 wheel"
+            exit 1
+          fi
+          ls dist/*cp314-cp314t*.whl >/dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wheels-freethreaded-${{ matrix.os }}-${{ matrix.target }}
+          path: dist
+
   publish-wheels:
     name: publish the wheels
-    needs: [decide, wheels]
-    # The same shape as `wheels`, and for the same reason.
+    needs: [decide, wheels, free-threaded-wheels]
+    # The same shape as `wheels`, and for the same reason. Both wheel waves
+    # must have succeeded: publishing the abi3 wheels while the free-threaded
+    # ones failed would leave `pip install` on 3.14t building from source,
+    # which is the outcome the free-threading page calls worse than saying
+    # nothing.
     if: >-
       always()
       && needs.wheels.result == 'success'
+      && needs.free-threaded-wheels.result == 'success'
       && (needs.decide.outputs.release == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 15

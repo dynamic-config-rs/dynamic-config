@@ -29,6 +29,13 @@ use serde::de::{self, Unexpected, Visitor};
 use serde::{Deserializer, Serializer};
 
 /// Splits `12kb` into `(12, "kb")`, tolerating whitespace between them.
+///
+/// Nothing here quotes the text it was given. What arrives is a configuration
+/// *value*, and a value that fails to parse as a duration is exactly the shape
+/// of a password pasted into the wrong field — the same reason
+/// `loader::origin` reduces figment's ``found string "hunter2"`` to "a string".
+/// The expected spelling is what a reader needs, and the loader has already
+/// named the key and the file.
 fn split_unit(text: &str) -> Result<(u64, &str), String> {
     let text = text.trim();
     let digits = text
@@ -36,12 +43,12 @@ fn split_unit(text: &str) -> Result<(u64, &str), String> {
         .unwrap_or(text.len());
 
     if digits == 0 {
-        return Err(format!("`{text}` does not start with a number"));
+        return Err("expected a number first, as in `30s`".to_owned());
     }
 
     let value = text[..digits]
         .parse::<u64>()
-        .map_err(|_| format!("`{}` is too large", &text[..digits]))?;
+        .map_err(|_| "the number is too large for a 64-bit count".to_owned())?;
 
     Ok((value, text[digits..].trim()))
 }
@@ -105,21 +112,15 @@ pub mod duration {
                 "m" => Duration::from_secs(checked(value, 60)?),
                 "h" => Duration::from_secs(checked(value, 60 * 60)?),
                 "d" => Duration::from_secs(checked(value, 24 * 60 * 60)?),
-                "" => {
-                    return Err(format!(
-                        "`{value}` has no unit; expected one of ms, s, m, h, d"
-                    ))
-                }
-                other => {
-                    return Err(format!(
-                        "unknown duration unit `{other}`; expected one of ms, s, m, h, d"
-                    ))
-                }
+                "" => return Err("a component has no unit; expected one of ms, s, m, h, d".into()),
+                // The unit is not echoed either: it is whatever followed the
+                // digits, so in `1234hunter2` it is the rest of the password.
+                _ => return Err("unknown duration unit; expected one of ms, s, m, h, d".into()),
             };
 
             total = total
                 .checked_add(component)
-                .ok_or_else(|| format!("`{text}` is longer than a `Duration` can hold"))?;
+                .ok_or_else(|| "the total is longer than a `Duration` can hold".to_owned())?;
 
             rest = tail;
         }
@@ -131,7 +132,7 @@ pub mod duration {
     fn checked(value: u64, seconds_per_unit: u64) -> Result<u64, String> {
         value
             .checked_mul(seconds_per_unit)
-            .ok_or_else(|| format!("`{value}` overflows a 64-bit second count"))
+            .ok_or_else(|| "a component overflows a 64-bit second count".to_owned())
     }
 
     struct DurationVisitor;
@@ -151,6 +152,10 @@ pub mod duration {
             Ok(Duration::from_secs(value))
         }
 
+        // serde renders `Unexpected::Signed` with the number in it, and that
+        // one is fine to show: reaching here means `u64::try_from` refused it,
+        // so it is a negative count and not something anybody typed a
+        // credential into.
         fn visit_i64<E: de::Error>(self, value: i64) -> Result<Duration, E> {
             u64::try_from(value)
                 .map(Duration::from_secs)
@@ -273,17 +278,18 @@ pub mod bytes {
             "mb" => 1_000_000,
             "gb" => 1_000_000_000,
             "tb" => 1_000_000_000_000,
-            other => {
-                return Err(format!(
-                    "unknown size unit `{other}`; expected one of B, KiB, MiB, GiB, TiB, \
+            // Not echoed, as in `duration`: the unit is whatever followed
+            // the digits, which in a mistyped secret is the rest of it.
+            _ => {
+                return Err("unknown size unit; expected one of B, KiB, MiB, GiB, TiB, \
                      KB, MB, GB, TB"
-                ))
+                    .to_owned())
             }
         };
 
         value
             .checked_mul(multiplier)
-            .ok_or_else(|| format!("`{}` overflows a 64-bit byte count", text.trim()))
+            .ok_or_else(|| "the size overflows a 64-bit byte count".to_owned())
     }
 
     struct BytesVisitor;
@@ -368,8 +374,11 @@ mod tests {
     fn an_unknown_duration_unit_lists_the_valid_ones() {
         let error = duration::parse("30w").unwrap_err();
 
-        assert!(error.contains("unknown duration unit `w`"), "{error}");
+        assert!(error.contains("unknown duration unit"), "{error}");
         assert!(error.contains("ms, s, m, h, d"), "{error}");
+        // The unit itself is not quoted back: it is whatever followed the
+        // digits, which in a mistyped credential is the rest of it.
+        assert!(!error.contains("`w`"), "{error}");
     }
 
     #[test]
@@ -407,7 +416,12 @@ mod tests {
     fn an_unknown_size_unit_lists_the_valid_ones() {
         let error = bytes::parse("5PB").unwrap_err();
 
-        assert!(error.contains("unknown size unit `pb`"), "{error}");
+        assert!(error.contains("unknown size unit"), "{error}");
+        assert!(error.contains("KiB, MiB"), "{error}");
+        assert!(
+            !error.contains("pb"),
+            "the unit is not quoted back: {error}"
+        );
     }
 
     #[test]

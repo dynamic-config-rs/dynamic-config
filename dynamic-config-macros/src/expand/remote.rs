@@ -6,14 +6,14 @@ use quote::quote;
 use syn::Ident;
 
 /// `set_remote`, `refresh_remote` and `remote_sink`.
-pub(super) fn remote_methods(name: &Ident) -> TokenStream {
+pub(super) fn remote_methods(path: &TokenStream, name: &Ident) -> TokenStream {
     quote! {
         /// Installs a remote store to read configuration from.
         ///
         /// Nothing is fetched here: call
         /// [`refresh_remote`](Self::refresh_remote) for that. Installing a
         /// source drops whatever the previous one had fetched.
-        pub fn set_remote(source: impl ::dynamic_config::RemoteSource) {
+        pub fn set_remote(source: impl #path::RemoteSource) {
             Self::dynamic_config_remote().set(source);
         }
 
@@ -27,7 +27,7 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
         ///
         /// If no source is installed, if it is async — use
         /// `refresh_remote_async` — or if the fetch fails.
-        pub fn refresh_remote() -> ::core::result::Result<(), ::dynamic_config::Error> {
+        pub fn refresh_remote() -> ::core::result::Result<(), #path::Error> {
             Self::dynamic_config_remote().refresh()
         }
 
@@ -48,18 +48,39 @@ pub(super) fn remote_methods(name: &Ident) -> TokenStream {
         /// "after" above orders the two calls when both exist, it does not
         /// require the first.
         #[must_use]
-        pub fn remote_sink() -> ::dynamic_config::RemoteSink {
-            ::dynamic_config::RemoteSink::new(
+        pub fn remote_sink() -> #path::RemoteSink {
+            #path::RemoteSink::new(
                 Self::dynamic_config_remote(),
                 Self::dynamic_config_remote_reload,
                 ::core::stringify!(#name),
             )
         }
 
+        /// How the fetches from this type's remote store have gone.
+        ///
+        /// Fetches, when the last document arrived, how long the last pull
+        /// took, the last failure's kind, and the failures since one
+        /// succeeded — plus `reachable()`, which answers `None` before the
+        /// store has been asked anything, because a source installed and
+        /// never fetched is not down.
+        ///
+        /// The fetch half of the picture [`status`](Self::status) starts:
+        /// *did the store answer* here, *did the document install* there.
+        /// Neither does I/O, so a `/metrics` handler may call both per
+        /// scrape.
+        #[must_use]
+        pub fn remote_status() -> #path::RemoteStatus {
+            Self::dynamic_config_remote().status()
+        }
+
         /// One reload through the remembered builder; see `remote_sink`.
-        fn dynamic_config_remote_reload() -> ::core::result::Result<(), ::dynamic_config::Error>
+        ///
+        /// Labelled `RemoteChanged`: the store pushed it, which is the one
+        /// thing a hook cannot work out from the swap it sees.
+        fn dynamic_config_remote_reload() -> ::core::result::Result<(), #path::Error>
         {
-            Self::dynamic_config_builder()?.reload()
+            Self::dynamic_config_builder()?
+                .reload_with(#path::ReloadReason::RemoteChanged)
         }
     }
 }

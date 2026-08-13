@@ -61,21 +61,27 @@ argument to opt in with; an unused method costs nothing.
 | `builder(key) -> Builder<Self>` | | Where everything starts: a [`Builder`](#the-builder) wired to this type's storage — its `init()` installs into the snapshot `current()` reads. |
 | `current() -> Arc<Self>` | | The current snapshot, one atomic load. Panics before anything installed one. |
 | `try_current() -> Option<Arc<Self>>` | | The current snapshot, or `None`. |
+| `generation() -> u64` | | How many snapshots have been installed; zero before the first. Monotonic, and the total order a hook should read rather than infer — the order callbacks are *called* in is not defined across concurrent reloads. |
+| `meta() -> Option<SnapshotMeta>` | | That generation and when it was installed. For operators rather than for correctness: it is a second load, so it can be one install away from a `current()` taken beside it, and nothing on the read path consults it. |
+| `status() -> ConfigStatus` | | Generation, when it landed, why, and how the reloads since have gone — a handful of atomic loads, no I/O, safe to call per scrape. See [Operating a configuration](reload-lifecycle.md#operating-a-configuration). |
 | `replace(config)` | | Atomically swap in a new snapshot. Readers holding an `Arc` keep their own generation. |
 | `prepare() -> Result<Commit, Error>` | | Load and validate through the remembered builder without installing — the fallible half of a reload, for a `ReloadGroup`. |
 | `on_reload(hook)` | | Run a callback on every later reload, for the life of the process. |
 | `on_reload_scoped(hook) -> HookGuard` | | The same, until the guard is dropped. |
+| `on_reload_with(hook)` | | The same list, told *why*: the callback gets a `ReloadEvent` — both snapshots, the [`ReloadReason`](reload-lifecycle.md#why-a-reload-happened) and the install's `SnapshotMeta`. It fires for the **first** install too, with `previous: None`, which the pair form has nowhere to say. |
+| `on_reload_with_scoped(hook) -> HookGuard` | | The same, until the guard is dropped. |
 | `set_default(path, value)` / `set_override(path, value)` | | The two runtime layers bracketing everything else: a fallback used only when nothing supplies the key, and a value that wins over every file and variable. |
 | `set_defaults(value)` | | Every field of a `Serialize` value as defaults, at once. |
 | `set_flag(path, value)` / `set_assignments(items)` | | The command-line layer: one flag, or `--set key=value` strings. |
 | `clear_defaults()` / `clear_overrides()` / `clear_flags()` | | Drop a runtime layer again. |
 | `bind_env(path, variable)` / `clear_env_bindings()` | | Bind a field to a variable that is not yours to name — `PORT`, `DATABASE_URL`. |
-| `alias(from, to)` / `clear_aliases()` | | Keep an old key path working after a rename; fills a gap rather than overriding. |
+| `alias(from, to)` / `clear_aliases()` | | Keep an old key path working after a rename; fills a gap rather than overriding. `from` may name the section the key moved out of — `alias("db::timeout", "timeout")`, read from this configuration's own documents — and `to` never can. |
 | `source_of(path)` / `is_set(path)` | | Which layer supplies a key, and whether anything does — through the remembered builder. |
 | `snapshot() -> Result<Snapshot, Error>` | | Resolve without deserializing, for keys with no field. |
 | `check() -> Result<Report, Error>` | | What the configuration resolves to, and whether it would load — works when the load fails, which is when it is worth running. |
 | `explain(path) -> Result<Explanation, Error>` | | Every layer's answer for one path, values included — secret fields come back already `***`. |
 | `set_remote(source)` / `refresh_remote()` / `remote_sink()` / `clear_remote()` | | Install a remote store, fetch from it explicitly, take the fenced sink a watch loop pushes through, drop what it gave. |
+| `remote_status() -> RemoteStatus` | | How the fetches have gone: how many, when the last one landed, how long it took, the last failure's kind, and whether the store is reachable. The fetch half of what `status()` starts, and no I/O either. |
 | `bind_clap(matches, bindings)` | `clap` | Copy named clap arguments into the flags layer — only ones that really came from the command line. |
 | `load_async()` / `init_async()` | `async` | The remembered builder's load and init, off the async executor. |
 | `changes()` | `async` | A handle woken by every later reload; a `Future`, so any executor drives it. |
@@ -107,11 +113,20 @@ with an error saying to start from the generated `builder()`.
 | `nest(separator)` | The nesting separator inside variable names; `"__"` unless said. |
 | `allow_empty_env()` | Treats `FOO=` as set-to-empty rather than unset. |
 | `strict_env()` | Refuses ambiguous environment spellings — `off`, `no`, `nil` — with an error naming the variable. |
+| `whole_document()` | Reads every document as this section's values, with no section header: `{"host": …, "port": …}` and nothing above it. The key still names the environment prefix, the cache entry and the diagnostics. See [Document Shape](document-shape.md). |
 | `env_file(path)` | A `.env` file read as the environment layer, just below the real thing. Needs the `dotenv` feature at load time. |
+| `secrets_dir(path)` | A directory where each file is one key — how Docker and Kubernetes mount secrets. One level, nesting spelled in the filename with the [`nest`](sources-and-precedence.md#nest) separator, one trailing newline trimmed, and provenance naming the individual file. Sits above the files and the remote store, below `.env`. See [`secrets_dir`](sources-and-precedence.md#secrets_dir). |
 | `profile_env(variable)` | The environment variable naming the active profile, as in `profile_env("APP_ENV")`. |
 | `cache(path, mode)` | A last-known-good cache: written after every clean `init` or watch reload, recovered from when the sources will not load. `mode` is a [`CacheMode`](persistence.md#cache-modes). |
 | `cache_encrypted(path, encryptor)` | The cache, encrypted at rest: full fidelity through the caller's `Encryptor`, recovered through the installed `Decryptor`. Path carries the format under the suffix — `last.json.age`. Needs the `decrypt` feature. Last cache call wins, either direction. |
 | `validate(f)` | Application-level validation, `fn(&T) -> Result<(), Error>`, run after deserializing and before anything installs. A reload it refuses keeps the previous snapshot. |
+| `secrets(&[path, ..])` | Which paths hold secrets, stated by hand — what `#[config(secret)]` declares for a type that has fields to declare it on. Redacts `explain` under the same three-way rule (the path is, sits under, or contains a secret), and makes `CacheMode::Redacted` and `Fingerprint` legal on a builder the macro did not generate. See [Schemaless Configuration](schemaless.md#secrets). |
+
+`Builder::values(key)` is the one entry point that is not a method on an
+existing builder: `Builder::<Value>::new(key)` under a findable name, for a
+configuration with no struct behind it. Every method above applies to it
+unchanged; what differs is the reading, which is by path — see
+[Schemaless Configuration](schemaless.md).
 
 ### Loading and installing
 
@@ -119,11 +134,13 @@ with an error saying to start from the generated `builder()`.
 |---|---|---|
 | `load() -> Result<T, Error>` | | Reads the sources and deserializes, installing nothing. |
 | `init() -> Result<(), Error>` | | Loads, installs as the type's snapshot, remembers the builder — and recovers from the cache when the sources are broken. |
+| `init_and_current() -> Result<Arc<T>, Error>` | | `init()`, handing back the snapshot it installed, so the type is not named a second time to read what was just loaded. What comes back is *that* install's snapshot: a reload landing a moment later moves `current()` and does not move this. |
 | `reload() -> Result<(), Error>` | | One reload by hand: load, validate, install, rewrite the cache. A failure installs nothing. |
+| `reload_with(reason) -> Result<(), Error>` | | The same, labelled: the [`ReloadReason`](reload-lifecycle.md#why-a-reload-happened) reaches `on_reload_with` hooks and `status().last_reason`. For a program that detects its own changes — a store with no adapter here, a control plane pushing over a socket. A plain `reload()` is `Manual`. |
 | `prepare() -> Result<Commit, Error>` | | Load and validate now, install later — what a `ReloadGroup` drives. |
 | `watch(debounce) -> io::Result<WatchHandle>` | `watch` | Reloads on file changes until the returned handle is dropped. One watcher per type, whichever surface starts it. |
 | `watch_with(debounce, mode)` | `watch` | The same, with the detection strategy chosen explicitly — `WatchMode::Poll` is what network and overlay filesystems need. |
-| `load_async()` / `init_async()` | `async` | The same, off the async executor. |
+| `load_async()` / `init_async()` / `init_and_current_async()` | `async` | The same, off the async executor. |
 
 ### Diagnostics on the builder
 

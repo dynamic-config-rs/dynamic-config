@@ -80,12 +80,31 @@ pub struct Report {
     pub resolved: Vec<Resolved>,
     /// Keys the struct does not name. Empty when detection was skipped.
     pub unknown: Vec<UnknownKey>,
+    /// Whether unknown-key detection ran at all.
+    ///
+    /// `false` when there was no field list to compare against — a
+    /// schemaless configuration, a bare [`Builder::new`](crate::Builder::new),
+    /// or a struct with a `#[serde(flatten)]` field, which legitimately
+    /// absorbs keys the outer type never names.
+    ///
+    /// It is a separate answer from an empty [`unknown`](Self::unknown)
+    /// because the two mean opposite things: "every key is known" and
+    /// "nobody looked". The [`Display`](fmt::Display) rendering says which,
+    /// and `check` on a configuration with no schema must not read as an
+    /// all-clear.
+    pub unknown_checked: bool,
     /// Why the configuration would fail to load, if it would.
     pub failure: Option<String>,
 }
 
 impl Report {
     /// Whether a load would succeed and no key looks like a typo.
+    ///
+    /// A report where detection never ran can still be clean: there is
+    /// nothing wrong with a configuration that declares no schema, and
+    /// answering `false` would make the flag useless for every schemaless
+    /// caller. [`unknown_checked`](Self::unknown_checked) is how a caller
+    /// asks the other question.
     #[must_use]
     pub fn is_clean(&self) -> bool {
         self.failure.is_none() && self.unknown.is_empty()
@@ -110,6 +129,12 @@ impl fmt::Display for Report {
             for unknown in &self.unknown {
                 writeln!(f, "  {unknown}")?;
             }
+        }
+
+        // Said out loud, because the alternative is a report that looks
+        // like an all-clear when nothing was compared.
+        if !self.unknown_checked {
+            writeln!(f, "\n  unknown keys: not checked (no field list)")?;
         }
 
         match &self.failure {
@@ -154,6 +179,7 @@ where
         // detector exists to catch typos, and an alias that silenced it would
         // make `pool.szie` a supported spelling.
         unknown: unknown_keys(&snapshot, fields, &aliased_keys(spec)),
+        unknown_checked: !fields.is_empty(),
         // `load` rather than `Snapshot::extract`, so the message names the file
         // at fault — which is the whole point of running this.
         failure: crate::loader::load::<T>(spec)

@@ -47,6 +47,38 @@ impl<T, const WAITERS: usize> ConfigCell<T, WAITERS> {
             notify: crate::asynchronous::Notify::new(),
         }
     }
+
+    /// How many times a waiter has had to displace another one, saturating.
+    ///
+    /// A [`ConfigCell`] parks `WAITERS` tasks and no more. Past that, a
+    /// registration evicts an existing waiter and wakes it — no wake-up is
+    /// lost, but the two tasks then wake each other for as long as both are
+    /// waiting, and a device that is doing that is not asleep. There is no
+    /// fifth slot to find: a fixed array cannot park what does not fit, and
+    /// the alternatives (drop the waker, refuse the registration) are both a
+    /// task that nobody polls again.
+    ///
+    /// So this is the report. **Non-zero means `WAITERS` is too small for this
+    /// firmware** — raise the second type parameter to the number of tasks
+    /// that genuinely await this configuration. Zero on a device that has run
+    /// its real workload means the budget fits, which is the only proof of
+    /// that worth having.
+    ///
+    /// ```
+    /// # use dynamic_config_embedded::ConfigCell;
+    /// # use serde::Deserialize;
+    /// # #[derive(Clone, Deserialize)] struct Settings { interval_ms: u32 }
+    /// static SETTINGS: ConfigCell<Settings, 4> = ConfigCell::new();
+    ///
+    /// // On a bench, after the firmware has run everything it does:
+    /// assert_eq!(SETTINGS.waiter_evictions(), 0, "raise WAITERS");
+    /// ```
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[must_use]
+    pub fn waiter_evictions(&self) -> u32 {
+        self.notify.evictions()
+    }
 }
 
 impl<T: Clone, const WAITERS: usize> ConfigCell<T, WAITERS> {

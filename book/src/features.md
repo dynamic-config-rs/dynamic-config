@@ -95,10 +95,21 @@ measured against a real toolchain, not `age`'s own claim; see
 
 ## Observability
 
-**`tracing`** — watcher reloads become `config_reload` spans with
-outcome and duration as structured fields, instead of stderr lines —
-enough to alert on "has not reloaded cleanly in an hour" without parsing
-message strings.
+**`tracing`** — the watcher's diagnostics become `tracing` events
+instead of stderr lines, every install becomes a `dynamic_config.reload`
+span carrying the reason, the generation and the outcome, with a `WARN`
+event for a reload that installed nothing, and every remote fetch becomes
+a `dynamic_config.fetch` span carrying the outcome and, on a failure, the
+error kind. Nothing is emitted on the read path, and no field carries a
+value, a key path or a store's address. See [Telemetry](telemetry.md).
+
+**`telemetry`** — `telemetry::Exposition`: `ConfigStatus` and
+`RemoteStatus` rendered as Prometheus text, so a process can serve
+`/metrics` without this crate choosing its metrics ecosystem. **No
+dependency at all** — an exposition format is a wire encoding, not a
+crate — and the metric names are API: six for the configuration, six more
+for a remote source, each labelled by the caller rather than by anything
+the crate read. Also see [Telemetry](telemetry.md).
 
 ## The bundle
 

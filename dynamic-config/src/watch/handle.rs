@@ -130,9 +130,13 @@ impl std::fmt::Debug for WatchHandle {
 /// Calling this twice for the same type is an error (`AlreadyExists`): a
 /// second handle could only mislead, and the first watcher keeps running.
 ///
-/// `reload` is expected to swap in a new snapshot. Returning `Some(summary)`
-/// replaces the generic "reloaded" line with something more specific — which is
-/// how `diff` reports the keys that moved without logging twice.
+/// `reload` is expected to swap in a new snapshot. It is handed the path
+/// whose event opened the debounce window — one path, not the set, because
+/// the window can cover several and an unbounded collection of remount
+/// directory names is what collecting them all would mean. Returning
+/// `Some(summary)` replaces the generic "reloaded" line with something more
+/// specific — which is how `diff` reports the keys that moved without
+/// logging twice.
 ///
 /// Its error is reported and discarded — an invalid or half-written file must
 /// degrade to "no change", never to a crash, because the previous snapshot is
@@ -154,7 +158,7 @@ pub fn spawn(
     name: &'static str,
     watched: Watched,
     debounce: Duration,
-    reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
+    reload: impl Fn(&Path) -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
     spawn_with(key, name, watched, debounce, WatchMode::default(), reload)
 }
@@ -171,7 +175,7 @@ pub fn spawn_with(
     watched: Watched,
     debounce: Duration,
     mode: WatchMode,
-    reload: impl Fn() -> Result<Option<String>, Error> + Send + 'static,
+    reload: impl Fn(&Path) -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
     // An error, not a quiet no-op handle. The old behaviour returned
     // `Ok(handle-that-owns-nothing)`, which read as "I started watching" and

@@ -31,6 +31,25 @@ pub struct Contribution {
     /// `***` when redacted. Tables and lists render as their shape
     /// (`a table (3 keys)`), not their contents.
     pub value: Option<String>,
+    /// The old path an alias carried this value from, on the `alias` row.
+    ///
+    /// `None` on every other layer. The spelling is the one the alias was
+    /// declared with, so a key that moved between sections says so:
+    /// `db::timeout`. [`origin`](Self::origin) names the file either way; this
+    /// is the other half of the answer, and the half a reader needs before
+    /// they can find the value in it.
+    pub aliased_from: Option<String>,
+}
+
+impl Contribution {
+    /// The layer's name in the table, with the old path when an alias carried
+    /// the value: `alias db::timeout`.
+    fn label(&self) -> std::borrow::Cow<'_, str> {
+        match &self.aliased_from {
+            Some(from) => std::borrow::Cow::Owned(format!("{} {from}", self.layer)),
+            None => std::borrow::Cow::Borrowed(self.layer),
+        }
+    }
 }
 
 /// Every configured layer's answer for one path, lowest precedence first.
@@ -94,6 +113,7 @@ impl fmt::Debug for Contribution {
             .field("layer", &self.layer)
             .field("origin", &self.origin)
             .field("value", &self.value.as_ref().map(|_| "..."))
+            .field("aliased_from", &self.aliased_from)
             .finish()
     }
 }
@@ -130,10 +150,15 @@ impl fmt::Display for Explanation {
             })
             .collect();
 
-        let layer_width = self
+        let labels: Vec<String> = self
             .rows
             .iter()
-            .map(|row| row.layer.len())
+            .map(|row| row.label().into_owned())
+            .collect();
+
+        let layer_width = labels
+            .iter()
+            .map(String::len)
             .chain(["layer".len()])
             .max()
             .unwrap_or(0);
@@ -152,7 +177,9 @@ impl fmt::Display for Explanation {
 
         let winner_at = self.rows.iter().rposition(|row| row.value.is_some());
 
-        for (index, (row, source)) in self.rows.iter().zip(&sources).enumerate() {
+        for (index, ((row, source), label)) in
+            self.rows.iter().zip(&sources).zip(&labels).enumerate()
+        {
             let value = row.value.as_deref().unwrap_or("absent");
             let marker = if Some(index) == winner_at {
                 "   ← winner"
@@ -162,8 +189,7 @@ impl fmt::Display for Explanation {
 
             writeln!(
                 f,
-                "{:layer_width$}  {source:source_width$}  {value}{marker}",
-                row.layer
+                "{label:layer_width$}  {source:source_width$}  {value}{marker}"
             )?;
         }
 
@@ -189,6 +215,7 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
             layer: name,
             origin,
             value: value.map(|value| render(&value)),
+            aliased_from: None,
         });
     }
 
@@ -216,11 +243,28 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
                 layer: "alias",
                 origin: Some(origin),
                 value: Some(render(&value)),
+                // Which alias fired is not something the merged figment can
+                // be asked — it reports the *supplier*, deliberately — so it
+                // is read back off the declaration. The last one to fill this
+                // path is the one that won, and the pass fills in the order
+                // the pairs come in.
+                aliased_from: aliased_from(spec, path),
             });
         }
     }
 
     Ok(Explanation::new(path.to_owned(), rows))
+}
+
+/// The old path aliased to `path`, if one is.
+///
+/// The last hop of a chain, which is the one that filled this path.
+fn aliased_from(spec: &LoadSpec<'_>, path: &str) -> Option<String> {
+    spec.aliases?
+        .pairs()
+        .into_iter()
+        .find(|(_, to)| to == path)
+        .map(|(from, _)| from)
 }
 
 /// A short, single-line rendering — the value for scalars, the shape for
@@ -251,7 +295,26 @@ mod tests {
             layer,
             origin: value.map(|_| Origin::Runtime("default")),
             value: value.map(str::to_owned),
+            aliased_from: None,
         }
+    }
+
+    #[test]
+    fn an_alias_row_names_the_old_path_in_the_layer_column() {
+        let explanation = Explanation::new(
+            "timeout".to_owned(),
+            vec![Contribution {
+                layer: "alias",
+                origin: Some(Origin::Inline),
+                value: Some("30".to_owned()),
+                aliased_from: Some("db::timeout".to_owned()),
+            }],
+        );
+
+        assert!(
+            explanation.to_string().contains("alias db::timeout"),
+            "{explanation}"
+        );
     }
 
     #[test]

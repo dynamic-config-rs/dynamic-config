@@ -102,5 +102,53 @@ fn main() {
         "the read path allocated — that is a regression, not a tuning knob"
     );
 
-    println!("\nzero, on both shapes — the claim holds.");
+    println!("\nzero, on both shapes — the claim holds.\n");
+
+    // A configuration with no struct reads by path, and the claim there is
+    // the same one: the walk borrows out of the tree it already holds, so a
+    // schemaless read allocates no more than a field access. What separates
+    // `get` from `get_as` is *work*, not memory — measured in
+    // `benches/read_path.rs`. The line memory does draw is what a read hands
+    // back: a scalar copies out, an owned `String` cannot.
+    let schemaless = Dynamic::new(dynamic_config::Builder::values("db").file("benches/bench.json"));
+    schemaless.init().expect("benches/bench.json should load");
+
+    let borrowed = counted("Value::get(path)", || {
+        let values = schemaless.current().expect("initialised");
+
+        black_box(
+            values
+                .get("pool.max_size")
+                .and_then(dynamic_config::Value::as_i64),
+        );
+    });
+    let scalar = counted("Value::get_as::<u16>", || {
+        let values = schemaless.current().expect("initialised");
+
+        black_box(values.get_as::<u16>("pool.max_size").expect("it is there"));
+    });
+    let owned = counted("Value::get_as::<String>", || {
+        let values = schemaless.current().expect("initialised");
+
+        black_box(values.get_as::<String>("host").expect("it is there"));
+    });
+
+    assert_eq!(
+        (borrowed, scalar),
+        (0, 0),
+        "a path read borrows out of the installed tree, and rebuilding a \
+         scalar to deserialize it touches no heap either; allocating means \
+         one of those stopped being true"
+    );
+    assert!(
+        owned > 0,
+        "a read that hands back an owned String has to allocate it — if this \
+         is ever zero the benchmark stopped measuring what it says"
+    );
+
+    println!(
+        "\nreading by path allocates nothing, typed or not; what allocates is \
+         handing back something owned — {} per `get_as::<String>`.",
+        owned / ROUNDS
+    );
 }

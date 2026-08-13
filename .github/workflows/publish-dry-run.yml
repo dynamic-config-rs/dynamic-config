@@ -71,6 +71,9 @@ jobs:
       - name: package every crate
         run: cargo package --workspace --no-verify --allow-dirty
 
+      # `dynamic-config-store-core` is the one published crate absent from
+      # this roster: it is machinery the store crates share, with no API of
+      # its own to install, so it carries a licence and no README.
       - name: every crate carries a readme and a licence
         run: |
           for crate in dynamic-config dynamic-config-macros \
@@ -78,6 +81,7 @@ jobs:
                        dynamic-config-nats dynamic-config-vault \
                        dynamic-config-redis dynamic-config-s3 \
                        dynamic-config-firestore dynamic-config-embedded \
+                       dynamic-config-git dynamic-config-server \
                        dynamic-config-cli; do
             tarball=$(find target/package -maxdepth 1 -name "$crate-*.crate" 2>/dev/null | head -1)
 

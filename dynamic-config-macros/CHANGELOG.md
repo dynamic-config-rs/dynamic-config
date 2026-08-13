@@ -25,6 +25,43 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-13
+
+### Fixed
+
+- **A renamed dependency now works.**
+  `config = { package = "dynamic-config", version = "0.6" }` is an ordinary
+  thing to write, and the expansion hardcoded `::dynamic_config` — a crate
+  that consumer's namespace does not have, so every generated item failed to
+  resolve. The facade's real name is resolved from the *consumer's*
+  manifest with `proc-macro-crate` and threaded through the whole
+  expansion.
+
+  `FoundCrate::Itself` is not one case but two, which is what the
+  repository's own examples caught: the facade's *library* wants `crate`,
+  while an example, a bin or a doctest of that same package links the
+  library as an extern crate and wants `::dynamic_config`. Integration
+  tests need no special handling — `proc-macro-crate` already tells them
+  apart. A consumer with no readable manifest keeps the old hardcoded path,
+  so what a user reads is rustc's "unresolved crate" rather than a panic
+  from inside a proc macro.
+
+  Doc *links* in the generated documentation still name `::dynamic_config`;
+  under a renamed dependency they resolve to nothing and rustdoc warns.
+  They are links, not code, and interpolating a path into a doc comment
+  costs more than the warning does.
+
+### Changed
+
+- One more dependency, `proc-macro-crate`, and one more parse of the
+  consumer's `Cargo.toml` per crate that uses the macro. Measured against
+  real 1.71 and 1.74 toolchains before it was added rather than read off a
+  manifest: the floor stays at **1.71**.
+- The generated install door, `dynamic_config_install`, returns the
+  `Arc<Self>` it stored — what `Builder::init_and_current` hands back. It is
+  private to the generated impl and named in no documentation, so no user
+  code refers to it; the public surface is unchanged.
+
 ## [0.5.0] — 2026-08-12
 
 ## [0.4.0] — 2026-08-12
@@ -89,7 +126,8 @@ Initial release.
 - Compile-fail suites (`trybuild`) pinning the diagnostics, including the
   ones that only exist when a feature is off.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ctolon/dynamic-config/compare/v0.2.0...v0.3.0

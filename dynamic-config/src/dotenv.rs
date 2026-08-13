@@ -13,7 +13,7 @@
 //! nesting as the real thing.
 //!
 //! ```text
-//! defaults < files < remote < .env < APP_DB_* < bind_env < flags < overrides
+//! defaults < files < remote < secrets_dir < .env < APP_DB_* < bind_env < flags < overrides
 //! ```
 //!
 //! Below the real environment, because a variable somebody exported for this
@@ -80,7 +80,11 @@ pub(crate) fn read(path: &Path) -> Result<BTreeMap<String, String>, Error> {
 }
 
 /// Parses the text, or reports the one-based line that could not be read.
-fn parse(text: &str) -> Result<BTreeMap<String, String>, usize> {
+///
+/// `pub(crate)` for [`crate::__fuzz`]: a coverage-guided fuzzer wants the
+/// splitter without a file behind it, and a `.env` that takes the process down
+/// at startup is exactly the failure this surface has.
+pub(crate) fn parse(text: &str) -> Result<BTreeMap<String, String>, usize> {
     let mut entries = BTreeMap::new();
 
     for (number, line) in text.lines().enumerate() {

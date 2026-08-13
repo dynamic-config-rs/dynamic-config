@@ -90,9 +90,21 @@ pub use asynchronous::Changes;
 /// How many tasks a [`ConfigCell`] can park by default.
 ///
 /// Override it per cell with the second type parameter —
-/// `ConfigCell<Settings, 8>` parks eight. Size it to the number of tasks
-/// that genuinely await this configuration: beyond the limit, waiters evict
-/// and wake each other in a churn that keeps the executor from idling.
+/// `ConfigCell<Settings, 8>` parks eight. Size it to the number of tasks that
+/// genuinely await this configuration: beyond the limit, waiters evict and
+/// wake each other without end, and a device that is doing that never reaches
+/// its idle loop. [`ConfigCell::waiter_evictions`] reports whether that has
+/// happened.
+///
+/// Four rather than a larger number, deliberately. Each slot is a `Waker`:
+/// eight bytes of RAM on a 32-bit target, per cell, whether or not anything
+/// ever waits on it — a `ConfigCell<Settings, 4>` measures 56 bytes on
+/// `thumbv7em-none-eabihf` against 88 for eight slots, for identical code
+/// size. Doubling the default would charge every device 32 bytes to move a
+/// cliff rather than remove it: nine tasks on an eight-slot cell behave
+/// exactly as five do on four. The number that is actually right is a
+/// property of the firmware, which knows its tasks at compile time — so it is
+/// a type parameter, and the default stays at the shape this crate is for.
 pub const DEFAULT_WAITERS: usize = 4;
 pub use cell::ConfigCell;
 pub use error::{Error, ErrorKind};

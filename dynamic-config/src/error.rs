@@ -28,6 +28,14 @@ pub enum ErrorKind {
     Invalid,
     /// A remote store could not be read.
     Remote,
+    /// A credential was rejected, or could not be obtained.
+    ///
+    /// Distinct from [`Remote`](Self::Remote), which is the store being
+    /// unreachable: **that one may fix itself by waiting; this one will not.**
+    /// A watch loop can back off on the first and stop on the second.
+    ///
+    /// The credential itself is never part of the message.
+    Auth,
     /// An encrypted file could not be decrypted.
     Decrypt,
     /// The active backend failed for a reason of its own.
@@ -46,6 +54,7 @@ impl ErrorKind {
             Self::Env => "env",
             Self::Invalid => "invalid",
             Self::Remote => "remote",
+            Self::Auth => "auth",
             Self::Decrypt => "decrypt",
             Self::Backend => "backend",
         }
@@ -141,6 +150,26 @@ impl Error {
     /// failure is categorised the same way whichever store it came from.
     pub fn remote<E: fmt::Display>(error: E) -> Self {
         Self::new(ErrorKind::Remote, error.to_string())
+    }
+
+    /// A credential a remote store refused, or one that could not be obtained.
+    ///
+    /// Also for [`RemoteSource`](crate::RemoteSource) implementors, and the
+    /// line between this and [`remote`](Self::remote) is the one worth getting
+    /// right: this is for what waiting cannot cure — a 401 or a 403, a token
+    /// that expired and could not be replaced. A network failure *while*
+    /// fetching a token is [`remote`](Self::remote), because the store may yet
+    /// answer; a credential file that is not there is an
+    /// [`Io`](ErrorKind::Io) problem, and one that is there but malformed is a
+    /// [`Parse`](ErrorKind::Parse) problem.
+    ///
+    /// Where a store cannot tell its own 403 from a proxy's, prefer
+    /// [`remote`](Self::remote): a wrong `Auth` stops a watch loop that would
+    /// have recovered.
+    ///
+    /// `error` must not name the credential. It reaches logs.
+    pub fn auth<E: fmt::Display>(error: E) -> Self {
+        Self::new(ErrorKind::Auth, error.to_string())
     }
 
     /// A failure decrypting an encrypted config file.
@@ -282,6 +311,20 @@ mod tests {
             .with_origin(Origin::Env("APP_X".to_owned()));
 
         assert_eq!(error.origin(), &Origin::Inline);
+    }
+
+    /// The whole value of the variant is that it is *not* `Remote`: a caller
+    /// backs off on one and stops on the other, so they must never collapse
+    /// into each other.
+    #[test]
+    fn a_refused_credential_is_its_own_kind_rather_than_a_flavour_of_remote() {
+        let refused = Error::auth("the store refused the credential");
+        let unreachable = Error::remote("the store is unreachable");
+
+        assert_eq!(refused.kind(), ErrorKind::Auth);
+        assert_eq!(refused.kind().as_str(), "auth");
+        assert_ne!(refused.kind(), unreachable.kind());
+        assert_eq!(refused.to_string(), "the store refused the credential");
     }
 
     #[test]

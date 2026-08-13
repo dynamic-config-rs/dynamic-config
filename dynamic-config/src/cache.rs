@@ -343,9 +343,15 @@ fn drift(cached: &Snapshot, current: Option<&Snapshot>) -> Option<Vec<String>> {
 }
 
 /// The hash of a snapshot's values, as `fingerprint_document` computes it.
+///
+/// Over this crate's own [`Value`](crate::Value) tree, which carries neither
+/// figment's provenance tag nor its numeric widths, so the same document
+/// fingerprints the same however it was assembled. It used to hash the
+/// figment tree's `Debug` rendering, which put the identity of every cache
+/// file on disk at the mercy of an upstream crate's formatting.
 fn fingerprint_of(snapshot: &Snapshot) -> String {
     let mut hasher = DefaultHasher::new();
-    format!("{:?}", snapshot.values()).hash(&mut hasher);
+    snapshot.to_value().hash(&mut hasher);
 
     format!("{:016x}", hasher.finish())
 }
@@ -392,9 +398,6 @@ fn remove_path(document: &mut Dict, path: &str) {
 fn fingerprint_document(snapshot: &Snapshot) -> Dict {
     let keys = snapshot.leaf_paths();
 
-    // `Debug` rather than `Hash` (inside `fingerprint_of`): figment's values
-    // carry a provenance tag that takes part in equality, and two identical
-    // values from different providers must fingerprint the same.
     let mut document = Dict::new();
     document.insert(
         FINGERPRINT.to_owned(),
@@ -524,6 +527,79 @@ mod tests {
 
         assert!(moved.contains(&"hsot is new".to_owned()), "{moved:?}");
         assert!(moved.contains(&"password is gone".to_owned()), "{moved:?}");
+    }
+
+    /// The document the hard-coded fingerprint below is taken over. Fixed
+    /// on purpose: every scalar shape the tree can hold, nested once.
+    fn known_document() -> Snapshot {
+        Snapshot::new(dict_of(&[
+            ("host", "localhost".into()),
+            ("port", Value::from(5432u16)),
+            ("ratio", Value::from(0.5f64)),
+            ("tls", Value::from(true)),
+            (
+                "tags",
+                Value::from(vec![Value::from("a"), Value::from("b")]),
+            ),
+            ("pool", Value::from(dict_of(&[("max", 10u16.into())]))),
+        ]))
+    }
+
+    /// The value in this assertion is not derived from anything: it is
+    /// written down so that *changing the algorithm is loud*. A fingerprint
+    /// is a cache file's identity, and a silent change to it means every
+    /// cache on disk stops being recognised — the conservative direction,
+    /// but not one to discover from a support ticket. If this fails, the
+    /// fingerprint moved: decide whether that was intended, say so in the
+    /// changelog under Changed, and write the new number down. `std`'s
+    /// hasher changing under us would land here too, which is the point —
+    /// it invalidates caches exactly the same way a change here does.
+    #[test]
+    fn the_fingerprint_of_a_known_document_is_this_one() {
+        assert_eq!(fingerprint_of(&known_document()), "67d38230cb74f238");
+    }
+
+    #[test]
+    fn a_fingerprint_is_stable_within_a_process() {
+        assert_eq!(
+            fingerprint_of(&known_document()),
+            fingerprint_of(&known_document())
+        );
+    }
+
+    /// The width a provider chose is not part of the document, so it must
+    /// not be part of its identity: a cache written when `max` arrived as a
+    /// `u16` has to still be recognised when it arrives as a `u64`.
+    #[test]
+    fn the_same_number_at_two_widths_fingerprints_the_same() {
+        let narrow = Snapshot::new(dict_of(&[("max", Value::from(10u16))]));
+        let wide = Snapshot::new(dict_of(&[("max", Value::from(10u64))]));
+
+        assert_eq!(fingerprint_of(&narrow), fingerprint_of(&wide));
+    }
+
+    #[test]
+    fn a_signed_zero_is_a_different_document() {
+        let negative = Snapshot::new(dict_of(&[("bias", Value::from(-0.0f64))]));
+        let positive = Snapshot::new(dict_of(&[("bias", Value::from(0.0f64))]));
+
+        assert_ne!(fingerprint_of(&negative), fingerprint_of(&positive));
+    }
+
+    /// The whole round trip the fingerprint mode exists for: written to
+    /// disk, read back, and compared against the same sources.
+    #[test]
+    fn a_fingerprint_still_matches_after_a_round_trip_through_the_file() {
+        let path = scratch("round-trip");
+
+        write(&known_document(), &path, CacheMode::Fingerprint, &[]).unwrap();
+
+        let Recovery::Drift(Some(report)) = read(&path, Some(&known_document())).unwrap() else {
+            panic!("a fingerprint cache cannot be usable");
+        };
+
+        assert_eq!(report.len(), 1);
+        assert!(report[0].contains("nothing moved"), "{report:?}");
     }
 
     #[test]

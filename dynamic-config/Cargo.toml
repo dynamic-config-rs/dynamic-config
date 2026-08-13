@@ -43,6 +43,10 @@ figment = []
 dotenv = []
 # Transparent decryption of `age`-encrypted config files.
 age = ["decrypt", "dep:age"]
+# `telemetry::Exposition`: a `ConfigStatus` rendered as Prometheus text. **No
+# dependency at all** — the text format is a wire encoding, not a crate — so
+# this crate still picks no metrics ecosystem for its users.
+telemetry = []
 full = [
     "json",
     "toml",
@@ -56,12 +60,16 @@ full = [
     "figment",
     "dotenv",
     "tracing",
+    "telemetry",
 ]
 
 [dependencies]
 dynamic-config-macros = { workspace = true }
-arc-swap = "1.7"
-serde = "1.0.210"
+# `1.9`: `gix-odb` requires it, and the Python remote wheel puts the git
+# store in this crate's graph. Nothing here needs 1.9 for itself — the floor
+# is the union's, which is what `-Z direct-minimal-versions` measures.
+arc-swap = "1.9"
+serde = "1.0.221"
 # The loader. Not optional: it is the only backend.
 figment = { version = "0.10.19", default-features = false, features = ["env"] }
 clap = { version = "4.4", optional = true, default-features = false, features = [
@@ -91,7 +99,7 @@ tokio = { version = "1.47", optional = true, default-features = false, features 
 ] }
 
 [dev-dependencies]
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.221", features = ["derive"] }
 schemars = "1.2"
 # The example encrypts a file before reading it back, which is what a
 # deployment does once with the CLI.
@@ -101,24 +109,36 @@ clap = { version = "4.4", features = ["derive"] }
 # Only for inspecting what `save` wrote.
 serde_json = "1.0.127"
 
-tempfile = "3"
+# `3.26`: `gix-odb` requires it, and `dynamic-config-python-remote` puts the
+# git store in the same graph as everything else. `-Z direct-minimal-versions`
+# pins a bare `3` to 3.0.0, which nothing in that union can build against.
+tempfile = "3.26"
 # Property tests: stable-toolchain fuzzing for the parsing surfaces. A
 # dev-dependency, so it never touches the MSRV story — the floor jobs are
 # `cargo check` without tests.
 proptest = "1"
 trybuild = "1.0"
 
-# The runtimes and web frameworks the examples exercise, kept out of loom
-# builds: `--cfg loom` applies to every crate in the graph, and tokio (and
-# the executors built on it or on `event-listener`) have their own loom
-# wiring that a plain flag does not satisfy. The loom job builds only the
-# `loom` test target, which touches none of these.
-[target.'cfg(not(loom))'.dev-dependencies]
+# The runtimes and web frameworks the examples exercise, kept out of the
+# model-checking builds. For loom it is a correctness matter: `--cfg loom`
+# applies to every crate in the graph, and tokio (and the executors built on
+# it or on `event-listener`) have their own loom wiring that a plain flag does
+# not satisfy. For shuttle it is cost — a separate `RUSTFLAGS` is a separate
+# build cache, and a job that recompiles axum and criterion to run four models
+# is a job nobody waits for. Either way the model job builds one test target,
+# which touches none of these.
+[target.'cfg(not(any(loom, shuttle)))'.dev-dependencies]
 # The statistics-driven benches (`benches/engine.rs`). Default features off:
 # the HTML reports pull a plotting stack nobody reads in CI. Held at 0.5,
 # not the newest: 0.6+ requires `clap ^4.5`, and the CLI pins `clap 4.4`
 # for the MSRV floor — one workspace lockfile cannot hold both.
 criterion = { version = "0.5", default-features = false }
+# `benches/instructions.rs`. The library half only; the `iai-callgrind-runner`
+# binary it shells out to is installed separately and must match this version
+# exactly — the runner refuses a mismatch rather than producing wrong numbers,
+# which is the most common way a first setup fails. CONTRIBUTING.md says so
+# next to the command.
+iai-callgrind = "0.16.1"
 # The two web-framework examples. Dev-dependencies, so nothing a user of this
 # crate depends on.
 axum = "0.8"
@@ -164,6 +184,15 @@ required-features = ["json"]
 name = "alloc_profile"
 harness = false
 required-features = ["json"]
+
+# Instruction counts rather than wall clock, and the only bench that is a
+# regression gate. It needs valgrind and a version-matched
+# `iai-callgrind-runner` to *run*; `cargo bench --no-run` compiles it in the
+# ordinary gate so a broken harness is caught without either.
+[[bench]]
+name = "instructions"
+harness = false
+required-features = ["json", "toml"]
 
 [[example]]
 name = "basic"
@@ -269,13 +298,27 @@ required-features = ["json"]
 name = "last_known_good"
 required-features = ["json"]
 
-# `--cfg loom` builds swap std::sync for loom's mirror (src/sync.rs); the
-# cfg is declared here so stable builds do not warn about it.
+# The only example that needs the `figment` feature, because it is the only
+# one that reaches the one door figment appears in.
+[[example]]
+name = "ini_provider"
+required-features = ["figment", "json"]
+
+# `--cfg loom` and `--cfg shuttle` build swap std::sync for loom's or
+# shuttle's mirror (src/sync.rs); the cfgs are declared here so stable builds
+# do not warn about them.
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(loom)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(loom)", "cfg(shuttle)"] }
 
 # A real dependency, not a dev one: the library itself swaps its primitives
 # under `--cfg loom`, and dev-dependencies are invisible to it. Inert in
 # every build that does not pass the cfg.
 [target.'cfg(loom)'.dependencies]
 loom = { version = "0.7", features = ["futures"] }
+
+# The same arrangement for shuttle, and for the same reason: `tests/shuttle.rs`
+# drives the library's own primitives, so the library has to be built against
+# shuttle's. Unlike loom's, shuttle's constructors are `const`, so nothing in
+# the crate needs a second `new` — `src/sync.rs` is the only file that knows.
+[target.'cfg(shuttle)'.dependencies]
+shuttle = "0.9"

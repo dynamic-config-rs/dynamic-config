@@ -3,6 +3,9 @@
 //! Every diagnostic the macro emits is locked down here, because an error
 //! message is part of the API: a user meets it far more often than they read
 //! the docs, and a refactor that degrades one is a regression like any other.
+//! A lint whose absence is silent belongs here for the same reason: a
+//! dropped `HookGuard` unregisters the hook it just registered, and nothing
+//! but a compiler run can assert that the warning still says so.
 //!
 //! Regenerate the expected output after an intentional change:
 //!

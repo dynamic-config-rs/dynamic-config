@@ -39,6 +39,28 @@ without restating the rest. A missing file is skipped, which is what makes
 an optional secrets file work. The format comes from the extension at load
 time.
 
+## A document with no section header
+
+```rust
+AppConfig::builder("app")
+    .whole_document()
+    .file("app.json")          // {"host": "0.0.0.0", "port": 8000}
+    .init()?;
+```
+
+The default reading is one file, several sections: every top-level key
+names one, which is what lets a `config.toml` hold `[db]` and `[server]`
+for two types that know nothing about each other. A file that is *only*
+this configuration has no use for that header — and a file this crate did
+not write may have none to give.
+
+The key keeps every other job it has: the environment prefix is still
+`APP_APP_*`, the cache entry and the diagnostics are still named after it,
+and profile variants still layer on top. `Builder::new("")` is a
+configuration with nothing to call itself, and then the environment layer
+is the prefix alone. [Document Shape](document-shape.md) is the whole
+story.
+
 ## Encrypted files
 
 ```rust
@@ -179,16 +201,27 @@ let candidate: AppConfig = AppConfig::builder("app").file("config.toml").load()?
 
 AppConfig::builder("app").file("config.toml").init()?;
 let config = AppConfig::current();      // one atomic load, any thread
+
+// The same two lines, for the one place they always pair: startup.
+let config = AppConfig::builder("app").file("config.toml").init_and_current()?;
 ```
 
 `load()` is a pure read — deserialize and hand over, the snapshot
 untouched; use it to inspect a configuration without publishing it.
 `init()` loads *and installs*, and remembers the builder so the type can
-answer questions later. `current()` is an atomic pointer load, cheap
+answer questions later. `init_and_current()` is `init()` with the
+installed snapshot still in hand — the same install, so a reload landing
+immediately afterwards moves `current()` and leaves what it returned
+alone. `current()` is an atomic pointer load, cheap
 enough per request — but call it once per request and reuse the `Arc`, or
 a reload landing mid-request shows one request two configurations.
 `try_current()` returns `None` instead of panicking;
 `replace(config)` installs a value you built yourself.
+
+`reload()` is the same install again, on demand; `reload_with(reason)` is
+the same with the *reason* named, which is what a reload hook and the
+`config_reload` span report — the watcher's own reloads carry
+`ReloadReason::FileChanged` for exactly this.
 
 ## Validation
 
@@ -228,8 +261,38 @@ is always spelled out: `Redacted` drops `#[config(secret)]` fields (they
 come back from the live environment during recovery), `Full` writes
 everything, `Fingerprint` writes only enough to say *what drifted* while
 still refusing to start. Recovery layers the environment and `.env` files
-over the cache exactly as a load would. See
+over the cache exactly as a load would. `cache_encrypted(path, encryptor)`
+writes the same cache through an [`Encryptor`](encryption.md) — full
+fidelity, at rest, recovered through the installed `Decryptor` — for a
+deployment that wants `Full` without a plaintext file on disk. See
 [Persistence & Writing](persistence.md#last-known-good).
+
+## A configuration with no struct
+
+```rust
+use dynamic_config::{Builder, Value};
+
+let plugins = Builder::<Value>::values("plugins")
+    .file("plugins.toml")
+    .secrets(&["token"])
+    .load()?;
+
+plugins.get("cache.ttl").and_then(Value::as_u64);
+```
+
+`Builder::values(key)` is sugar for `Builder::<Value>::new(key)`, for the
+keys a program learns at run time rather than declares — a plugin host, a
+feature-flag table, a tool reading somebody else's file. Every layer,
+profile, watcher, cache and diagnostic works unchanged, because nothing in
+the engine ever knew what `T` was.
+
+Two things a struct declares are gone, and both are *reported* rather than
+assumed: there is no field list, so `check()` says
+`unknown keys: not checked (no field list)` instead of an empty
+all-clear — and nothing is marked secret, so `.secrets(&[..])` is how a
+schemaless configuration says what to redact. Without it a redacting cache
+mode is refused rather than written unredacted. See
+[Schemaless Configuration](schemaless.md).
 
 ## Hot reload
 
@@ -322,6 +385,11 @@ served on — a group loads and validates *every* member before installing
 *any*, so a failure leaves all of them on their previous snapshots. Each
 member answers through the builder its `init()` remembered.
 
+`builder.prepare()` is the piece that makes that possible, and it is
+public: it loads and validates and hands back a `Commit` that installs
+when called, so a caller can stage several configurations and decide
+afterwards whether any of them lands.
+
 ## Remote stores
 
 ```rust
@@ -346,9 +414,10 @@ let now = AppConfig::snapshot()?.source_of("port").cloned(); // and in this snap
 println!("{}", AppConfig::explain("port")?);      // every layer's answer, as a table
 ```
 
-`check` reports without loading and names unknown keys; `source_of`
-answers for the *next* load, `snapshot().source_of` for the resolved
-snapshot in hand. `explain` shows the whole argument — every layer's
+`check` reports without loading and names unknown keys; `is_set(path)` is
+the one-question form of the same, answering whether anything supplies a
+path at all. `source_of` answers for the *next* load,
+`snapshot().source_of` for the resolved snapshot in hand. `explain` shows the whole argument — every layer's
 value and the winner — and is the one diagnostic that prints values;
 `#[config(secret)]` fields stay `***` in it. All four work on the builder
 before any `init`, and on the type after one. See

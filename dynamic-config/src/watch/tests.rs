@@ -8,7 +8,7 @@ use notify::{Event, EventKind};
 use crate::source::LoadSpec;
 
 use super::handle::STARTED;
-use super::relevance::is_relevant;
+use super::relevance::relevant_path;
 use super::{spawn, Watched};
 
 /// A spec that names one file explicitly and searches nowhere.
@@ -17,6 +17,11 @@ fn explicit_spec() -> LoadSpec<'static> {
         &[crate::Source::file("config.toml", crate::Format::Toml)];
 
     LoadSpec::new("app", SOURCES)
+}
+
+/// Relevance as a yes/no, which is what most of these tests ask.
+fn is_relevant(event: &Event, watched: &Watched) -> bool {
+    relevant_path(event, watched).is_some()
 }
 
 fn event(kind: EventKind, path: &str) -> Event {
@@ -45,6 +50,26 @@ fn a_discovered_name_matches_even_though_no_file_was_listed() {
 
     let probe = event(EventKind::Create(CreateKind::File), "/srv/app/other.toml");
     assert!(!is_relevant(&probe, &watched));
+}
+
+/// An event names several paths — a rename carries both — and only one of
+/// them is ours. The reload has to be told *that* one, because it becomes
+/// the `ReloadReason::FileChanged` an operator reads.
+#[test]
+fn the_relevant_path_is_the_one_returned_not_the_first_one_listed() {
+    let probe = Event {
+        kind: EventKind::Modify(ModifyKind::Any),
+        paths: vec![
+            PathBuf::from("/srv/app/notes.txt"),
+            PathBuf::from("/srv/app/config.toml"),
+        ],
+        attrs: Default::default(),
+    };
+
+    assert_eq!(
+        relevant_path(&probe, &Watched::from_spec(&explicit_spec())),
+        Some(std::path::Path::new("/srv/app/config.toml"))
+    );
 }
 
 #[test]
@@ -76,7 +101,7 @@ fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
         "DuplicateTest",
         Watched::from_spec(&spec),
         Duration::from_millis(10),
-        || Ok(None),
+        |_| Ok(None),
     )
     .expect("the first spawn should start a watcher");
 
@@ -88,7 +113,7 @@ fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
         "DuplicateTest",
         Watched::from_spec(&spec),
         Duration::from_millis(10),
-        || Ok(None),
+        |_| Ok(None),
     )
     .expect_err("a second watcher for the same type must be refused");
 
@@ -112,7 +137,7 @@ fn a_duplicate_spawn_is_an_error_and_frees_nothing() {
         "DuplicateTest",
         Watched::from_spec(&spec),
         Duration::from_millis(10),
-        || Ok(None),
+        |_| Ok(None),
     )
     .expect("after the drop, watching can restart");
     drop(again);
@@ -139,7 +164,7 @@ fn a_failed_spawn_frees_its_registration_for_a_retry() {
         "FailedSpawnTest",
         Watched::from_spec(&bad),
         Duration::from_millis(10),
-        || Ok(None),
+        |_| Ok(None),
     )
     .expect_err("no directory to watch means the spawn fails");
 
@@ -154,7 +179,7 @@ fn a_failed_spawn_frees_its_registration_for_a_retry() {
         "FailedSpawnTest",
         Watched::from_spec(&explicit_spec()),
         Duration::from_millis(10),
-        || Ok(None),
+        |_| Ok(None),
     )
     .expect("the retry should start a watcher");
 

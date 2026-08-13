@@ -255,3 +255,121 @@ fn a_fingerprint_builder_never_boots_from_a_value_cache() {
         .init()
         .expect_err("the on-disk values must not override the configured mode");
 }
+
+/// `init_and_current` is the pair — install, then read — written once. What
+/// it returns has to *be* the installed snapshot, not a second load of it.
+#[test]
+fn init_and_current_returns_the_snapshot_it_installed() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Paired {
+        port: u16,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/builder-paired.json",
+        r#"{"svc": {"port": 4242}}"#,
+    )
+    .unwrap();
+
+    let config = Paired::builder("svc")
+        .file("tests/scratch/builder-paired.json")
+        .init_and_current()
+        .expect("the source reads cleanly");
+
+    assert_eq!(config.port, 4242);
+    assert!(
+        std::sync::Arc::ptr_eq(&config, &Paired::current()),
+        "the same snapshot `current()` serves, not a second copy of it"
+    );
+}
+
+/// The returned snapshot is *this* install's. A reload landing afterwards
+/// moves `current()` and must not retroactively move what init handed back —
+/// a program that installed a configuration means the one it installed.
+#[test]
+fn a_later_reload_does_not_change_what_init_handed_back() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Started {
+        port: u16,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/builder-started.json",
+        r#"{"svc": {"port": 1000}}"#,
+    )
+    .unwrap();
+
+    let sources = Started::builder("svc").file("tests/scratch/builder-started.json");
+    let at_startup = sources
+        .init_and_current()
+        .expect("the source reads cleanly");
+
+    std::fs::write(
+        "tests/scratch/builder-started.json",
+        r#"{"svc": {"port": 2000}}"#,
+    )
+    .unwrap();
+    sources.reload().expect("and reloads");
+
+    assert_eq!(at_startup.port, 1000);
+    assert_eq!(Started::current().port, 2000);
+}
+
+/// The recovery path installs too, so the pair form has to answer from it —
+/// the snapshot the cache supplied, not an error and not the absent one.
+#[test]
+fn init_and_current_answers_from_the_last_known_good_cache_too() {
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Recoverable {
+        port: u16,
+    }
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/builder-recoverable.json",
+        r#"{"svc": {"port": 3300}}"#,
+    )
+    .unwrap();
+
+    let sources = || {
+        Recoverable::builder("svc")
+            .file("tests/scratch/builder-recoverable.json")
+            .cache(
+                "tests/scratch/builder-recoverable-cache.json",
+                dynamic_config::CacheMode::Full,
+            )
+    };
+
+    sources().init().expect("the source reads cleanly");
+
+    std::fs::write("tests/scratch/builder-recoverable.json", "{ not json").unwrap();
+
+    let recovered = sources()
+        .init_and_current()
+        .expect("the cache stands in for the unreadable file");
+
+    assert_eq!(recovered.port, 3300);
+}
+
+/// A builder with nowhere to install refuses the pair form for the same
+/// reason it refuses `init`, and says the same thing.
+#[test]
+fn a_bare_builder_refuses_the_pair_form_too() {
+    #[derive(Debug, Deserialize)]
+    struct Db {
+        #[allow(dead_code)]
+        #[serde(default)]
+        port: u16,
+    }
+
+    let error = dynamic_config::Builder::<Db>::new("db")
+        .init_and_current()
+        .expect_err("there is no storage to install into");
+
+    assert!(error.to_string().contains("builder()"), "{error}");
+}

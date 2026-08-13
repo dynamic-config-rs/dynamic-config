@@ -100,10 +100,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // returned yesterday's answer instead would be a poor thing to build on.
 
     // `full` recovers on its own: the secret was on disk too.
-    match full.init() {
-        Ok(()) => {
-            let config = Full::current();
-
+    match full.init_and_current() {
+        Ok(config) => {
             println!(
                 "full:        recovered — host = {}, password = {}",
                 config.host,
@@ -119,20 +117,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `redacted` needs the secret from somewhere live. Without it the field is
     // simply missing, which is a clearer failure than a silently empty string.
-    match redacted.init() {
-        Ok(()) => println!(
-            "redacted:    recovered — host = {}",
-            Redacted::current().host
-        ),
+    match redacted.init_and_current() {
+        Ok(config) => println!("redacted:    recovered — host = {}", config.host),
         Err(error) => println!("redacted:    failed — {error}"),
     }
 
     std::env::set_var("REDACTED_DB_PASSWORD", "hunter2");
 
-    match redacted.init() {
-        Ok(()) => {
-            let config = Redacted::current();
-
+    match redacted.init_and_current() {
+        Ok(config) => {
             println!(
                 "redacted:    recovered with REDACTED_DB_PASSWORD set — host = {}, \
                  password = {}",
@@ -149,11 +142,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // `fingerprint` never recovers, and does not pretend to. What it adds is
     // the diagnosis attached to the failure.
-    match fingerprint.init() {
-        Ok(()) => println!(
+    match fingerprint.init_and_current() {
+        Ok(config) => println!(
             "fingerprint: recovered — host = {}, password = {}",
-            Fingerprint::current().host,
-            Fingerprint::current().password
+            config.host, config.password
         ),
         Err(error) => println!("fingerprint: failed, as designed — {error}"),
     }

@@ -48,6 +48,7 @@ server_config!(LoadTarget);
 server_config!(UninitTarget);
 server_config!(SubscribeTarget);
 server_config!(SnapshotTarget);
+server_config!(PairedTarget);
 
 #[tokio::test]
 async fn load_async_reads_the_same_configuration_as_load() {
@@ -157,4 +158,21 @@ fn the_tokio_feature_does_not_require_a_tokio_runtime() {
     };
 
     assert_eq!(outcome.unwrap(), 42);
+}
+
+/// The async pair: `init_async().await?` and the type named again on the
+/// next line, written once. What comes back is the snapshot that call
+/// installed — the same one `current()` serves until something reloads.
+#[tokio::test]
+async fn init_and_current_async_returns_the_snapshot_it_installed() {
+    let config = PairedTarget::server_builder()
+        .init_and_current_async()
+        .await
+        .expect("the fixture should deserialize");
+
+    assert_eq!(config.port, 8080);
+    assert!(
+        std::sync::Arc::ptr_eq(&config, &PairedTarget::current()),
+        "the same snapshot `current()` serves, not a second copy of it"
+    );
 }

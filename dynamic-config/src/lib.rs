@@ -54,6 +54,8 @@
 //! | `replace(Self)` | Atomically swap in a new snapshot. |
 //! | `on_reload(f)` | Run a callback on every later reload, for the life of the process. |
 //! | `on_reload_scoped(f) -> HookGuard` | The same, until the guard is dropped. |
+//! | `on_reload_with(f)` | The same, told *why*: a [`ReloadEvent`] carrying the [`ReloadReason`], the metadata, and `previous: None` on the first install. |
+//! | `status() -> ConfigStatus` | Which generation is live, when it landed, why, and how many reloads have failed since one worked. No I/O. |
 //! | `set_default(path, value)` | A fallback used only when nothing else supplies the key. |
 //! | `set_override(path, value)` | A value that wins over every file and variable. |
 //! | `clear_defaults()` / `clear_overrides()` | Drop them again. |
@@ -63,8 +65,9 @@
 //! `builder(key)` returns: `.file(..)`, `.discover(name, paths)`,
 //! `.env(prefix)`, `.strict_env()`, `.env_file(..)`, `.profile_env(..)`,
 //! `.cache(path, mode)`, `.validate(f)` — then `.load()`, `.init()`,
-//! `.watch(debounce)`, `.explain(path)`, `.check()`, and with `async`,
-//! `.load_async()` / `.init_async()`. A successful `init` also *remembers*
+//! `.init_and_current()` (the pair, in one call), `.watch(debounce)`,
+//! `.explain(path)`, `.check()`, and with `async`, `.load_async()` /
+//! `.init_async()` / `.init_and_current_async()`. A successful `init` also *remembers*
 //! the builder, so `source_of`, `is_set`, `snapshot`, `check`, `explain`,
 //! `prepare` and the remote reload on the type answer for the running
 //! configuration. The rest — remote stores, aliases, bindings, flags,
@@ -179,7 +182,8 @@
 //! | `age` | no | `decrypt`, plus the `age` module's implementation of it |
 //! | `figment` | no | foreign figment providers as sources, via `Source::provider` |
 //! | `dotenv` | no | `env_files = [".env"]`: `.env` files as the environment layer |
-//! | `tracing` | no | Watcher diagnostics via `tracing` instead of stderr |
+//! | `tracing` | no | Watcher diagnostics, and a record per reload and per remote fetch, via `tracing` instead of stderr |
+//! | `telemetry` | no | [`telemetry::Exposition`]: a `ConfigStatus` and a [`RemoteStatus`] as Prometheus text, with no dependency |
 //! | `full` | no | all of the above |
 //!
 //! Using a format, `watch` or `async` whose feature is disabled is a compile
@@ -204,6 +208,42 @@
 //!
 //! assert_eq!(db.host, "localhost");
 //! # }
+//! ```
+//!
+//! # Without a struct
+//!
+//! A plugin host, a feature-flag table or a tool inspecting somebody else's
+//! configuration cannot write the struct, so [`Value`] is one:
+//! [`Builder::values`] loads a section as data, and `Dynamic<Value>` installs
+//! it like any other configuration — same layers, same watcher, same
+//! last-known-good cache, same reload hooks.
+//!
+//! ```no_run
+//! # #[cfg(feature = "json")] {
+//! use dynamic_config::{Builder, Dynamic, Value};
+//!
+//! let config = Dynamic::new(Builder::values("db").file("config.json"));
+//! let values = config.init_and_current()?;
+//!
+//! assert_eq!(values.get("pool.max_size").and_then(Value::as_i64), Some(32));
+//! # }
+//! # Ok::<(), dynamic_config::Error>(())
+//! ```
+//!
+//! It costs what it looks like it costs: `current()` is still one atomic
+//! load, and the path is then a walk of the tree — a couple of times a field
+//! access, rather than the same thing. No feature flag, no extra dependency,
+//! and no schema either: types are checked at the read instead of at the
+//! load, `check()` reports that unknown keys were **not** checked, and
+//! secrets have to be named with [`Builder::secrets`] because there is no
+//! `#[config(secret)]` to derive them from. The book's *Schemaless
+//! Configuration* chapter has the measured numbers and the whole list.
+//!
+//! ```text
+//! current().port, on a struct   20 ns   0 allocations
+//! values.get("port")            27 ns   0 allocations
+//! values.get("pool.max_size")   32 ns   0 allocations
+//! values.get_as::<u16>(path)    37 ns   0 allocations
 //! ```
 
 #![forbid(unsafe_code)]
@@ -239,6 +279,7 @@ mod loader;
 mod log;
 mod redirects;
 mod registry;
+mod reload;
 mod remote;
 #[cfg(feature = "schema")]
 #[cfg_attr(docsrs, doc(cfg(feature = "schema")))]
@@ -246,6 +287,14 @@ pub mod schema;
 mod snapshot;
 mod source;
 pub(crate) mod sync;
+#[cfg(feature = "telemetry")]
+#[cfg_attr(docsrs, doc(cfg(feature = "telemetry")))]
+pub mod telemetry;
+// The same module with only its `tracing` half compiled, and private: the
+// reload events are emitted from inside this crate, so they need no public
+// surface to reach.
+#[cfg(all(feature = "tracing", not(feature = "telemetry")))]
+mod telemetry;
 mod units;
 mod value;
 mod write;
@@ -276,7 +325,7 @@ pub use builder::Builder;
 #[doc(hidden)]
 pub use builder::Configured;
 pub use cache::{CacheMode, Recovery};
-pub use cell::{ConfigCell, HookGuard};
+pub use cell::{ConfigCell, HookGuard, SnapshotMeta};
 pub use check::{check, Report, Resolved, UnknownKey};
 #[cfg(feature = "decrypt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "decrypt")))]
@@ -288,10 +337,11 @@ pub use explain::{Contribution, Explanation};
 pub use group::{Commit, ReloadGroup, Reloadable};
 pub use layer::Layer;
 pub use registry::Registry;
+pub use reload::{ConfigStatus, FailureStatus, ReloadEvent, ReloadReason};
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
-pub use remote::{Fetched, Remote, RemoteSink, RemoteSource, RemoteWatch, Watching};
+pub use remote::{Fetched, Remote, RemoteSink, RemoteSource, RemoteStatus, RemoteWatch, Watching};
 pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};
@@ -527,6 +577,61 @@ where
 // feature-gated `__*!` wall — live in `redirects`; the functions stay here
 // because they are reached by path, and a path names the module it lives in.
 // ---------------------------------------------------------------------------
+/// Not public API. The parsers a fuzz target needs and a caller does not.
+///
+/// Three of this crate's parsing surfaces are private because nothing outside
+/// it has any business calling them — and `fuzz/fuzz_targets/` is outside it.
+/// The choice is between publishing them (a stability promise nobody wants for
+/// a `.env` line splitter) and leaving the surfaces whose failure mode is a
+/// crash at startup or a path traversal covered only by proptest. This is the
+/// third way: reachable by path, absent from the book and from rustdoc, and
+/// carrying no more of a compatibility promise than [`__private`] does.
+///
+/// The public parse seam needs nothing here — [`Value::parse`] is fuzzable as
+/// it stands.
+#[doc(hidden)]
+pub mod __fuzz {
+    /// `.env` text into `KEY` → `value`, or the one-based line that stopped it.
+    ///
+    /// Reads no file: the fuzzer supplies the bytes a file would have held.
+    #[cfg(feature = "dotenv")]
+    pub fn dotenv_entries(text: &str) -> Result<std::collections::BTreeMap<String, String>, usize> {
+        crate::dotenv::parse(text)
+    }
+
+    /// A top-level key as the profile the loader files that section under.
+    ///
+    /// The 0.4 bug was here: an unprefixed mapping handed figment's reserved
+    /// `global` and `default` profiles to any document with an innocently named
+    /// table.
+    #[must_use]
+    pub fn section_profile(key: &str) -> String {
+        crate::loader::section_profile(key)
+    }
+
+    /// Whether a profile can only ever name a sibling of the file it applies to.
+    ///
+    /// The guard; [`profile_variant`] is what it guards. A profile arrives from
+    /// an environment variable and is interpolated into a file name, so the
+    /// property worth fuzzing is the pair: anything this accepts must leave
+    /// [`profile_variant`] naming a path in the same directory it started in.
+    #[must_use]
+    pub fn profile_is_safe(profile: &str) -> bool {
+        crate::loader::sections::profile_is_safe(profile)
+    }
+
+    /// `config.toml` + `production` → `config.production.toml`.
+    ///
+    /// Strings rather than paths on both sides, so a target can hand over
+    /// generated bytes without building an `OsString` first. `None` where the
+    /// name has no extension to put the profile under.
+    #[must_use]
+    pub fn profile_variant(path: &str, profile: &str) -> Option<String> {
+        crate::loader::sections::profile_variant(std::path::Path::new(path), profile)
+            .map(|variant| variant.display().to_string())
+    }
+}
+
 /// Not public API. Lets the generated code name `serde` without the caller
 /// having to depend on it under that exact name.
 #[doc(hidden)]

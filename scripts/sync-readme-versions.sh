@@ -40,7 +40,10 @@ pattern = re.compile(
 # README dropping out of the sync a loud failure instead of a shrug. The
 # CLI's README is exempt by design: a binary is installed, not depended on.
 # A new companion crate joins this list, or the release fails saying so.
-expected = 10
+# 0.6 added two: `dynamic-config-git`, and `dynamic-config-server`, whose
+# README carries a dependency snippet because its router is mountable in a
+# service that already runs axum.
+expected = 12
 
 matched = 0
 readmes = [pathlib.Path("README.md"), *pathlib.Path(".").glob("dynamic-config-*/README.md")]

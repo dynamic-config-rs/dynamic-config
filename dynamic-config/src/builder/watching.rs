@@ -87,11 +87,20 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
 
         let reloader = self.clone();
 
-        crate::watch::spawn_with(key, name, watched, debounce, mode, move || {
+        crate::watch::spawn_with(key, name, watched, debounce, mode, move |trigger| {
             // `load` already validates, so a refused configuration keeps
-            // the previous snapshot exactly like a parse failure.
-            let value = reloader.load()?;
-            install.install(value);
+            // the previous snapshot exactly like a parse failure — and the
+            // cell is told, so `status()` can count the failures a watcher
+            // absorbs. Nobody else is listening on this thread.
+            let value = reloader.load().map_err(|error| {
+                install.record_failure(&error);
+                error
+            })?;
+
+            install.install(
+                value,
+                crate::ReloadReason::FileChanged(trigger.to_path_buf()),
+            );
             reloader.write_cache();
 
             Ok(None)

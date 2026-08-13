@@ -14,7 +14,10 @@ The base install has **no dependencies**: the engine is compiled into the
 wheel, and a `dataclasses.dataclass` is a schema here. Pydantic is an
 extra because it is a choice — see
 [What a schema may be](python/types.md#what-a-schema-may-be) for what
-each kind validates.
+each kind validates, including `Values`, which is
+[no schema at all](python/types.md#values-a-configuration-with-no-schema):
+a configuration read by dotted path, for the keys a program learns at run
+time.
 
 ```python
 from dataclasses import dataclass
@@ -120,6 +123,48 @@ compatibility layer — anything. There is a blocking `changed(timeout=…)`
 for threads and an awaitable `changed_async(timeout=…)` for a single
 shot. [Async & asyncio](python/async.md) is the whole story: which calls
 block, which thread each piece runs on, and how cancellation behaves.
+
+## Testing
+
+The most common shape this library is used in is a test that wants one
+value pinned:
+
+```python
+with config.overrides(pool_size=1, host="localhost"):
+    assert under_test(config) == "localhost, one connection"
+```
+
+Reloaded on entry, and on exit the *previous* override layer is restored
+and reloaded — restored rather than emptied, so a nested `with` composes
+and a pin made before the block still stands after it. The restore runs
+on an exception too, which is the point: the long hand is
+`set_override`, `reload`, `clear_overrides`, `reload`, and it is the last
+two that get forgotten, after which one test's pin is the next test's
+mystery. Dotted paths are spelled with `__` — `pool__max_size=1` — the
+same nesting rule the environment layer uses.
+
+The other half of an isolated configuration test is the filesystem and
+the environment, and the package ships those as a pytest plugin. It
+loads through a `pytest11` entry point, so installing the package is the
+whole setup:
+
+```python
+def test_the_service_reads_its_file(dynamic_config_workspace):
+    (dynamic_config_workspace / "app.toml").write_text('[db]\nport = 5432\n')
+    config = DynamicConfig(Database, key="db").file("app.toml")
+
+    assert config.init_and_current().port == 5432
+```
+
+`dynamic_config_workspace` is a temporary directory that is also the
+working directory, so a relative `file("app.toml")` finds this test's
+copy; `dynamic_config_env("APP_")` unsets the variables a developer's
+shell would otherwise contribute. Neither is autouse, and the module
+imports pytest and the standard library only — it is loaded in every
+pytest run of every environment this package is installed in, so a
+dependency there would be a dependency for all of them.
+[The reference](python/reference.md#testing) has both fixtures, and the
+`conftest.py` that makes the environment one automatic.
 
 ## Secrets are derived, not re-declared
 
@@ -257,6 +302,33 @@ In Python a runtime-configured decorator is idiomatic where Rust's
 argument-free attribute was not. The engine-level rule holds in both:
 declaration is separate from the configurable builder underneath.
 
+### Inherit `Configured` if you type-check
+
+The decorator attaches its six members at runtime, and **no type checker
+can see that**: Python has no way to spell "this class, plus these
+members", so `Database.current()` is an `attr-defined` error under
+`mypy --strict` and nothing at all to an editor's completion.
+
+```python
+from dynamic_config import Configured, dynamic_config
+
+@dynamic_config(key="db", files=["config.toml"])
+class Database(Configured, BaseModel):
+    host: str = "localhost"
+
+Database.current().host      # `str`, and it completes
+```
+
+`Configured` declares the members where a checker sees them; the
+decorator fills them in. It adds no fields, so `model_fields` is
+unchanged, and the runtime behaviour is identical either way.
+
+The decorator on its own still works and is not deprecated — but it
+cannot be made visible to a checker, and `tests/typing/usage.py` in the
+repository is where that promise is kept: `mypy --strict` runs over a
+file written the way a caller writes one, because types that regress for
+a user are invisible to a test suite.
+
 ## Typing
 
 `DynamicConfig` is `Generic[M]`, so `current()` comes back as *your*
@@ -307,12 +379,15 @@ sets. [What a schema may be](python/types.md#what-a-schema-may-be) and
 
 | Not exposed | Why |
 |---|---|
-| The [remote stores](remote-stores.md) | their clients — gRPC, the AWS SDK, three HTTP stacks — would ride into every wheel |
-| `RemoteSource` implemented in Python | a Python object on the fetch path deserves its own design pass |
+| The [store crates](remote-stores.md) themselves | their clients — gRPC, the AWS SDK, three HTTP stacks — would ride into every wheel |
 | Encrypted files | decryption needs a `Decryptor`, which is a Rust trait; decrypt with the [CLI](cli.md) and point this at the result |
 | `save`, JSON Schema | Pydantic already does both, better |
 
-The first two are on the roadmap; the last two are not.
+The *door* those crates go through is exposed: `RemoteSource` is
+implementable in Python, so a store with no Rust client is a class with
+`fetch()` and `describe()` — see [Remote Stores in
+Python](python/remote-stores.md). The first row is on the roadmap as an
+opt-in wheel; the last two are not.
 [Limitations](python/limitations.md) has the full list with the reasoning
 — including the constraints that are not omissions at all: sources fixed
 after the first load, one watcher per configuration, and why
@@ -320,12 +395,13 @@ after the first load, one watcher per configuration, and why
 
 ## Examples
 
-Sixteen runnable scripts ship with the package —
+Eighteen runnable scripts ship with the package —
 [`examples/`](https://github.com/ctolon/dynamic-config/tree/main/dynamic-config-python/examples),
 from the twenty-line quick start to multi-tenant configuration, the
 diagnostics tour, several configurations on one event loop (as values
 and as decorated classes), every callback shape, an existing
-`pydantic-settings` class, and the three framework integrations. None needs a server or a setup step,
+`pydantic-settings` class, a remote store written in Python, and the
+three framework integrations. None needs a server or a setup step,
 and all of them run in CI, because an example nobody runs is
 documentation that has already started rotting — and the framework ones
 are driven again by the integration suite, which asserts what they

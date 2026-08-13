@@ -127,15 +127,12 @@ impl Snapshot {
     pub fn extract<T: DeserializeOwned>(&self) -> Result<T, Error> {
         Value::from(self.values.clone())
             .deserialize()
-            .map_err(|error: figment::Error| {
-                let mut translated = Error::new(ErrorKind::Type, error.to_string());
-
-                for segment in error.path.iter().rev() {
-                    translated = translated.prepend_key(segment);
-                }
-
-                translated
-            })
+            // Through the loader's translation, which strips the offending
+            // value out of the backend's message. This used to render
+            // `error.to_string()`, and figment renders a type mismatch as
+            // ``found string "hunter2"`` — the leak the rest of the crate is
+            // built to prevent, on the door that skips the loader.
+            .map_err(|error: figment::Error| crate::loader::translate(&error))
     }
 
     /// Every key that differs between `self` and `other`, in path order.
@@ -158,17 +155,28 @@ impl Snapshot {
     /// section, a user-defined table. Everything else should go through a
     /// struct, where a typo is a compile error rather than a runtime one.
     ///
+    /// **This deserializes on every call**, which a `current()` on a struct
+    /// does not — it is a diagnostic-grade read, not a request-path one. A
+    /// schemaless configuration that wants the cheap door holds the resolved
+    /// tree instead and walks it: `Dynamic<Value>` plus
+    /// [`Value::get`](crate::Value::get). The book's schemaless chapter
+    /// prints both numbers.
+    ///
     /// # Errors
     ///
-    /// If nothing supplies `path`, or the value cannot become `T`.
+    /// If nothing supplies `path`, or the value cannot become `T`. The
+    /// message names the path and the kind of thing that was there, never
+    /// the value.
     pub fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T, Error> {
         let value = self.at(path).ok_or_else(|| {
             Error::new(ErrorKind::Missing, "no value at this path").prepend_key(path)
         })?;
 
-        value.deserialize().map_err(|error: figment::Error| {
-            Error::new(ErrorKind::Type, error.to_string()).prepend_key(path)
-        })
+        // See `extract`: the translation is what keeps a mistyped secret out
+        // of the message.
+        value
+            .deserialize()
+            .map_err(|error: figment::Error| crate::loader::translate(&error).prepend_key(path))
     }
 
     /// This snapshot minus one top-level key — how the cache strips its own
@@ -373,11 +381,19 @@ fn compare_values(
     }
 }
 
-/// figment values carry a provenance tag that takes part in `PartialEq`, so two
-/// identical values from different providers compare unequal. Rendering strips
-/// the tag, which is the comparison anyone actually means here.
+/// Compared through this crate's own untagged [`Value`](crate::Value) — the
+/// tree [`Snapshot::to_value`] already hands out — rather than through the
+/// figment value in hand.
+///
+/// figment's value carries a provenance tag and a numeric *width*, neither of
+/// which is part of the configuration: an integer that arrived as `u8` from
+/// one provider and `u64` from another is the same setting. This used to
+/// compare `Debug` renderings, which stripped the tag but kept the width, so
+/// a reload could report every such key as changed — and which made
+/// correctness rest on an upstream crate's rendering, where a future addition
+/// to it would be silent in both directions.
 fn values_equal(before: &Value, after: &Value) -> bool {
-    format!("{before:?}") == format!("{after:?}")
+    crate::value::from_figment(before) == crate::value::from_figment(after)
 }
 
 fn change(path: &[String], kind: ChangeKind) -> Change {
@@ -408,6 +424,55 @@ mod tests {
         let two = snapshot(&[("host", "a".into()), ("port", 1u16.into())]);
 
         assert!(one.diff(&two).is_empty());
+    }
+
+    /// A value as a provider hands it over — figment records where it came
+    /// from in a tag, and two providers tag the same value differently.
+    fn from_provider(key: &str, value: impl serde::Serialize) -> Value {
+        figment::Figment::from((key, value))
+            .find_value(key)
+            .expect("the provider supplies exactly this key")
+    }
+
+    #[test]
+    fn the_same_value_from_two_providers_is_not_a_change() {
+        let (left, right) = (from_provider("host", "a"), from_provider("host", "a"));
+
+        assert_ne!(
+            left.tag(),
+            right.tag(),
+            "the point of this test is two differently tagged values"
+        );
+
+        assert!(snapshot(&[("host", left)])
+            .diff(&snapshot(&[("host", right)]))
+            .is_empty());
+    }
+
+    /// The width an integer arrived at is the provider's business, not the
+    /// configuration's: `5432` from a `u8`-shaped default and `5432` from a
+    /// JSON file are one setting. Comparing rendered figment values called
+    /// that a change on every reload.
+    #[test]
+    fn the_same_number_at_two_widths_is_not_a_change() {
+        let narrow = snapshot(&[("port", Value::from(1u8))]);
+        let wide = snapshot(&[("port", Value::from(1u64))]);
+
+        assert!(narrow.diff(&wide).is_empty());
+    }
+
+    /// And the line that stays drawn: a whole number is not the float that
+    /// prints the same.
+    #[test]
+    fn an_integer_and_a_float_are_different_values() {
+        let integer = snapshot(&[("ratio", Value::from(1u8))]);
+        let float = snapshot(&[("ratio", Value::from(1.0f64))]);
+
+        let changes = integer.diff(&float);
+
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].path, "ratio");
+        assert_eq!(changes[0].kind, ChangeKind::Modified);
     }
 
     #[test]

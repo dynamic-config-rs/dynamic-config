@@ -4,7 +4,7 @@
 //! else; everything here is the filter, including the Kubernetes
 //! ConfigMap `..data` convention that makes a remount visible at all.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use notify::{Event, EventKind};
 
@@ -12,17 +12,34 @@ use crate::discovery;
 
 use super::Watched;
 
-/// Whether one event is about one of our files.
+/// Which of an event's paths is one of ours, if any.
 ///
 /// The whole directory is watched, so most events are about something else.
 /// Paths are compared in both directions because event paths are absolute while
 /// configured paths are usually relative to the working directory; a rare false
 /// positive costs one redundant reload, which is harmless.
-pub(super) fn is_relevant(event: &Event, watched: &Watched) -> bool {
-    matches!(
+///
+/// The path is returned rather than a bare `yes`, because the reload it
+/// causes wants to say *which file* — [`ReloadReason::FileChanged`] is that
+/// answer, and this is the only place it is known.
+///
+/// [`ReloadReason::FileChanged`]: crate::ReloadReason::FileChanged
+pub(super) fn relevant_path<'event>(
+    event: &'event Event,
+    watched: &Watched,
+) -> Option<&'event Path> {
+    if !matches!(
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    ) && event.paths.iter().any(|changed| is_ours(changed, watched))
+    ) {
+        return None;
+    }
+
+    event
+        .paths
+        .iter()
+        .map(PathBuf::as_path)
+        .find(|changed| is_ours(changed, watched))
 }
 
 fn is_ours(changed: &Path, watched: &Watched) -> bool {

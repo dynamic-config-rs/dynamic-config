@@ -5,7 +5,7 @@ no runtime.
 
 ```toml
 [dependencies]
-dynamic-config-embedded = { version = "0.5.0", default-features = false, features = ["json"] }
+dynamic-config-embedded = { version = "0.6.0", default-features = false, features = ["json"] }
 ```
 
 ```rust
@@ -76,10 +76,51 @@ scalars — which is what a device's configuration is — the clone is a memcpy.
 ## Awaiting a change, with no allocator
 
 `changes()` needs somewhere to keep a waker, and a `Vec<Waker>` needs an
-allocator. So there are four fixed slots, chosen for the shape of the problem: a
-device has a handful of tasks that care about configuration, not thousands. A
-fifth waiter replaces the oldest rather than being dropped — a task that is
-never woken is a hang, and one woken early merely polls again.
+allocator. So there are four fixed slots — `ConfigCell<Settings, 8>` for eight —
+chosen for the shape of the problem: a device has a handful of tasks that care
+about configuration, not thousands. A fifth waiter replaces the occupant of a
+slot rather than being dropped: a task that is never woken is a hang, and one
+woken early merely polls again.
+
+**Past the budget the device stops idling.** The evicted task wakes, polls, sees
+no change and re-registers, displacing somebody else — so five tasks on a
+four-slot cell trade wake-ups for as long as both are waiting, with no
+configuration change between them. No wake-up is lost; the cost is entirely
+power, and it is measured rather than feared
+(`one_task_past_the_budget_costs_the_device_its_idle_loop`).
+
+`waiter_evictions()` is how a firmware finds out, because the symptom otherwise
+is a battery that empties early:
+
+```rust
+// On a bench, after the firmware has run everything it does.
+assert_eq!(SETTINGS.waiter_evictions(), 0, "raise WAITERS");
+```
+
+There is no queue here and no plan for one. An intrusive list would lift the
+cap without an allocator, at the price of `unsafe` in a crate that forbids it,
+self-referential futures that must unlink on drop, and — measured — *more* RAM
+per waiting task than a slot costs: a list node is a `Waker` plus its links,
+where a slot is the `Waker` alone. A device knows its tasks at compile time, so
+the compile-time budget is not a limitation to be worked around; it is the
+right model, and the number belongs to the firmware.
+
+The budget is not free either, and the sizes are small enough to state: on
+`thumbv7em-none-eabihf` a `ConfigCell<Settings, 4>` is 56 bytes of RAM and a
+`ConfigCell<Settings, 8>` is 88 — eight bytes per slot, for identical code
+size. That is why the default is not simply larger.
+
+## Interrupts
+
+Every read and write of the shared state happens inside a critical section, so
+storing a configuration, reading one and registering a waker are all sound from
+an interrupt handler. Two rules make that true, and the tests hold them: no
+borrow outlives its critical section, and no waker is ever woken while one is
+held — a `wake` belongs to the executor and may store a configuration or poll
+the task it just woke before it returns.
+
+The section is a scan of `WAITERS` slots and at most one `Waker` clone. Nothing
+on that path parses, allocates or waits.
 
 ## Features
 
