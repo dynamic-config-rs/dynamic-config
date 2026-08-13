@@ -98,7 +98,50 @@ jobs:
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
         with:
           tool: cargo-semver-checks
-      - run: cargo semver-checks --workspace
+      # A crate that has never been released has no baseline to compare
+      # against, and `cargo semver-checks` treats that as an error rather
+      # than as nothing to do — so one unpublished member fails the whole
+      # workspace run, which is exactly what happens on the release that
+      # introduces a crate. 0.6 introduced three.
+      #
+      # The exclusions are *derived* rather than written down: a crate is
+      # skipped only while crates.io has never heard of it, so the release
+      # that first publishes it excludes it once and every release after
+      # that checks it like any other. A list in this file would have to be
+      # remembered, and would go stale silently — which is the failure mode
+      # this whole job exists to prevent.
+      #
+      # `publish != []` drops the members that are `publish = false`; the
+      # Python extension crates go to PyPI and have no crates.io name at
+      # all. Anything but 200 or 404 fails the step: a rate limit or an
+      # outage must not read as "unpublished, skip it".
+      - name: the semver promise, against what is actually published
+        run: |
+          set -euo pipefail
+
+          agent='dynamic-config release (github.com/ctolon/dynamic-config)'
+          excludes=()
+
+          for crate in $(cargo metadata --no-deps --format-version 1 \
+              | jq -r '.packages[] | select(.publish != []) | .name'); do
+            code=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header "User-Agent: ${agent}" \
+              "https://crates.io/api/v1/crates/${crate}")
+
+            case "${code}" in
+              200) ;;
+              404)
+                echo "::notice::${crate} is not on crates.io yet — first release, so there is no baseline to compare against"
+                excludes+=(--exclude "${crate}")
+                ;;
+              *)
+                echo "::error::crates.io answered ${code} for ${crate}; refusing to guess whether it is published"
+                exit 1
+                ;;
+            esac
+          done
+
+          cargo semver-checks --workspace ${excludes[@]+"${excludes[@]}"}
 
   publish:
     name: publish to crates.io
@@ -203,12 +246,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `manylinux` is the base wheel's image; `manylinux_remote` is the
+          # remote one's, and they differ for a measured reason. The base
+          # wheel compiles no C at all, so the default image is fine
+          # anywhere. The remote wheel carries an AWS SDK and therefore
+          # `aws-lc-sys`, which builds AWS-LC from source — and on the
+          # aarch64 row `manylinux: auto` selects the *manylinux2014* cross
+          # image, whose toolchain is too old to compile it: the 0.6
+          # release's first attempt failed there and nowhere else, with the
+          # x86_64 row (which `auto` resolves to a 2_28 image) building the
+          # same code cleanly. So the remote wheel asks for 2_28 on both
+          # Linux rows, which is glibc 2.28 — RHEL 8, Ubuntu 18.10, Debian
+          # 10 — a floor a wheel with an AWS SDK in it can carry.
           - os: ubuntu-latest
             target: x86_64
             manylinux: auto
+            manylinux_remote: "2_28"
           - os: ubuntu-latest
             target: aarch64
             manylinux: auto
+            manylinux_remote: "2_28"
           - os: macos-latest
             target: universal2-apple-darwin
           - os: windows-latest
@@ -263,7 +320,7 @@ jobs:
           command: build
           args: --release --out dist --manifest-path dynamic-config-python-remote/Cargo.toml
           target: ${{ matrix.target }}
-          manylinux: ${{ matrix.manylinux }}
+          manylinux: ${{ matrix.manylinux_remote }}
           # The container is whichever manylinux image maturin selects, and
           # they are not one distribution: the x86_64 image is RPM-based and
           # the cross image for aarch64 is Debian-based. Asking the package

@@ -126,12 +126,32 @@ safe to redo; nothing before step 5 leaves the laptop.
    re-synced onto `main`.
 7. **`./scripts/watch-release.sh`.** Follows the run the merge set off:
    verification (including `cargo semver-checks` against the published
-   baseline), publishing in the three waves, then the tag and the GitHub
+   baseline — see [A crate's first release](#a-crates-first-release)),
+   publishing in the three waves, then the tag and the GitHub
    release, minted by CI at the merge commit. The same push to `main`
    deploys the book to Pages.
 8. **Afterwards.** Check docs.rs built each crate (its *own* README,
    feature badges present), and open issues for whatever the release
    deferred.
+
+## A crate's first release
+
+A crate that has never been on crates.io has no baseline to compare
+against, and `cargo semver-checks` calls that an error rather than
+nothing to do — so one unpublished member fails the whole workspace run.
+0.6 introduced three (`dynamic-config-store-core`, `-git`, `-server`) and
+that is exactly what happened on its first release attempt.
+
+The verify step derives the exclusions instead of carrying a list: it
+asks crates.io whether each publishable member exists, skips the ones it
+has never heard of, and fails on any answer that is neither 200 nor 404 —
+a rate limit must not read as "unpublished". A crate is therefore skipped
+on the release that introduces it and checked on every release after,
+with nobody having to remember to remove anything.
+
+Nothing else about a first release is special: `cargo publish` claims the
+name, and the publish waves already list the new crates in dependency
+order.
 
 ## Releasing
 
