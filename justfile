@@ -340,10 +340,18 @@ examples:
 # (`cargo install mdbook`).
 book:
     mdbook build book
-    # The binding's own book, into the first one's output — the layout CI
-    # publishes: `/dynamic-config/` and `/dynamic-config/python/`.
-    mdbook build book-python --dest-dir book/book/python
-    mdbook build book-node --dest-dir book/book/node
+    # The bindings' own books, into the first one's output — the layout CI
+    # publishes: `/dynamic-config/`, `/dynamic-config/python/` and
+    # `/dynamic-config/node/`.
+    #
+    # Absolute, because mdbook 0.4 reads a relative `--dest-dir` as relative
+    # to the book being built and 0.5 as relative to here; the two disagree
+    # by a whole directory, and the artefact CI publishes is this one.
+    mdbook build book-python --dest-dir "{{ justfile_directory() }}/book/book/python"
+    mdbook build book-node --dest-dir "{{ justfile_directory() }}/book/book/node"
+    test -f book/book/index.html
+    test -f book/book/python/index.html
+    test -f book/book/node/index.html
 
 # Regenerate the compile-fail expectations after an intentional change.
 bless:

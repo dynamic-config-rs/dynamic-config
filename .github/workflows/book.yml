@@ -45,15 +45,38 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: mdbook build book
-      # The Python binding's book, published *inside* the first one's output
-      # rather than beside it: one Pages deployment, two directories —
-      # `/dynamic-config/` and `/dynamic-config/python/`. A reader who does
-      # need to cross over is one link away and no DNS is involved.
+      # The bindings' books, published *inside* the first one's output rather
+      # than beside it: one Pages deployment, three directories —
+      # `/dynamic-config/`, `/dynamic-config/python/` and
+      # `/dynamic-config/node/`. A reader who does need to cross over is one
+      # link away and no DNS is involved.
       #
       # Built second on purpose: `mdbook build book` empties `book/book`
       # first, so the other order would publish an empty `python/`.
-      - run: mdbook build book-python --dest-dir book/book/python
-      - run: mdbook build book-node --dest-dir book/book/node
+      #
+      # **Absolute, and that is not a style choice.** mdbook 0.4 resolves a
+      # relative `--dest-dir` against the *book's* root, so
+      # `--dest-dir book/book/python` writes `book-python/book/book/python`
+      # and the artefact below never sees it; 0.5 resolves it against the
+      # working directory and writes what you meant. An absolute path is the
+      # same thing to both.
+      - run: mdbook build book-python --dest-dir "$GITHUB_WORKSPACE/book/book/python"
+      - run: mdbook build book-node --dest-dir "$GITHUB_WORKSPACE/book/book/node"
+
+      # What is about to be published, checked before it is: the failure this
+      # catches published a site whose `/python/` and `/node/` were 404 while
+      # every other job stayed green, because a missing directory is not an
+      # error to anything upstream of here.
+      - name: all three books are in the artefact
+        run: |
+          set -euo pipefail
+
+          for page in index.html python/index.html node/index.html; do
+            if [ ! -f "book/book/${page}" ]; then
+              echo "::error::book/book/${page} is missing; the deploy would 404"
+              exit 1
+            fi
+          done
 
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:

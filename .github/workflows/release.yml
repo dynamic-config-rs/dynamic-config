@@ -712,7 +712,14 @@ jobs:
             fi
 
             echo "── ${name}@${version}"
-            npm publish "${directory}" --provenance --access public
+
+            # `./` is not decoration: `npm publish dynamic-config-node` is a
+            # *package spec*, and npm goes to the registry looking for a
+            # package by that name — which on a first release is a 404 that
+            # reads as if the wrapper were missing rather than as a path it
+            # never treated as one. The platform packages published fine
+            # only because their argument has a slash in it.
+            npm publish "./${directory}" --provenance --access public
           }
 
           for package in dynamic-config-node/npm/*/ dynamic-config-node-remote/npm/*/; do
