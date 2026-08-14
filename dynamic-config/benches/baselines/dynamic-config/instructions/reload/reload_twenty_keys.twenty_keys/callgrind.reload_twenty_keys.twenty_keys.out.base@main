@@ -1,0 +1,3679 @@
+# callgrind format
+version: 1
+creator: callgrind-3.22.0
+pid: 10746
+cmd:  /home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5 --iai-run reload 0 0 instructions::reload::reload_twenty_keys
+part: 1
+thread: 1
+
+
+desc: I1 cache: 32768 B, 64 B, 8-way associative
+desc: D1 cache: 32768 B, 64 B, 8-way associative
+desc: LL cache: 8388608 B, 64 B, 16-way associative
+
+desc: Timerange: Basic block 0 - 146456
+desc: Trigger: Program termination
+
+positions: line
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+summary: 199532 52930 42221 1804 128 310 55 0 112
+
+
+ob=/usr/lib/x86_64-linux-gnu/libc.so.6
+fl=./time/../sysdeps/unix/sysv/linux/clock_gettime.c
+fn=clock_gettime@@GLIBC_2.17
+30 1 0 0 1
+38 2 2 0 0 2
+40 2
+68 2
+69 2 0 0 1
+44 2 1
+
+fl=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+fn=__memcmp_avx2_movbe
+73 378 0 0 1
+80 378
+81 378
+156 375 0 0 1
+166 375 375
+167 375 375
+168 375
+171 750 375
+401 378 0 0 2
+402 378
+407 378
+408 378
+409 378
+410 378
+411 378
+414 374 374
+415 374 374
+416 374
+417 374
+420 374
+421 374
+429 4 0 0 1
+430 4
+432 3
+433 3
+435 2
+436 2
+438 2 2
+439 2 2
+440 2
+441 2
+442 2 2
+443 2 2
+444 2
+445 2
+446 2
+448 2
+463 3
+464 3
+466 3 3
+476 1 1 0 1
+477 1 1
+478 1
+479 1
+512 1 1 0 1 0 0 1
+513 1 1
+514 1
+515 1
+516 1
+
+fl=./io/../sysdeps/unix/sysv/linux/statx.c
+fn=statx
+27 4 0 0 1
+28 10
+32 4
+38 4 2
+
+fl=./io/../sysdeps/unix/sysv/linux/open64.c
+fn=open
+30 2 0 1 1
+33 1
+30 10 1 4
+33 6 0 0 1
+41 9 1
+43 8 6 0 1
+
+fl=./io/../sysdeps/unix/sysv/linux/close.c
+fn=close
+26 1 0 0 1
+27 6 1
+28 1 1
+
+fl=./io/../sysdeps/unix/sysv/linux/read.c
+fn=read
+25 2 0 0 1
+26 12 2
+27 2 2
+
+fl=./csu/../csu/libc-start.c
+fn=__libc_start_main@@GLIBC_2.34
+cfi=./csu/../sysdeps/nptl/libc_start_call_main.h
+cfn=(below main)
+calls=1 29 
+360 199532 52930 42221 1804 128 310 55 0 112
+
+fl=./malloc/./malloc/malloc.c
+fn=_int_free
+4495 1722 0 984 1
+4499 738 246
+4505 984
+4506 492
+4510 1230
+4518 984 492
+4517 492
+4518 492 246
+4547 242 242 0 1
+4527 242 242
+4521 242
+4527 484 242
+4547 968 242
+1792 56 56
+4561 112
+4572 208 52 0 1 2
+4574 156 52
+1992 52 52
+4593 52
+1992 104
+4595 52 0 52
+4596 52
+4600 104
+4602 52 52
+4600 52 52
+4602 52
+4606 104
+4608 156 0 52
+4609 52 0 52
+4628 206
+4658 1452 1210 0 1
+4637 8 4
+4640 8 4
+4658 4
+4646 4
+4658 16 16
+4646 4
+cfn=_int_free_merge_chunk
+calls=7 4665 
+4646 432 132 83 20 1
+3163 190 190 0 1
+3167 190
+3163 190 0 190
+3165 760 190 190 1 1
+3166 190 0 190
+3167 190 0 190
+4550 190
+
+fn=alloc_perturb
+1985 57 19 0 2
+1987 19 19
+
+fn=_int_realloc
+4914 56 0 42 6
+4925 28 7
+4926 35 7
+4927 28
+4933 14 0 0 1
+4935 14
+4936 21 7
+4938 28
+4941 14
+4955 2
+5008 4
+4955 4
+5012 2 0 0 1
+4955 2
+5012 4
+5010 4
+5029 2
+5030 63 49
+4951 12 6 0 1
+4963 8 4
+4975 12 0 6
+cfn=_int_malloc
+calls=7 3846 
+4975 4216 904 651 25 12 5 7 0 4
+4975 3
+4976 6
+4985 3 3
+4979 3
+4980 3 3
+4985 6 0 0 1
+4993 3 3
+4992 3
+fi=./malloc/../string/bits/string_fortified.h
+29 3
+fe=./malloc/./malloc/malloc.c
+4993 18
+fi=./malloc/../string/bits/string_fortified.h
+29 3 0 3
+cob=???
+cfi=???
+cfn=0x00000000048a16b0
+calls=7 0 
+29 254 73 62 2 1 20 0 0 6
+fe=./malloc/./malloc/malloc.c
+4997 12 0 3
+cfn=_int_free
+calls=7 4495 
+4997 281 82 45 1
+4999 3
+5021 2 0 0 2
+5017 2
+5020 2
+5025 2
+5021 2
+5020 2 0 2
+5021 2 0 2 0 0 2 0 0 2
+5024 2 0 2
+5025 4 0 2
+cfn=_int_free
+calls=3 4495 
+5025 191 53 32 9 1
+5025 2
+4965 2 0 0 1 0 0 1
+4964 4
+4969 3 0 2
+cfn=unlink_chunk.isra.0
+calls=1 1608 
+4969 24 10 3 3
+5013 2 1
+4965 2
+4952 2 0 0 2
+4953 2
+4951 4
+4955 8 0 0 1
+4957 2
+4955 2
+4957 2
+4955 4
+4956 2
+4955 4 0 2
+4959 2
+4956 2 0 2
+4957 2 0 2 0 0 2 0 0 2
+4959 2
+
+fn=realloc
+3407 88 0 48 3
+3413 16 8 0 2
+3417 16
+3424 16
+5241 8 8
+3433 8
+5242 24 0 0 3
+5241 16
+5243 16 8
+3489 1
+3538 72 56
+5244 8
+3441 16 0 0 3
+3443 2
+3444 4
+3456 21 14
+fi=./malloc/./malloc/arena.c
+153 21
+fe=./malloc/./malloc/malloc.c
+3464 28
+3465 14 0 0 2
+1326 14
+1345 42
+3475 14
+3506 14 7
+3508 42 0 14 2
+cfn=_int_realloc
+calls=15 4914 
+3508 5467 1212 863 56 14 29 8 0 14
+3508 7
+3509 35 7 0 3
+fi=./malloc/./malloc/arena.c
+153 28 7
+fe=./malloc/./malloc/malloc.c
+3509 14 0 0 5
+
+fn=malloc
+3294 1864 0 932 0 0 1
+3301 466 233
+1326 466
+1345 1110
+3311 356
+3313 932 466
+3316 466 233
+3326 74 37 0 1
+3354 222 185 0 2
+3318 696 232
+3178 392 196 0 0 1
+3182 392
+3186 196
+3190 196
+3186 588 196 196 0 10
+3190 196 0 196
+3191 196 0 196
+3354 1176 980
+3328 148 0 37
+cfn=_int_malloc
+calls=135 3846 
+3328 6438 1285 882 54 8 11 10 0 3
+3329 185 37
+fi=./malloc/./malloc/arena.c
+153 74
+fe=./malloc/./malloc/malloc.c
+
+fn=_int_free_merge_chunk
+4665 20 0 16 3
+4666 4
+4665 12 0 8 2
+4670 24 4
+4673 8 4
+4678 12 4
+4681 8
+4682 8 0 0 1
+4683 8 4
+1992 12 4
+4689 8 4
+4714 8 4 0 2
+4720 6 3
+4724 1 0 1
+4733 1 1
+4732 1
+4733 3
+4734 2 1
+4733 2 2
+4732 2
+4733 6
+4734 4 2
+4736 3 0 3 2
+4738 6
+4743 3 0 3
+4744 3 0 3
+4746 9 0 3
+4747 3 0 3
+4702 3
+4701 6
+4702 18 18
+4701 3
+cfn=_int_free_maybe_consolidate
+calls=5 4770 
+4701 72 30 21 4
+4702 1
+4701 2
+4702 6 6
+4701 1
+cfn=_int_free_maybe_consolidate
+calls=2 4770 
+4701 36 14 7 2 1
+4740 9 0 3 1
+4756 1
+4757 3 0 1
+4758 2 0 1
+4721 2 0 0 1
+4722 2
+4721 2 0 2
+cfn=unlink_chunk.isra.0
+calls=2 1608 
+4721 54 23 8
+4722 2
+4675 12 4 0 2
+4673 8
+
+fn=_int_free_maybe_consolidate
+4770 44 4 28 2
+4776 8 0 0 2
+4798 44 36
+4778 4 1
+4781 3 0 0 1
+4784 5 3 0 1 1
+
+fn=_int_malloc
+3846 440 40 280 1 0 1
+1326 80
+1345 224 0 0 1
+3887 48
+1794 24 24
+3914 48
+3979 38
+3916 76
+3919 19 19 0 2
+3921 38
+3923 2
+3917 1
+3926 2 1
+3927 5 1 1
+3932 2 1
+3933 2 0 0 1 0 0 1
+3940 1 1
+3939 2
+3940 5 2
+3945 2 2
+3165 1 0 0 1 0 0 1
+3945 1
+3946 2
+3951 42 7 7
+3165 7 7
+3163 7 7
+3167 7
+3165 7 0 7
+3945 7
+3163 7 0 7
+3166 7 0 7
+3167 7 0 7
+3946 35 7
+3948 14
+3950 14 7
+3977 10 0 0 4
+4039 10
+4040 6 2
+4060 37 37 0 1
+4059 37
+4058 37
+4059 74 0 37
+4060 74 37
+4058 74 37
+4070 185 37 37
+4069 62 0 31
+4073 62 31
+4074 31
+4076 62
+4073 36 18
+4074 18
+4076 36
+4077 147 49
+4079 49 49
+4080 196
+4082 196 49
+4072 49 49
+4084 98 49
+4085 98 49
+4087 98
+4098 160
+4127 22 0 22
+4128 22 0 22
+4132 44
+4161 44
+4169 12
+4170 3 0 0 2
+4171 3 3 0 0 1
+4170 3
+4174 6
+3887 32
+3914 32 16
+3980 37
+3982 37 37 0 0 2
+3980 37
+3982 74
+3984 2 2
+3985 4 2
+3991 2
+3987 2 0 2
+3988 2 0 2
+3989 2 0 2
+3991 4
+3998 8 4 0 1 0 0 1
+3997 4
+3998 4 2
+4003 37 4 0 1 0 0 1
+4004 20
+4006 18
+3914 48 0 0 1
+1345 16
+3919 32 16
+3921 32
+3930 102 0 0 3
+4041 2 0 1
+cfn=malloc_consolidate
+calls=1 4811 
+4041 2540 599 408 7 6 0 7
+4041 1
+4134 6
+4135 6 0 0 2 0 0 1
+4134 6 0 6
+4135 12
+4121 6
+4140 12
+4141 36 24
+1985 3 1
+4487 480 360 0 1
+1985 2 2
+4020 2
+1985 4
+4163 44 0 22 1
+4164 66
+4165 22 22 0 0 2
+4164 22
+4221 44 22 0 1
+4230 22 0 22
+4221 44
+4230 22 22
+4221 66 0 22
+4222 22 0 22
+4223 22 0 22
+4224 22 0 22
+4225 22 0 22
+4231 44
+4221 6 3 0 1
+4230 3 0 3
+4221 6
+4230 3 3
+4221 9 0 3 0 0 1
+4222 3 0 3
+4223 3 0 3
+4224 3 0 3
+4225 3 0 3
+4231 6
+4070 75 25 0 2
+4246 14
+4257 39 0 0 2
+4259 6
+4262 2 2 0 0 2
+4259 2
+4262 4
+4263 13
+4334 39
+4330 13
+4331 13
+4332 13
+4331 13 0 0 2
+4332 13
+4333 26 13
+4334 39
+4339 68
+4355 74
+4357 148
+4353 190
+4361 21 21 0 0 4
+4364 42
+4366 9
+4367 9
+4368 9
+4366 36 0 9
+4339 9
+4240 100 25 25 3
+3163 6 6
+3167 6
+3163 6 0 6
+3165 48 12 18 1 0 0 1
+3166 12 6 6
+3167 6 0 6
+4070 12
+4099 58 29
+4101 27
+4100 54
+4127 9 0 9
+4128 9 0 9
+4132 18
+4161 9 0 0 2
+4169 15 0 3
+4008 9 9 0 1 0 0 1
+4009 9 0 9
+4010 18
+3159 9
+4012 9 0 9
+3167 9
+3159 9 0 9
+3163 9 9
+4013 9 0 9
+3163 9 0 9
+3165 36 9 9 1 0 0 1
+3166 9 9
+3168 9
+3166 9 0 9
+3167 9 0 9
+3168 9
+4218 3 0 0 2
+4170 3
+4218 9 0 3
+4343 6 0 0 1
+4346 4 1
+4443 1 1 0 1
+4444 2 1
+4446 2 1
+4449 3 0 0 1
+4070 3
+3979 18
+4343 1 0 0 1
+4348 4
+4349 2 0 0 1
+4373 48 12 0 0 1
+4376 24
+4378 12
+4381 24 0 12
+4378 24 0 12
+4381 12 0 12 0 0 1
+cfn=unlink_chunk.isra.0
+calls=14 1608 
+4381 264 113 38 5 2
+4384 48 24 0 2
+4399 24 12
+4394 12
+4399 24
+4400 24 12
+4403 12 0 12 0 0 2 0 0 1
+4404 12 0 12
+4405 12 0 12
+4408 24
+4409 11 0 11 2
+4410 24
+4415 96 0 12
+4417 36 0 12
+4418 12 0 12 2
+1985 12 12
+4421 12
+1985 24
+4070 6 0 0 2 0 0 1
+3199 6 6 0 2 0 0 1
+3178 6 6
+3182 12
+3190 6 6
+3186 24 6 6
+3190 6 0 6
+3191 12 0 6
+4248 6
+4105 18 0 0 2
+4104 18 0 0 2
+4107 18
+4106 18 0 18
+4107 36 0 18
+4108 54 0 18 0 0 9 0 0 4
+4109 36
+4111 8 0 4
+4115 4
+4121 4
+4115 4
+4122 4 0 0 1
+4115 24 0 4
+4117 12 0 4 0 0 1 0 0 1
+4122 4
+4118 4 0 4
+4122 4 0 4
+cfn=alloc_perturb
+calls=43 1985 
+4122 16 8 0 1
+4115 14
+4121 14
+4115 14
+4122 14 0 0 1
+4115 84 0 14
+4117 42 0 14
+4122 14
+4118 14 0 14
+4122 14 0 14
+cfn=alloc_perturb
+calls=30 1985 
+4122 56 28 0 1
+4123 18
+4460 3 0 1 1
+cfn=alloc_perturb
+calls=49 1985 
+4460 4 2
+4461 1
+4452 2 0 0 1
+4454 2
+4453 1 0 1
+4454 1
+4451 1
+4454 1
+4456 1
+4454 4 0 1
+4456 1 0 1 0 0 1 0 0 1
+4459 2 0 0 1
+
+fn=malloc_consolidate
+4811 1 0 1 1 0 0 1
+4828 1
+4811 5 0 3
+4839 1
+4811 3 0 2
+4826 1 0 1
+4828 1 0 1
+4841 2 1 1
+4842 2 0 0 1 0 0 1
+4841 18 9 9
+4842 18
+4904 30 10
+4905 8 7
+4874 80 40 0 0 1
+4878 42 0 21
+4880 21 21
+4881 42 0 21
+4882 42 21 21
+4884 42
+4880 19 19
+4881 38 0 19
+4882 38 19 19
+4884 38
+4889 40
+4891 40 0 40
+4889 80 0 40
+4892 40 0 40
+4901 119
+4845 80 0 0 1 0 0 1
+4849 120 40 0 1 2 0 1
+4850 160
+4858 40
+4855 80 40 0 0 1
+4858 40
+4855 40
+4859 40
+4855 40
+4860 40 40
+4855 40
+4860 80
+4862 80 0 0 1 0 0 1
+4863 4 4
+4865 4
+4864 4
+4866 16 4
+4868 28 0 24
+cfn=unlink_chunk.isra.0
+calls=4 1608 
+4868 84 36 12
+4868 20 20
+4871 80 40 0 1 0 0 1
+4875 19
+4876 57 0 38
+4892 38 0 19 1 0 0 1
+4876 19 0 19
+cfn=unlink_chunk.isra.0
+calls=19 1608 
+4876 399 171 57 0 2
+4876 76 57
+
+fn=free
+3359 241
+3363 482
+3359 723 0 482
+3373 241
+3359 723 0 482
+3371 241 241
+3375 241 241 0 0 3
+3371 241 241
+3375 482
+3392 723 482
+fi=./malloc/./malloc/arena.c
+153 723
+fe=./malloc/./malloc/malloc.c
+3398 723 0 241
+cfn=_int_free
+calls=485 4495 
+3398 14290 3879 1906 16 3
+3401 241 0 241
+3402 1446 1205
+
+fn=unlink_chunk.isra.0
+1608 38 0 38 3
+1610 114 38
+1608 38
+1610 76 38 0 2 2
+1613 38 38 0 0 1
+1614 76 38
+1616 152 76 0 0 1
+1613 38 38
+1619 38 0 38
+1620 38 0 38
+1621 85 3 0 1
+1623 4 2
+1624 6 4
+1627 4 2
+1641 2 0 2
+1642 2 0 2
+1645 76 76 0 2
+
+fl=./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S
+fn=__memset_avx2_unaligned_erms
+158 5 0 0 1
+159 10
+164 5
+165 5
+166 2
+167 2
+168 2
+170 2 0 2
+171 2 0 2
+172 4 2
+337 3 0 0 1
+346 3
+347 3
+378 3 0 3 1
+379 3 0 3
+380 3 3
+
+fl=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+fn=__memcpy_avx_unaligned_erms
+255 777
+256 777
+262 777
+263 777
+265 631 631 0 0 1
+266 631
+267 631
+270 7 7
+271 7 0 7 0 0 2
+272 7 0 7
+275 14 7
+305 146
+306 146
+308 120
+309 120
+311 55
+315 55
+316 17 0 0 8
+317 17
+318 15 15 0 0 1
+319 15
+320 11 11
+321 11 0 11
+323 11 0 11
+325 11 11
+323 4 0 4
+325 6 6
+331 38 38 0 1 2
+332 38 38
+333 38 0 38
+334 38 0 38
+335 38 38
+342 26 26
+343 26 26
+344 26 0 26 0 0 1
+345 26 0 26
+347 26 26
+364 65 65 0 1
+365 65 65
+366 65 0 65
+367 65 0 65
+368 65 65
+375 16 16
+376 16 16
+377 16 0 16 0 0 1
+378 16 0 16 0 0 2 0 0 1
+379 16 0 16 0 0 2
+380 16 0 16
+381 32 16
+386 624 624
+387 624
+392 624
+393 624
+395 555 555
+396 555
+397 555
+399 539 539 0 0 1
+400 539 539 0 0 1
+401 539 539 0 0 2
+402 539 539
+403 539 539
+404 539 539
+405 539 0 539 0 0 10
+406 539 0 539 0 0 6
+407 539 0 539 0 0 8
+408 539 0 539 0 0 10
+409 539 0 539 0 0 10
+410 539 0 539 0 0 4
+411 539 0 539
+412 539 0 539
+413 1078 539
+417 69
+418 69
+422 69
+424 69
+428 65 65
+429 65
+440 65
+443 65
+445 65
+447 65
+451 65
+452 65
+461 64 64
+462 64 64
+464 64
+466 64
+467 64 64
+468 64 64
+471 64
+473 64
+475 64
+477 128
+483 64 64
+484 64 64
+485 64 64
+486 64 64
+487 64
+488 64 0 64 0 0 14 0 0 12
+489 64 0 64 0 0 8 0 0 7
+490 64 0 64 0 0 13 0 0 11
+491 64 0 64 0 0 9 0 0 7
+492 64
+493 64
+494 64
+483 72 72
+484 72 72
+485 72 72
+486 72 72
+487 72
+488 72 0 72 0 0 13 0 0 11
+489 72 0 72 0 0 14 0 0 7
+490 72 0 72 0 0 12 0 0 11
+491 72 0 72 0 0 14 0 0 7
+492 72
+493 72
+494 72
+496 64 0 64 0 0 16 0 0 15
+497 64 0 64
+498 64 0 64
+499 64 0 64
+501 64 0 64
+505 128 64
+511 4
+512 4
+518 5 5
+519 5 5
+521 5 0 0 2
+522 5 5
+523 5 5
+525 5
+527 5
+529 10
+535 5 5
+536 5 5
+537 5 5
+538 5 5
+539 5
+540 5 0 5 0 0 1 0 0 1
+541 5 0 5 2
+542 5 0 5 0 0 1 0 0 1
+543 5 0 5
+544 5
+545 5
+546 5
+535 3 3
+536 3 3
+537 3 3
+538 3 3
+539 3
+540 3 0 3 0 0 1 0 0 1
+541 3 0 3
+542 3 0 3 0 0 1 0 0 1
+543 3 0 3
+544 3
+545 3
+546 3
+548 5 0 5
+549 5 0 5
+550 5 0 5
+551 5 0 5
+553 5 0 5 0 0 2 0 0 1
+554 10 5
+
+fl=./csu/../sysdeps/nptl/libc_start_call_main.h
+fn=(below main)
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=main
+calls=1 0 
+58 199532 52930 42221 1804 128 310 55 0 112
+
+fl=./io/../sysdeps/unix/sysv/linux/getcwd.c
+fn=getcwd
+49 14 1 8 1
+55 2
+80 5 1 0 1
+81 5 2
+76 1 0 1 1
+66 2
+131 12 10 0 2
+84 3 1 0 2
+88 4 1 1
+
+fl=./string/../sysdeps/x86_64/multiarch/strlen-avx2.S
+fn=__strlen_avx2
+52 1 0 0 1
+65 1
+66 1
+67 1
+70 1
+72 1
+73 1
+76 1 1
+77 1
+85 1
+86 1
+118 1 0 0 1
+131 1
+132 1
+133 1
+139 2 1
+221 1 0 0 1
+236 1 1
+242 1
+243 1
+244 1
+
+ob=???
+fl=???
+fn=0x00000000048a16b0
+0 6 3 0 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=55 255 
+0 248 70 62 0 0 20 0 0 6
+
+ob=/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+fl=???
+fn=0x000000000001f540
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=(below main)
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+ob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+fl=???
+fn=core::str::converts::from_utf8
+0 1085 177 54 4 8
+
+fn=<std::path::Components>::parse_next_component_back
+0 178 24 5 4
+
+fn=<alloc::string::String as core::fmt::Write>::write_str
+0 110 24 36 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=12 255 
+0 92 18 12 0 2
+0 64 36 8 2
+cfn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+calls=4 0 
+0 203 50 43 6 0 1
+0 6 2
+
+fn=std::fs::read_to_string::inner
+0 23 1 12 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 22 6 4
+0 135 18 2 4
+cfn=<std::sys::fs::unix::File>::open_c
+calls=2 0 
+0 99 27 16 10 1
+0 9 2 1 2
+cfn=std::sys::fs::unix::try_statx
+calls=2 0 
+0 120 28 42 0 0 2
+0 42 3 8 4 1
+cfn=std::io::default_read_to_end::small_probe_read::<std::fs::File>
+calls=2 0 
+0 53 13 10 4
+0 24 4 2 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/read.c
+cfn=read
+calls=2 25 
+0 8 2 0 1
+0 21 8 3 2
+cfn=core::str::converts::from_utf8
+calls=2 0 
+0 309 80 6 0 7
+0 11 4 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/close.c
+cfn=close
+calls=2 26 
+0 8 2 0 1
+0 14 7 1 2
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=2 0 
+0 75 18 16
+0 8 2 2 1
+
+fn=<toml_edit::de::Deserializer<&str>>::parse
+0 76 9 52 10 2 1
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=2 0 
+0 18 7 3 3
+0 9 1 4 2
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=2 0 
+0 31 10 6 6
+0 9 2 2 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 65 16 13 0 0 3
+0 3 1 1
+cfn=<toml_edit::parser::state::ParseState>::finalize_table
+calls=2 0 
+0 1560 385 312 40
+0 567 120 95 7
+cfn=toml_edit::parser::document::parse_keyval
+calls=40 0 
+0 67660 18593 17411 450 10 23 10 0 3
+0 200 40 20
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 80 0 20 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160 0 0 1
+0 80 0 20
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160 0 0 1
+0 120 0 40 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 1300 320 260
+0 240 80 80 1
+cfn=<toml_edit::parser::state::ParseState>::on_keyval
+calls=40 0 
+0 24488 5975 4452 205 20 125 8 0 99
+0 2023 203 37 18
+cfn=toml_edit::parser::key::key
+calls=2 0 
+0 580 142 142 42 1 6
+0 44 13 22 6
+cfn=toml_edit::parser::trivia::line_trailing
+calls=2 0 
+0 120 37 31 8
+0 34 12 13 4
+cfn=<toml_edit::parser::state::ParseState>::on_std_header
+calls=2 0 
+0 317 110 115 35 0 4
+0 213 47 93 3
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=46 0 
+0 705 227 138 1
+0 240 84 14 7
+cfn=core::ptr::drop_glue::<indexmap::map::IndexMap<toml_edit::key::Key, toml_edit::item::Item>>
+calls=2 0 
+0 28 11 7 3
+0 87 33 43 9
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=2 0 
+0 18 7 3 2
+0 10 8 0 1
+
+fn=toml_edit::parser::trivia::line_ending
+0 399 105 84 1
+
+fn=<toml_edit::parser::state::ParseState>::finalize_table
+0 56 14 26 6 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=4 255 
+0 60 20 16 0 0 2
+0 132 47 61 15
+cfn=core::ptr::drop_glue::<[indexmap::Bucket<toml_edit::key::Key, toml_edit::item::Item>]>
+calls=2 0 
+0 17 7 7 3
+0 8 1 1 2
+cfn=<toml_edit::parser::state::ParseState>::descend_path
+calls=2 0 
+0 23 8 10
+0 8 4 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 23 15 1 1
+cfn=<toml_edit::key::Key as core::clone::Clone>::clone
+calls=2 0 
+0 354 77 61 22
+0 5 0 1 1
+cfn=<indexmap::map::IndexMap<toml_edit::key::Key, toml_edit::item::Item>>::entry
+calls=2 0 
+0 242 46 37
+0 12 5 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 9 2 5 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 4 0 2
+cfn=<indexmap::map::core::entry::VacantEntry<toml_edit::key::Key, toml_edit::item::Item>>::insert
+calls=2 0 
+0 521 128 104 2
+0 6 0 2 2
+cfn=core::ptr::drop_glue::<toml_edit::key::Key>
+calls=2 0 
+0 118 35 16 3
+0 5 1
+
+fn=<hashbrown::raw::RawTableInner>::find_insert_index
+0 55 15 0 2
+
+fn=<toml_edit::parser::datetime::time_hour as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+0 198 22 110 2
+cfn=winnow::token::take_while::<core::ops::range::RangeInclusive<u8>, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeInclusive<usize>>::{closure#0}
+calls=22 0 
+0 574 128 62 1
+0 375 67 55 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=10 3294 
+0 363 87 51 9 0 1 0 0 1
+0 170 85 54 2
+
+fn=<winnow::combinator::impls::Map<toml_edit::parser::numbers::float, <toml_edit::value::Value as core::convert::From<f64>>::from, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, f64, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+0 165 22 110 2
+cfn=<toml_edit::parser::numbers::dec_int as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=22 0 
+0 3685 959 1242 31 0 6
+0 110 33 22 1
+cfn=<toml_edit::parser::numbers::exp as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=22 0 
+0 352 110 121 3
+0 737 121 253 7
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=22 0 
+0 572 220 165
+0 550 132 187 26
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=22 0 
+0 198 77 33
+0 264 22 99 7
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=22 0 
+0 572 220 165
+0 198 66 77 2
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=22 0 
+0 572 220 165
+0 220 44 110 3
+cfn=<winnow::error::ErrMode<winnow::error::ContextError>>::map::<winnow::error::ContextError, <winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::AddContext<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::StrContext>>::add_context::{closure#0}>
+calls=22 0 
+0 1782 506 418
+0 286 165 77 8
+
+fn=<winnow::combinator::multi::Repeat<winnow::combinator::branch::alt<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>, (winnow::combinator::impls::Void<toml_edit::parser::numbers::digit, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Void<(winnow::combinator::impls::Verify<winnow::token::any<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::token::one_of<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Context<winnow::combinator::core::cut_err<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::numbers::digit>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, winnow::error::StrContext>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (u8, u8), winnow::error::ErrMode<winnow::error::ContextError>>)>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), (), winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next::{closure#0}
+0 594 132 198 5 0 1
+cfn=winnow::combinator::branch::alt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>, (winnow::combinator::impls::Void<toml_edit::parser::numbers::digit, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Void<(winnow::combinator::impls::Verify<winnow::token::any<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::token::one_of<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Context<winnow::combinator::core::cut_err<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::numbers::digit>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, winnow::error::StrContext>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (u8, u8), winnow::error::ErrMode<winnow::error::ContextError>>)>::{closure#0}
+calls=44 0 
+0 1230 326 436 4
+0 140 28 28
+cfn=winnow::combinator::branch::alt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>, (winnow::combinator::impls::Void<toml_edit::parser::numbers::digit, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Void<(winnow::combinator::impls::Verify<winnow::token::any<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::token::one_of<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Context<winnow::combinator::core::cut_err<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::numbers::digit>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, winnow::error::StrContext>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (u8, u8), winnow::error::ErrMode<winnow::error::ContextError>>)>::{closure#0}
+calls=56 0 
+0 1932 518 700 5 0 7 0 0 2
+0 438 100 88 2
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=44 0 
+0 396 154 66
+0 198 154 0 1
+
+fn=<toml_edit::parser::numbers::exp as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+0 352 110 121 3
+
+fn=core::ptr::drop_glue::<toml_edit::parser::error::CustomError>
+0 105 30 25 8
+
+fn=<core::str::pattern::CharSearcher as core::str::pattern::Searcher>::next_match
+0 730 168 154 7
+
+fn=<core::marker::PhantomData<alloc::string::String> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+0 20 5 5 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 7 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 3 2
+0 12 5 4 2
+
+fn=<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>::drop_slow
+0 22 8 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+
+fn=instructions::main
+cfn=instructions::reload::__run
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=instructions::reload::__run
+cfn=instructions::reload_twenty_keys::twenty_keys
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=instructions::reload_twenty_keys::twenty_keys
+cfn=instructions::reload_twenty_keys::__iai_callgrind_wrapper_mod::reload_twenty_keys
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=dynamic_config::loader::merged
+0 13 2 7 1
+cfn=dynamic_config::loader::sections::validated_profile
+calls=2 0 
+0 19 7 7 3
+0 29 8 9 6 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 4 0 1
+cfn=dynamic_config::loader::merge_listed
+calls=2 0 
+0 152342 40953 34444 1361 74 237 19 0 112
+0 8 3 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 2
+0 13 4 4 3 1
+cfn=<dynamic_config::source::LoadSpec>::full_env_prefix
+calls=2 0 
+0 20 7 6 3
+0 16 5 1 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 4
+0 7 2 3
+cfn=dynamic_config::loader::aliases_pass::apply_aliases
+calls=2 0 
+0 54 19 15 3
+0 10 2 4 1
+cfn=alloc::fmt::format::format_inner
+calls=2 0 
+0 330 80 58 0 1
+0 4 0 1 1
+cfn=<figment::figment::Figment>::select::<alloc::string::String>
+calls=2 0 
+0 217 64 44 4 0 3
+0 10 7 0 1 1
+
+fn=<std::path::Path>::_join
+0 17 1 8 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7 0 1
+0 7 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 12 3 2 0 0 1
+0 18 3 4 2
+cfn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+calls=2 0 
+0 448 94 64 11 1 2 0 0 2
+0 17 5 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 11 3 2
+0 14 8 3
+
+fn=std::sys::fs::unix::try_statx
+0 70 6 42 4 2 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/statx.c
+cfn=statx
+calls=4 27 
+0 22 2 0 1
+0 148 48 42 6
+
+fn=core::fmt::write
+0 123 15 30 6 1
+cfn=<alloc::string::String as core::fmt::Write>::write_str
+calls=6 0 
+0 232 64 49 2
+0 57 12 12 4
+cfn=<&str as core::fmt::Display>::fmt
+calls=6 0 
+0 333 105 68 16 4 1
+0 45 21 3 1
+
+fn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+0 1378 276 377 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=22 3359 
+0 935 275 154
+0 840 600 0 2
+
+fn=core::ptr::drop_glue::<[indexmap::Bucket<toml_edit::key::Key, toml_edit::item::Item>]>
+0 17 7 7 3
+
+fn=<toml_edit::parser::strings::escaped as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+0 162 54 72 4
+
+fn=core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(alloc::string::String, figment::value::value::Value), <[(alloc::string::String, figment::value::value::Value)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as core::iter::traits::collect::FromIterator<(alloc::string::String, figment::value::value::Value)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>, <figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from::{closure#0}>>::{closure#0}>::{closure#0}>
+0 302 114 46 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=38 73 
+0 425 95
+0 103 7 0 2
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>> as figment::coalesce::Coalescible>::coalesce
+0 34 3 20 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 27 12 9
+0 8 1 1 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 27 12 9
+0 29 4 10 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 49 13 15
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 120 39 24
+0 36 13 11 3
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+calls=2 0 
+0 90 26 25
+0 9 2 1 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 27 12 9
+0 16 11 2 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::alloc::Global>
+0 14 1 8 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 24 5 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 7 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 3 2
+0 10 3 1 1
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>
+calls=2 0 
+0 7153 1659 1105 37 10 29
+0 36 15 9 3
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+0 25 3 15 3
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 124 39 24 5
+0 35 10 15 5
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 49 13 15 7
+0 15 5 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 106 29 13
+0 3 0 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+calls=2 0 
+0 4814 1374 888 4 1
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 120 39 24 2
+0 10 7 0 1
+
+fn=<core::marker::PhantomData<u16> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+0 38 15 6 8 2
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Pool>>>::wait_for_readers
+0 50 6 22 3 1
+cfn=<arc_swap::debt::Debt>::pay_all::<alloc::sync::Arc<instructions::Pool>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Pool>>>::wait_for_readers::{closure#0}>::{closure#0}
+calls=2 0 
+0 296 66 48 8 3 1
+0 6 4
+
+fn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::wait_for_readers::{closure#0}>
+0 42 6 18 3
+cfn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::wait_for_readers::{closure#0}>::{closure#0}
+calls=3 0 
+0 310 70 50 7 1 0 1
+0 6 4
+
+fn=core::ptr::drop_glue::<dynamic_config::builder::Builder<instructions::Pool>>
+0 12 3 8 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 106 29 13 0 1
+0 14 5 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 106 29 13 0 1
+0 5 2 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 40 21 1 6 2 0 6
+cfn=<alloc::sync::Arc<dynamic_config::cell::ConfigCell<instructions::Pool>>>::drop_slow
+calls=1 0 
+0 1287 319 243 19 0 0 19
+
+fn=dynamic_config::loader::merge_listed
+0 14 2 7 2
+cfn=dynamic_config::loader::sections::validated_profile
+calls=2 0 
+0 19 7 7
+0 47 16 12 6
+cfn=dynamic_config::loader::sections::merge_file
+calls=2 0 
+0 151997 40834 34351 1343 73 223 19 0 112
+0 11 3 1 2 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 2
+0 6 0 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 3
+0 14 9 4 1 1
+cfn=dynamic_config::loader::sections::merge_profile_variant
+calls=2 0 
+0 48 17 14 2 0 3
+0 11 3 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 1
+0 6 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 7 3 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 4
+0 12 9 0 2
+
+fn=std::env::current_dir
+0 12 1 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 180 38 23 1 1 1 0 0 1
+0 8 1 3 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/getcwd.c
+cfn=getcwd
+calls=2 49 
+0 48 16 10 7
+0 4 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/strlen-avx2.S
+cfn=__strlen_avx2
+calls=2 52 
+0 22 3 0 3
+0 9 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=2 3407 
+0 203 40 26 13 1 1 0 0 1
+0 19 10 5 2
+
+fn=<toml_edit::parser::state::ParseState>::descend_path
+0 506 176 220 2
+
+fn=winnow::combinator::core::opt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::strings::basic_chars>::{closure#0}
+0 240 24 132 4 0 1
+cfn=<winnow::combinator::impls::Map<winnow::combinator::impls::TryMap<winnow::token::take_while<((u8, u8), u8, core::ops::range::RangeInclusive<u8>, core::ops::range::RangeInclusive<u8>, core::ops::range::RangeInclusive<u8>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}, core::str::converts::from_utf8, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &[u8], &str, winnow::error::ErrMode<winnow::error::ContextError>, core::str::error::Utf8Error>, alloc::borrow::Cow<str>::Borrowed, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+calls=24 0 
+0 2278 425 192 13 0 1
+0 90 12 42 2
+cfn=<toml_edit::parser::strings::escaped as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=12 0 
+0 162 54 72 4
+0 120 36 42 2
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=12 0 
+0 312 120 90 7
+0 180 72 72 4
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=12 0 
+0 108 42 18
+0 126 84 24 1 0 1
+
+fn=__rustc::__rust_alloc
+0 54 6 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=12 3294 
+0 258 72 42
+
+fn=<indexmap::map::core::entry::VacantEntry<toml_edit::key::Key, toml_edit::item::Item>>::insert
+0 1324 287 329 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=28 255 
+0 420 140 112
+0 70 14 28
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=28 255 
+0 420 140 112
+0 49 14 7 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=14 255 
+0 210 70 56
+0 42 14 14 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=14 255 
+0 210 70 56
+0 140 42 21
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 1363 336 273 2 0 96 0 0 88
+0 360 213 24 2
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=6 0 
+0 632 136 101 12 1 7 0 0 7
+0 65 17 18 1
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=8 0 
+0 5230 1143 828 52 11 19 8 0 4
+0 55 20 5 2 1
+cfn=<hashbrown::raw::RawTable<usize>>::reserve_rehash::<indexmap::map::core::get_hash<toml_edit::key::Key, toml_edit::item::Item>::{closure#0}>
+calls=10 0 
+0 2051 410 282 28 3 3
+0 30 15 5
+cfn=<hashbrown::raw::RawTableInner>::find_insert_index
+calls=10 0 
+0 55 15 0 2
+0 40 15
+
+fn=<figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from
+0 36 4 17 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 352 62 39 4 1 1 0 0 1
+0 26 1 15 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 62 14 15 9
+0 60 0 40
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=40 0 
+0 1161 343 320 3
+0 903 401 320 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=40 3294 
+0 882 240 140
+0 140 20 20 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 262 60 40
+0 260 60 80 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=40 3359 
+0 1700 500 280
+0 406 120 162 2 0 4 0 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 27 12 9
+0 16 5 4 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 1357 488 535 8
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=2 73 
+0 22 5
+0 479 203 165 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 16 2 8 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 63 13 19 7
+cfn=core::ptr::drop_glue::<alloc::collections::btree::dedup_sorted_iter::DedupSortedIter<alloc::string::String, figment::value::value::Value, alloc::vec::into_iter::IntoIter<(alloc::string::String, figment::value::value::Value)>>>
+calls=2 0 
+0 222 70 39 12
+0 48 16 13 5
+cfn=core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(alloc::string::String, figment::value::value::Value), <[(alloc::string::String, figment::value::value::Value)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as core::iter::traits::collect::FromIterator<(alloc::string::String, figment::value::value::Value)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>, <figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from::{closure#0}>>::{closure#0}>::{closure#0}>
+calls=2 0 
+0 830 216 46 5
+0 1
+
+fn=<alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0 29 6 12 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 1
+0 10 2 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 1
+0 44 22 14 4
+
+fn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+0 56 5 31 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 62 14 15
+0 17 0 11 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 27 12 9 4
+0 60 0 20
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=40 0 
+0 1273 373 335
+0 1066 402 360 7
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=40 0 
+0 8339 1844 873 0 0 2
+0 74 22 2 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=4 0 
+0 54 24 18
+0 37 6 10 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 27 12 9
+0 13 0 4 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 62 14 15 6
+0 60 0 20
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=40 0 
+0 1161 343 320
+0 886 342 320 4
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=40 0 
+0 8339 1844 873 37 2 27
+0 52 22 2 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=4 0 
+0 54 24 18
+0 32 22 4 1
+
+fn=<alloc::sync::Arc<dynamic_config::cell::ConfigCell<instructions::Pool>>>::drop_slow
+0 6 0 4 1 0 0 1
+cfn=core::ptr::drop_glue::<dynamic_config::cell::ConfigCell<instructions::Pool>>
+calls=1 0 
+0 1187 290 224 18 0 0 18
+0 9 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+
+fn=std::rt::lang_start_internal
+cfn=std::rt::lang_start::<()>::{closure#0}
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=<dynamic_config::builder::Builder<instructions::Pool>>::load
+0 20 5 8 2 2
+cfn=<dynamic_config::source::Format>::from_path
+calls=2 0 
+0 754 149 82 26 2
+0 7 4 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 77 16 26 11
+cfn=dynamic_config::loader::load::<instructions::Pool>
+calls=2 0 
+0 195206 51857 41467 1657 103 308 19 0 112
+0 12 3 1 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 25 14 6 3 1 1
+
+fn=alloc::fmt::format::format_inner
+0 205 11 17 10 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14
+0 14 1 4 1
+cfn=core::fmt::write
+calls=2 0 
+0 406 107 84 15 3 1
+0 16 2 8 1
+cfn=core::fmt::write
+calls=4 0 
+0 384 110 78 14 2
+0 42 24 6
+
+fn=<core::fmt::Formatter>::pad
+0 75 30 18 7
+cfn=<alloc::string::String as core::fmt::Write>::write_str
+calls=6 0 
+0 243 66 50 8 2 1
+
+fn=toml_edit::parser::trivia::line_trailing
+0 357 42 189 2
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=42 0 
+0 651 210 126
+0 336 84 105 3
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=42 0 
+0 378 147 63
+0 105 42 21 1
+cfn=toml_edit::parser::trivia::line_ending
+calls=42 0 
+0 399 105 84 1
+0 294 147 63 1
+
+fn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+0 2866 957 935 3 0 4 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=44 3359 
+0 1870 550 308
+0 191 5 5 1 1
+cfn=core::ptr::drop_glue::<toml_edit::parser::error::CustomError>
+calls=10 0 
+0 105 30 25 8
+0 20 10 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=10 3359 
+0 425 125 70
+0 1328 747 332 3 0 1
+
+fn=<alloc::raw_vec::RawVec<winnow::error::StrContext>>::grow_one
+0 495 66 99 2
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=66 0 
+0 2970 660 561 0 2
+0 297 165 66
+
+fn=core::ptr::drop_glue::<indexmap::map::IndexMap<toml_edit::key::Key, toml_edit::item::Item>>
+0 28 11 7 3
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+0 40 10 14 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14 0 1
+0 50 18 22 1 0 1
+
+fn=<figment::profile::ProfileTag as core::convert::From<&figment::profile::Profile>>::from
+0 160 60 0 2
+
+fn=<uncased::borrowed::UncasedStr as core::cmp::Ord>::cmp
+0 321 27 0 5 1
+
+fn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>
+0 414 180 126 3 1
+
+fn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+cfn=instructions::main
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=<alloc::raw_vec::RawVecInner>::finish_grow
+0 42 1 16 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=2 3407 
+0 42 10 6
+0 10 2 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 87 24 14
+0 67 16 16 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=2 3407 
+0 365 78 48 3 1 2 0 0 2
+0 1967 12 440 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=10 3407 
+0 5462 1199 845 63 12 26 8 0 11
+0 432 67 139 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=134 3294 
+0 3377 888 521 13 2 0 4
+0 854 504 144
+
+fn=<std::path::Components as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+0 59 13 8 5
+cfn=<std::path::Components>::parse_next_component_back
+calls=2 0 
+0 178 24 5 4
+0 20 7 5 2
+
+fn=std::sys::fs::metadata
+0 14 1 5 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 22 6 4
+0 136 18 2 4
+cfn=std::sys::fs::unix::try_statx
+calls=2 0 
+0 120 28 42 11 2
+0 6 2 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 8 5
+
+fn=<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Toml>> as figment::provider::Provider>::data
+0 22 6 9 5
+cfn=std::fs::read_to_string::inner
+calls=2 0 
+0 981 225 129 36 9 2
+0 8 3 1
+cfn=<figment::providers::data::Toml as figment::providers::data::Format>::from_str::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+calls=2 0 
+0 145065 39058 33049 1080 40 198 19 0 108
+0 4 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 6 2 1 1 1
+cfn=<figment::profile::Profile>::collect
+calls=2 0 
+0 92 28 29 4 0 5
+0 27 4 12 4 0 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 49 13 15 9 0 1
+0 2 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 120 39 24 1
+0 32 8 11 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 49 13 15
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 120 39 24
+0 57 21 19 5
+cfn=alloc::fmt::format::format_inner
+calls=2 0 
+0 330 80 58 20 2
+0 7 3 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 3 2
+0 8 2 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 5 0 1 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+calls=2 0 
+0 90 26 25 6 1 1
+0 7 4 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 4 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 27 12 9
+0 15 3 1 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=2 0 
+0 27 12 9
+0 17 10 3 3 2
+
+fn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+0 3549 1107 642 7 0 1
+
+fn=toml_edit::parser::key::key
+0 399 42 273 4 0 1
+cfn=<winnow::combinator::impls::Map<(winnow::combinator::impls::Span<toml_edit::parser::trivia::ws, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, winnow::error::ErrMode<winnow::error::ContextError>>, toml_edit::parser::key::simple_key, winnow::combinator::impls::Span<toml_edit::parser::trivia::ws, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, winnow::error::ErrMode<winnow::error::ContextError>>), toml_edit::parser::key::key::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (core::ops::range::Range<usize>, (toml_edit::raw_string::RawString, toml_edit::internal_string::InternalString), core::ops::range::Range<usize>), toml_edit::key::Key, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::key::Key, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+calls=42 0 
+0 9055 1680 1494 22 0 6 6
+0 147 42 63 1 1
+cfn=<alloc::raw_vec::RawVec<toml_edit::key::Key>>::grow_one
+calls=42 0 
+0 2394 567 462 6
+0 126 42 21 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168 0 0 1
+0 420 105 168 4
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=42 0 
+0 378 147 63 3
+0 1806 504 399 10
+
+fn=toml_edit::parser::document::parse_keyval
+0 220 20 140 1
+cfn=toml_edit::parser::key::key
+calls=40 0 
+0 14775 3197 2969 9 0 2 6
+0 780 180 360 5
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=40 0 
+0 740 220 120
+0 160 60 20 1
+cfn=toml_edit::parser::value::value::{closure#1}
+calls=40 0 
+0 38569 10656 10062 376 9 19 4 0 3
+0 780 340 360 4
+cfn=toml_edit::parser::value::value::{closure#0}
+calls=40 0 
+0 2490 740 620 10 1
+0 740 320 360 26
+cfn=toml_edit::parser::trivia::line_trailing
+calls=40 0 
+0 2400 740 620
+0 1680 820 680 10
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 280 80 40 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 140 40 40
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 694 160 120 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160 0 0 1
+0 80 0 20
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160 0 0 1
+0 132 20 80 1
+
+fn=toml_edit::parser::value::value::{closure#1}
+0 752 132 287 16 3 2
+cfn=winnow::token::take_while::<core::ops::range::RangeInclusive<u8>, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeInclusive<usize>>::{closure#0}
+calls=22 0 
+0 619 135 57 9 0 1
+0 238 95 78 8
+cfn=toml_edit::parser::strings::basic_string
+calls=12 0 
+0 4096 1013 834 49 0 5
+0 60 30 12 3
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=12 0 
+0 108 42 18
+0 537 122 199 43 0 1
+cfn=<winnow::error::ErrMode<winnow::error::ContextError>>::map::<winnow::error::ContextError, <winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::AddContext<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::StrContext>>::add_context::{closure#0}>
+calls=22 0 
+0 1782 506 418 7 1 1
+0 198 66 88 3
+cfn=<toml_edit::parser::datetime::partial_time as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=22 0 
+0 2200 588 541 28 1 1 0 0 1
+0 220 55 99 7
+cfn=<winnow::error::ErrMode<winnow::error::ContextError>>::map::<winnow::error::ContextError, <winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::AddContext<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::StrContext>>::add_context::{closure#0}>
+calls=22 0 
+0 1782 506 418 0 1
+0 143 44 44 2
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=22 0 
+0 1529 517 330
+0 362 184 81 5
+cfn=__rustc::__rust_alloc
+calls=12 0 
+0 312 78 42 1
+0 42 6 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=12 255 
+0 86 18 12
+0 282 88 121 4
+cfn=<winnow::combinator::impls::Map<toml_edit::parser::numbers::float, <toml_edit::value::Value as core::convert::From<f64>>::from, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, f64, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+calls=22 0 
+0 10263 2917 3244 90 0 6
+0 88 22 11 2
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=22 0 
+0 2104 687 435 8 1
+0 66 11 33 1
+cfn=<winnow::combinator::impls::Map<toml_edit::parser::numbers::integer, <toml_edit::value::Value as core::convert::From<i64>>::from, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, i64, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+calls=22 0 
+0 9083 2266 2346 86 0 2 4 0 2
+0 88 33 11 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=22 255 
+0 330 110 88 0 2
+0 22 0 11 2
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=22 0 
+0 1155 374 198
+0 22 11
+
+fn=core::ptr::drop_glue::<toml_edit::key::Key>
+0 252 126 84 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=84 3359 
+0 3570 1050 588
+0 1140 297 2 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 27 7 0 2
+
+fn=<toml_edit::de::table::TableDeserializer as serde_core::de::Deserializer>::deserialize_any::<<alloc::collections::btree::map::BTreeMap<_, _> as serde_core::de::Deserialize>::deserialize::MapVisitor<alloc::string::String, figment::value::value::Value>>
+0 20 6 8 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 19 2 10 2
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=2 0 
+0 839 225 171 14 0 1
+0 3 0 1
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=2 0 
+0 21 9 8
+0 17 6 1 1
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_value_seed::<core::marker::PhantomData<figment::value::value::Value>>
+calls=2 0 
+0 40843 11524 8759 169 6 28 1 0 6
+0 36 11 17 3
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=2 0 
+0 142 40 45 0 0 4
+0 11 4 4 2
+cfn=core::ptr::drop_glue::<toml_edit::de::table::TableMapAccess>
+calls=2 0 
+0 113 37 20
+0 8 7 0 1
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::dedup_sorted_iter::DedupSortedIter<alloc::string::String, figment::value::value::Value, alloc::vec::into_iter::IntoIter<(alloc::string::String, figment::value::value::Value)>>>
+0 21 6 6 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 192 57 33 8
+0 9 7 0 1
+
+fn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+0 206 46 80 9 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 170 50 28
+0 98 63 15 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 78 20 25 9
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 17 14 1 1
+
+fn=dynamic_config::loader::sections::merge_profile_variant
+0 18 7 6 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 3
+
+fn=<dynamic_config::source::LoadSpec>::full_env_prefix
+0 20 7 6 3
+
+fn=core::ptr::drop_glue::<figment::figment::Figment>
+0 9 3 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 106 29 13
+0 22 3 10 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+calls=2 0 
+0 49 13 15 9
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+calls=2 0 
+0 120 39 24 1 1
+0 11 3 1
+cfn=core::ptr::drop_glue::<figment::metadata::Metadata>
+calls=2 0 
+0 219 69 32 3 3
+0 10 4 0 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+calls=2 0 
+0 5145 1470 958 18 1
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+0 26 3 15 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 62 14 15
+0 186 62 40 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=40 3359 
+0 2120 580 260
+0 80 0 20
+cfn=core::ptr::drop_glue::<figment::value::value::Value>
+calls=40 0 
+0 1052 346 198 0 1
+0 60 0 20
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=40 0 
+0 1161 343 320
+0 67 26
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::CaS<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::compare_and_swap::<&core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>
+0 21 0 11 2
+cfn=<arc_swap::debt::list::LocalNode>::with::<arc_swap::strategy::hybrid::HybridProtection<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::load::{closure#0}>
+calls=2 0 
+0 47 14 5
+0 31 3 6 3
+cfn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::wait_for_readers::{closure#0}>
+calls=2 0 
+0 182 41 35 10 1 0 1
+0 17 10 1 1
+
+fn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::wait_for_readers::{closure#0}>::{closure#0}
+0 310 70 50 7 1 0 1
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>>>::wait_for_readers
+0 50 6 22 2
+cfn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>>>::wait_for_readers::{closure#0}>::{closure#0}
+calls=3 0 
+0 322 72 56 7 0 0 1
+0 6 4 0 1
+
+fn=<alloc::sync::Arc<instructions::Once>>::drop_slow
+0 10 4 2 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>>>::wait_for_readers
+0 25 3 11 3 0 0 3
+cfn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>>>::wait_for_readers::{closure#0}>::{closure#0}
+calls=1 0 
+0 149 34 26 9 0 0 9
+0 3 2
+
+fn=std::rt::lang_start::<()>::{closure#0}
+cfn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=<dynamic_config::source::Format>::from_extension
+0 11 1 6 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 42 12 7
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 15 3 2
+0 54 7 5 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 9 5 0 1
+
+fn=dynamic_config::loader::sections::merge_file
+0 22 2 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 4 1 1 1 1
+cfn=<figment::providers::data::Data<_>>::file::find
+calls=2 0 
+0 1596 368 268 68 7 5 0 0 4
+0 18 5 9 1
+cfn=<figment::figment::Figment>::provide::<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Toml>>>
+calls=2 0 
+0 150318 40441 34058 1268 65 218 19 0 108
+0 9 7 0 3
+
+fn=<figment::providers::data::Data<_>>::file::find
+0 16 2 7 2
+cfn=std::env::current_dir
+calls=2 0 
+0 505 111 77 29 3 2 0 0 2
+0 16 4 4 1
+cfn=<std::path::Path>::_join
+calls=2 0 
+0 589 130 94 16 2 3 0 0 2
+0 4 3 1
+cfn=<std::path::Path>::is_file
+calls=2 0 
+0 360 79 68 19 2
+0 12 7 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 9 7
+
+fn=<figment::figment::Figment>::provide::<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Toml>>>
+0 25 3 11 4
+cfn=alloc::fmt::format::format_inner
+calls=2 0 
+0 497 119 95 21 5 1
+0 24 5 10 4 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::value::tag::Tag, figment::metadata::Metadata>>::insert
+calls=2 0 
+0 91 26 26 4
+0 7 1 2 1
+cfn=<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Toml>> as figment::provider::Provider>::data
+calls=2 0 
+0 147494 39703 33506 1186 55 209 19 0 108
+0 5 1 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 2 1
+0 4 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 479 58 45 16 0 2
+cfn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>
+calls=38 0 
+0 741 247 133 6
+0 7 1 2
+cfn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>
+calls=2 0 
+0 39 13 7
+0 90 3 3 2
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>> as figment::coalesce::Coalescible>::coalesce
+calls=2 0 
+0 475 148 137 15
+0 15 6 6 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 1
+0 4 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 5
+0 5 4 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14 0 1
+0 15 9 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 22 6 4
+0 22 8 12 3
+
+fn=<winnow::combinator::impls::Map<(winnow::combinator::impls::Span<toml_edit::parser::trivia::ws, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, winnow::error::ErrMode<winnow::error::ContextError>>, toml_edit::parser::key::simple_key, winnow::combinator::impls::Span<toml_edit::parser::trivia::ws, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, winnow::error::ErrMode<winnow::error::ContextError>>), toml_edit::parser::key::key::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (core::ops::range::Range<usize>, (toml_edit::raw_string::RawString, toml_edit::internal_string::InternalString), core::ops::range::Range<usize>), toml_edit::key::Key, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::key::Key, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+0 378 42 210 2 0 3
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=42 0 
+0 651 210 126 0 0 1
+0 4064 539 126 7
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=42 3294 
+0 1567 386 276 7 0 1 6
+0 147 21 21
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 280 63 42
+0 588 21 273 3
+cfn=winnow::token::take_while::<(u8, u8), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}
+calls=42 0 
+0 771 230 126
+0 609 168 294 3 0 1
+
+fn=<winnow::combinator::impls::Map<winnow::combinator::impls::TryMap<winnow::token::take_while<((u8, u8), u8, core::ops::range::RangeInclusive<u8>, core::ops::range::RangeInclusive<u8>, core::ops::range::RangeInclusive<u8>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeFrom<usize>>::{closure#0}, core::str::converts::from_utf8, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &[u8], &str, winnow::error::ErrMode<winnow::error::ContextError>, core::str::error::Utf8Error>, alloc::borrow::Cow<str>::Borrowed, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, &str, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+0 1478 243 108 11
+cfn=core::str::converts::from_utf8
+calls=12 0 
+0 620 74 36
+0 180 108 48 2 0 1
+
+fn=<hashbrown::raw::RawTable<usize>>::reserve_rehash::<indexmap::map::core::get_hash<toml_edit::key::Key, toml_edit::item::Item>::{closure#0}>
+0 283 15 60 7
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=10 3294 
+0 225 60 35 0 3
+0 85 10 10 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S
+cfn=__memset_avx2_unaligned_erms
+calls=10 158 
+0 57 5 10 3
+0 1143 245 125 15 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=6 3359 
+0 255 75 42
+0 3
+
+fn=<toml_edit::parser::numbers::dec_int as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+0 1078 132 616 5
+cfn=core::ptr::drop_glue::<winnow::error::ErrMode<winnow::error::ContextError>>
+calls=44 0 
+0 396 154 66
+0 440 22 132 2
+cfn=<winnow::combinator::multi::Repeat<winnow::combinator::branch::alt<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>, (winnow::combinator::impls::Void<toml_edit::parser::numbers::digit, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Void<(winnow::combinator::impls::Verify<winnow::token::any<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::token::one_of<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Context<winnow::combinator::core::cut_err<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::numbers::digit>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, winnow::error::StrContext>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (u8, u8), winnow::error::ErrMode<winnow::error::ContextError>>)>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), (), winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next::{closure#0}
+calls=44 0 
+0 4928 1412 1516 17 0 8 0 0 2
+0 528 198 154 7
+
+fn=winnow::combinator::branch::alt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (), winnow::error::ErrMode<winnow::error::ContextError>, (winnow::combinator::impls::Void<toml_edit::parser::numbers::digit, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Void<(winnow::combinator::impls::Verify<winnow::token::any<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::token::one_of<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, u8, winnow::error::ErrMode<winnow::error::ContextError>>, winnow::combinator::impls::Context<winnow::combinator::core::cut_err<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::numbers::digit>::{closure#0}, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, u8, winnow::error::ErrMode<winnow::error::ContextError>, winnow::error::StrContext>), winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, (u8, u8), winnow::error::ErrMode<winnow::error::ContextError>>)>::{closure#0}
+0 1776 272 718 8 0 2
+cfn=<winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::ParserError<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>>>::or
+calls=44 0 
+0 1144 440 330 0 0 5 0 0 2
+0 242 132 88 1
+
+fn=<toml_edit::key::Key as core::clone::Clone>::clone
+0 330 66 154 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=44 3294 
+0 1130 298 174 6
+0 154 22 22
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=44 255 
+0 298 66 44 1
+0 2376 528 528 14
+
+fn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<<alloc::collections::btree::map::BTreeMap<_, _> as serde_core::de::Deserialize>::deserialize::MapVisitor<alloc::string::String, figment::value::value::Value>>
+0 11 1 7 2
+cfn=<toml_edit::item::Item>::span
+calls=2 0 
+0 22 6 3
+0 47 15 13 4 1
+cfn=<toml_edit::de::table::TableDeserializer as serde_core::de::Deserializer>::deserialize_any::<<alloc::collections::btree::map::BTreeMap<_, _> as serde_core::de::Deserialize>::deserialize::MapVisitor<alloc::string::String, figment::value::value::Value>>
+calls=2 0 
+0 42157 11896 9058 194 6 33 1 0 6
+0 21 11 3 2
+
+fn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+0 503 88 201 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168 0 0 2
+0 84 0 21 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168
+0 321 63 67 1
+cfn=<toml_edit::key::Key as core::clone::Clone>::clone
+calls=42 0 
+0 3934 903 861 1
+0 168 42 63 1 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168 0 0 1
+0 147 63 21 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=42 3294 
+0 1258 324 188 2
+0 147 21 21
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 280 63 42
+0 63 0 21
+cfn=core::ptr::drop_glue::<toml_edit::key::Key>
+calls=42 0 
+0 2478 735 336 3
+0 168 0 105 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168
+0 84 0 21
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168
+0 147 42 21 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 1365 336 273
+0 457 308 126 1
+
+fn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_value_seed::<core::marker::PhantomData<figment::value::value::Value>>
+0 23 6 10 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 3 1 1
+cfn=<toml_edit::item::Item>::span
+calls=2 0 
+0 22 6 3
+0 12 3 2 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 4 0 2
+cfn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>
+calls=2 0 
+0 40589 11445 8708 164 6 28 1 0 6
+0 4 1 1
+cfn=core::ptr::drop_glue::<toml_edit::key::Key>
+calls=2 0 
+0 118 35 16
+0 8 7
+
+fn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_value_seed::<core::marker::PhantomData<figment::value::value::Value>>'2
+0 460 120 200
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 60 20 20
+cfn=<toml_edit::item::Item>::span
+calls=40 0 
+0 686 140 60 1
+0 240 60 40
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 80 0 40
+cfn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>'2
+calls=40 0 
+0 2421 726 537 10 0 2 0 0 2
+0 80 20 20 1
+cfn=core::ptr::drop_glue::<toml_edit::key::Key>
+calls=40 0 
+0 2360 700 320
+0 160 140
+
+fn=<figment::value::de::ValueVisitor as serde_core::de::Visitor>::visit_map::<toml_edit::de::table::TableMapAccess>
+0 29 0 15 3
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=2 0 
+0 869 223 172 0 0 3
+0 60 0 20
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=40 0 
+0 13025 3581 2877 1
+0 380 92 80 3 1
+cfn=<toml_edit::de::table::TableMapAccess as serde_core::de::MapAccess>::next_value_seed::<core::marker::PhantomData<figment::value::value::Value>>'2
+calls=40 0 
+0 7747 2326 1557 12 0 2 0 0 2
+0 400 140 140 2
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=40 0 
+0 8132 2026 1406 49 2 18 1
+0 44 21 1 1
+cfn=core::ptr::drop_glue::<toml_edit::de::table::TableMapAccess>
+calls=2 0 
+0 192 61 31 6 1
+0 15 9 3 2
+cfn=<figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from
+calls=2 0 
+0 9466 2891 2347 76 1 5 0 0 4
+0 9 4 4 1
+
+fn=<alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, figment::value::value::Value>>::insert_entry
+0 530 158 225 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14 0 1
+0 413 62 102 5 1 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=30 255 
+0 297 88 64 0 0 3
+0 345 135 105 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=30 255 
+0 436 123 98 2 0 5
+0 248 103 73 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 37 7 10 3 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 22 6 4 0 0 1
+0 8 0 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 2
+0 32 9 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 22 6 4 0 0 1
+0 22 8 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 66 28 27 8
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 309 157 122 5 0 3
+
+fn=core::ptr::drop_glue::<toml_edit::de::table::TableMapAccess>
+0 40 10 12 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 249 74 39 2 1
+0 16 14 0 1
+
+fn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>
+0 340 60 120 2
+cfn=<figment::profile::ProfileTag as core::convert::From<&figment::profile::Profile>>::from
+calls=40 0 
+0 160 60 0 2
+0 280 140 20 2
+
+fn=<figment::figment::Figment>::merged
+0 18 4 6 2
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::alloc::Global>
+calls=2 0 
+0 7347 1711 1147 47 10 29
+0 12 3 4 2
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=2 0 
+0 94 18 17 11 1
+0 9 1 3 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=2 0 
+0 94 18 17
+0 9 3 3 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=2 0 
+0 562 111 78 14
+0 6 2 1 1 1
+cfn=<figment::profile::Profile>::is_custom
+calls=2 0 
+0 8 3 0 2
+0 11 2 3 1
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+calls=2 0 
+0 10723 2618 1610 63 2 27
+0 9 2 3 1
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+calls=2 0 
+0 11028 2707 1659 6 0 2
+0 10 2 6 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+calls=2 0 
+0 159 49 39 10
+0 8 6 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>
+0 17 1 7 2
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>'2
+calls=2 0 
+0 3876 894 592 24 6 12
+0 6 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 34 5 14 3 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 175 39 22 0 0 1
+0 7 1 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 15 3 2
+0 18 8 4 1
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>'2
+calls=2 0 
+0 2906 670 440 0 4 13
+0 54 23 14 6 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>'2
+0 26 2 14 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14 0 1
+0 146 59 31 2 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=38 3294 
+0 4112 839 500 8 6 7
+0 133 19 38
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=38 255 
+0 247 57 38
+0 710 234 196 4 2 16
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=12 3294 
+0 1110 264 147 5
+0 42 18 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=12 255 
+0 86 18 12 0 1
+0 80 30 36 4
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+0 120 18 48 3
+cfn=<uncased::borrowed::UncasedStr as core::cmp::Ord>::cmp
+calls=6 0 
+0 321 27 0 5 1
+0 43 4 5 3
+cfn=<alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+calls=2 0 
+0 109 32 29 8
+0 34 16 11 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 38 25 5 2
+
+fn=<figment::profile::Profile>::is_custom
+0 8 3 0 2
+
+fn=core::ptr::drop_glue::<figment::metadata::Metadata>
+0 8 3 4 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 106 29 13
+0 9 4 1 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14 0 1
+0 11 8 0 1
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::load::{closure#0}
+0 62 18 6 4
+
+fn=<std::sys::pal::unix::time::Timespec>::now
+0 6 1 3 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./time/../sysdeps/unix/sysv/linux/clock_gettime.c
+cfn=clock_gettime@@GLIBC_2.17
+calls=2 30 
+0 11 3 0 2 2
+0 10 5
+
+fn=(below main)
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./csu/../csu/libc-start.c
+cfn=__libc_start_main@@GLIBC_2.34
+calls=1 242 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=dynamic_config::loader::load::<instructions::Pool>
+0 9 1 5 1
+cfn=dynamic_config::loader::merged
+calls=2 0 
+0 153186 41193 34629 1394 79 246 19 0 112
+0 8 3 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 1
+0 5 0 3 0 0 1
+cfn=<figment::figment::Figment>::extract::<instructions::Pool>
+calls=2 0 
+0 36259 9009 5760 223 18 59
+0 9 3 3 2 0 1
+cfn=core::ptr::drop_glue::<figment::figment::Figment>
+calls=2 0 
+0 5694 1633 1058 35 5
+0 6 5 0 0 1
+
+fn=<std::path::Path>::is_file
+0 11 1 6 1
+cfn=std::sys::fs::metadata
+calls=2 0 
+0 336 70 62 17 2
+0 13 8 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::value::tag::Tag, figment::metadata::Metadata>>::insert
+0 17 2 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 29 12 12 2
+
+fn=<figment::providers::data::Toml as figment::providers::data::Format>::from_str::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+0 10 0 7 2
+cfn=<toml_edit::de::Deserializer<&str>>::parse
+calls=2 0 
+0 102725 27093 23929 867 33 164 18 0 102
+0 56 26 26 7 0 1
+cfn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<<alloc::collections::btree::map::BTreeMap<_, _> as serde_core::de::Deserialize>::deserialize::MapVisitor<alloc::string::String, figment::value::value::Value>>
+calls=2 0 
+0 42258 11929 9084 202 7 33 1 0 6
+0 16 10 3 2
+
+fn=<toml_edit::parser::state::ParseState>::on_std_header
+0 15 1 7 2
+cfn=<toml_edit::parser::state::ParseState>::finalize_table
+calls=2 0 
+0 188 70 71 20 0 4
+0 29 6 10 3
+cfn=<toml_edit::parser::state::ParseState>::descend_path
+calls=2 0 
+0 23 8 10 2
+0 62 25 17 8
+
+fn=toml_edit::parser::strings::basic_string
+0 156 18 72 1 0 1
+cfn=winnow::combinator::core::opt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::strings::basic_chars>::{closure#0}
+calls=12 0 
+0 2128 359 222 19 0 3
+0 108 24 36 4 0 1
+cfn=winnow::combinator::core::opt::<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, alloc::borrow::Cow<str>, winnow::error::ErrMode<winnow::error::ContextError>, toml_edit::parser::strings::basic_chars>::{closure#0}
+calls=12 0 
+0 1488 510 462 18
+0 216 102 42 7
+
+fn=toml_edit::parser::value::value::{closure#0}
+0 260 20 160 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 870 180 140 5 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 160 140
+
+fn=<core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+0 2145 301 253 30
+
+fn=<toml_edit::parser::datetime::partial_time as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+0 121 0 77 2
+cfn=<toml_edit::parser::datetime::time_hour as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=22 0 
+0 1680 389 332 19 0 1 0 0 1
+0 399 199 132 7 1
+
+fn=<str>::replace::<char>
+0 330 0 220 8
+cfn=<core::str::pattern::CharSearcher as core::str::pattern::Searcher>::next_match
+calls=22 0 
+0 730 168 154 7
+0 165 66 11 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=22 255 
+0 184 29 18 9
+0 198 99 44 1
+cfn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+calls=22 0 
+0 1671 381 294 35 0 0 4
+0 44 22 11
+
+fn=<figment::figment::Figment>::select::<alloc::string::String>
+0 17 3 8 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 13 3 2
+0 4 2 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 16 8 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8 0 0 3
+
+fn=core::ptr::drop_glue::<figment::value::value::Value>
+0 452 183 132 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=12 3359 
+0 636 174 78 0 1
+0 7 0 4 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 62 14 15 10
+0 186 62 40 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=40 3359 
+0 2015 560 265
+0 80 0 20
+cfn=core::ptr::drop_glue::<figment::value::value::Value>'2
+calls=40 0 
+0 1008 338 200 1
+0 60 0 20
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=40 0 
+0 1273 373 335 2
+0 61 20
+
+fn=core::ptr::drop_glue::<figment::value::value::Value>'2
+0 416 172 120
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=12 3359 
+0 592 166 80 1
+
+fn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+0 67 13 24 9 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 17 14 1 1
+
+fn=<arc_swap::debt::list::LocalNode>::with::<arc_swap::strategy::hybrid::HybridProtection<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::load::{closure#0}>
+0 32 10 4 2
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::load::{closure#0}
+calls=4 0 
+0 62 18 6 4
+
+fn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>>>::wait_for_readers::{closure#0}>::{closure#0}
+0 322 72 56 7 0 0 1
+
+fn=core::ptr::drop_glue::<std::sync::once_lock::OnceLock<arc_swap::ArcSwapAny<alloc::sync::Arc<alloc::vec::Vec<dynamic_config::cell::Registered<instructions::Once>>>>>>
+0 11 4 2 1 0 0 1
+
+fn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>>>::wait_for_readers::{closure#0}>::{closure#0}
+0 149 34 26 9 0 0 9
+
+fn=main
+cfn=std::rt::lang_start_internal
+calls=1 0 
+0 199532 52930 42221 1804 128 310 55 0 112
+
+fn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0 40 4 8 2 0 1
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=4 0 
+0 143 34 31 3
+0 45 14 8 4
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=2 0 
+0 413 86 58 8 1 2 0 0 2
+0 230 28 35 22
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=22 0 
+0 1352 304 239 13 0 0 4
+0 99 55 22
+
+fn=<&str as core::fmt::Display>::fmt
+0 15 9 0 1 2
+cfn=<core::fmt::Formatter>::pad
+calls=6 0 
+0 318 96 68 15 2 1
+
+fn=<alloc::raw_vec::RawVec<toml_edit::key::Key>>::grow_one
+0 315 42 63 1
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=42 0 
+0 1890 420 357 4
+0 189 105 42 1
+
+fn=<toml_edit::parser::state::ParseState>::on_keyval
+0 320 20 140 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 100 0 20
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 500 160 100 4
+cfn=<toml_edit::item::Item>::span
+calls=40 0 
+0 686 140 60 14 1
+0 320 80 80 1
+cfn=<toml_edit::parser::state::ParseState>::descend_path
+calls=40 0 
+0 460 160 200
+0 160 80 20 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=40 3359 
+0 1700 500 280 5
+0 360 160 20 2
+cfn=<indexmap::map::IndexMap<toml_edit::key::Key, toml_edit::item::Item>>::entry
+calls=40 0 
+0 5557 1032 825 64 3
+0 140 40 20
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=40 255 
+0 600 200 160
+0 80 20 20 1
+cfn=<indexmap::map::core::entry::VacantEntry<toml_edit::key::Key, toml_edit::item::Item>>::insert
+calls=40 0 
+0 12245 2983 2167 109 16 125 8 0 99
+0 60 0 20
+
+fn=<toml_edit::item::Item>::span
+0 2124 438 189 15 1
+
+fn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>
+0 11 1 7 1
+cfn=<toml_edit::item::Item>::span
+calls=2 0 
+0 22 6 3
+0 44 14 9 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 21 5 9 2
+cfn=<figment::value::de::ValueVisitor as serde_core::de::Visitor>::visit_map::<toml_edit::de::table::TableMapAccess>
+calls=2 0 
+0 40368 11374 8653 156 5 28 1 0 6
+0 38 20 13 1
+
+fn=<toml_edit::de::value::ValueDeserializer as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>'2
+0 220 20 140 0 0 1 0 0 1
+cfn=<toml_edit::item::Item>::span
+calls=40 0 
+0 686 140 60
+0 1515 566 337 10 0 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+0 1452 363 361 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=172 73 
+0 1899 428 0 6 0 0 1
+0 1515 75 176 3
+cfn=<alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, figment::value::value::Value>>::insert_entry
+calls=42 0 
+0 3027 958 893 35 2 22
+0 4515 1304 923 5 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=544 73 
+0 5984 1360 0 1
+0 3586 132 58 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14
+0 1712 758 452 8 0 16
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=8 3294 
+0 180 48 28 0 1
+0 152 36 40 3 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=8 255 
+0 88 24 16 0 0 1
+0 32 8 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=8 255 
+0 120 40 32 0 0 3
+0 352 144 132 10 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 90 24 14 0 1
+0 158 28 54 8 0 5
+
+fn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+0 637 144 201 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 47 11 3 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 216 2 127 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 2 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 85 25 14
+0 1441 456 390 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 170 50 28
+0 83 19 5 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=6 3359 
+0 255 75 42
+0 413 5 242 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 170 50 28
+0 1521 587 346 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 170 50 28
+0 83 19 5 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=6 3359 
+0 255 75 42
+0 413 5 242 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 170 50 28
+0 338 294 2 1
+
+fn=<figment::profile::Profile>::collect
+0 18 4 9 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 29 12 13 2 0 5
+
+fn=dynamic_config::loader::aliases_pass::apply_aliases
+0 14 2 7 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=2 255 
+0 30 10 8
+0 10 7 0 1
+
+fn=<dynamic_config::builder::Installer<instructions::Pool>>::install
+0 21 6 10 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 45 12 7
+0 21 4 9 1 1
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Pool>>>::wait_for_readers
+calls=2 0 
+0 176 38 35 11 4 1
+0 7 0 4 1
+cfn=<arc_swap::debt::list::LocalNode>::with::<arc_swap::strategy::hybrid::HybridProtection<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::load::{closure#0}>
+calls=2 0 
+0 47 14 5 6
+0 17 1 5 1 1
+cfn=<std::sys::pal::unix::time::Timespec>::now
+calls=1 0 
+0 27 9 3 3 3
+0 4 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 181 39 22 2
+0 16 3 8 1
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::CaS<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::compare_and_swap::<&core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>
+calls=2 0 
+0 298 68 58 16 1 0 1
+0 38 7 8 4
+cfn=<alloc::sync::Arc<instructions::Once>>::drop_slow
+calls=1 0 
+0 90 27 15 1 0 0 1
+0 20 4 2 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 15 3 7 1
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>>>::wait_for_readers
+calls=2 0 
+0 189 41 39 10 0 0 1
+0 7 1 2 1
+cfn=<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>::drop_slow
+calls=1 0 
+0 96 29 16 1 0 0 1
+0 17 6 3 1
+cfn=<alloc::sync::Arc<instructions::Pool>>::drop_slow
+calls=1 0 
+0 204 60 30
+0 10 7 0 1
+
+fn=<dynamic_config::builder::Builder<instructions::Pool>>::write_cache
+0 17 8 6 2 1
+
+fn=instructions::reload_twenty_keys::__iai_callgrind_wrapper_mod::reload_twenty_keys
+0 12 1 5 2 0 0 2
+cfn=<dynamic_config::builder::Builder<instructions::Pool>>::load
+calls=1 0 
+0 196231 52085 41613 1702 109 309 19 0 112
+0 13 5 4 2 2 0 1
+cfn=<dynamic_config::builder::Installer<instructions::Pool>>::install
+calls=1 0 
+0 1591 392 296 67 11 1 4
+0 4 1 2
+cfn=<dynamic_config::builder::Builder<instructions::Pool>>::write_cache
+calls=1 0 
+0 17 8 6 2 1
+0 9 5 1 1 1 0 1
+cfn=core::ptr::drop_glue::<dynamic_config::builder::Builder<instructions::Pool>>
+calls=1 0 
+0 1655 433 294 28 4 0 28
+
+fn=core::ptr::drop_glue::<dynamic_config::cell::ConfigCell<instructions::Pool>>
+0 12 1 5 2 0 0 2
+cfn=core::ptr::drop_glue::<std::sync::once_lock::OnceLock<arc_swap::ArcSwapAny<alloc::sync::Arc<alloc::vec::Vec<dynamic_config::cell::Registered<instructions::Once>>>>>>
+calls=1 0 
+0 11 4 2 1 0 0 1
+0 9 1 3
+cfn=<arc_swap::debt::Debt>::pay_all::<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::cell::SnapshotMeta>>>>::wait_for_readers::{closure#0}>
+calls=1 0 
+0 176 39 33
+0 7 1 2 1 0 0 1
+cfn=<alloc::sync::Arc<instructions::Once>>::drop_slow
+calls=1 0 
+0 90 27 15
+0 6 1 1
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>>>::wait_for_readers
+calls=1 0 
+0 189 41 39
+0 7 1 2
+cfn=<alloc::sync::Arc<dynamic_config::reload::ReloadReason>>::drop_slow
+calls=1 0 
+0 96 29 16
+0 6 1 1
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<core::option::Option<alloc::sync::Arc<dynamic_config::reload::FailureStatus>>>>::wait_for_readers
+calls=1 0 
+0 177 39 37 12 0 0 12
+0 15 6 1 2 0 0 2
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Pool>>>::wait_for_readers
+calls=1 0 
+0 176 38 35
+0 5 1 2
+cfn=<alloc::sync::Arc<instructions::Pool>>::drop_slow
+calls=1 0 
+0 204 60 30
+0 1
+
+fn=<dynamic_config::source::Format>::from_path
+0 12 1 7 1 1
+cfn=core::str::converts::from_utf8
+calls=2 0 
+0 86 15 6 4 1
+0 22 5 6 2
+cfn=<std::path::Components as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+calls=2 0 
+0 257 44 18 11
+0 54 9 1 1
+cfn=core::str::converts::from_utf8
+calls=2 0 
+0 70 8 6
+0 5 4 1
+cfn=<dynamic_config::source::Format>::from_extension
+calls=2 0 
+0 223 54 35 4
+0 25 9 2 3
+
+fn=dynamic_config::loader::sections::validated_profile
+0 38 14 14 3
+
+fn=<std::sys::fs::unix::File>::open_c
+0 39 8 9 5 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/open64.c
+cfn=open
+calls=2 30 
+0 36 8 5 3
+0 24 11 2 2
+
+fn=std::io::default_read_to_end::small_probe_read::<std::fs::File>
+0 21 2 9 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/read.c
+cfn=read
+calls=2 25 
+0 8 2
+0 24 9 1 2
+
+fn=<indexmap::map::IndexMap<toml_edit::key::Key, toml_edit::item::Item>>::entry
+0 588 105 294 25 2
+cfn=<core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+calls=42 0 
+0 1214 178 144 28
+0 105 0 42
+cfn=<core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
+calls=42 0 
+0 931 123 109 2
+0 2079 294 42 8 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=42 255 
+0 630 210 168
+0 252 168 63 1
+
+fn=winnow::token::take_while::<core::ops::range::RangeInclusive<u8>, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::ErrMode<winnow::error::ContextError>, core::ops::range::RangeInclusive<usize>>::{closure#0}
+0 1193 263 119 10 0 1
+
+fn=<winnow::error::ErrMode<winnow::error::ContextError>>::map::<winnow::error::ContextError, <winnow::error::ErrMode<winnow::error::ContextError> as winnow::error::AddContext<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, winnow::error::StrContext>>::add_context::{closure#0}>
+0 792 231 264 3
+cfn=<alloc::raw_vec::RawVec<winnow::error::StrContext>>::grow_one
+calls=66 0 
+0 3762 891 726 2 2
+0 792 396 264 2 0 1
+
+fn=<winnow::combinator::impls::Map<toml_edit::parser::numbers::integer, <toml_edit::value::Value as core::convert::From<i64>>::from, winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, i64, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>> as winnow::parser::Parser<winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>, toml_edit::value::Value, winnow::error::ErrMode<winnow::error::ContextError>>>::parse_next
+0 198 33 77 9
+cfn=<toml_edit::parser::numbers::dec_int as core::ops::function::FnMut<(&mut winnow::stream::stateful::Stateful<winnow::stream::locating::LocatingSlice<&winnow::stream::bstr::BStr>, toml_edit::parser::prelude::RecursionCheck>,)>>::call_mut
+calls=22 0 
+0 3685 959 1242 0 0 2 0 0 2
+0 77 33 11 2
+cfn=<str>::replace::<char>
+calls=22 0 
+0 3322 765 752 62 0 0 4
+0 66 22 11
+cfn=<i64>::from_ascii_radix
+calls=22 0 
+0 569 58 33 8
+0 44 22 11
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=22 3359 
+0 935 275 154
+0 187 99 55 5
+
+fn=<i64>::from_ascii_radix
+0 569 58 33 8
+
+fn=<figment::figment::Figment>::extract::<instructions::Pool>
+0 12 1 7 1
+cfn=<figment::figment::Figment>::merged
+calls=2 0 
+0 30107 7260 4596 164 14 58
+0 716 106 85 13 1
+cfn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>
+calls=36 0 
+0 414 180 126 3 1
+0 43 21 1 2
+cfn=<core::marker::PhantomData<alloc::string::String> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+calls=2 0 
+0 97 26 19 6
+0 8 4 1 2
+cfn=<core::marker::PhantomData<u16> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+calls=2 0 
+0 38 15 6 8 2
+0 28 11 8 6 0 1
+cfn=core::ptr::drop_glue::<figment::value::value::Value>
+calls=2 0 
+0 4788 1378 911 18
+0 8 7
+
+fn=<arc_swap::debt::Debt>::pay_all::<alloc::sync::Arc<instructions::Pool>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Pool>>>::wait_for_readers::{closure#0}>::{closure#0}
+0 296 66 48 8 3 1
+
+fn=<alloc::sync::Arc<instructions::Pool>>::drop_slow
+0 12 6 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 212 58 26
+0 14 6 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+
+totals: 199532 52930 42221 1804 128 310 55 0 112

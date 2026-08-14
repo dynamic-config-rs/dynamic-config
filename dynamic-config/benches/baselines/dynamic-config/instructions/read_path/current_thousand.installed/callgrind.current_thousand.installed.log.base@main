@@ -1,0 +1,29 @@
+==10745== Callgrind, a call-graph generating cache profiler
+==10745== Copyright (C) 2002-2017, and GNU GPL'd, by Josef Weidendorfer et al.
+==10745== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==10745== Command: /home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5 --iai-run read_path 1 0 instructions::read_path::current_thousand
+==10745== Parent PID: 10740
+==10745== 
+--10745-- warning: L3 cache found, using its data for the LL simulation.
+--10745-- warning: specified LL cache: line_size 64  assoc 1  total_size 335,544,320
+--10745-- warning: simulated LL cache: line_size 64  assoc 1  total_size 268,435,456
+==10745== For interactive control, run 'callgrind_control -h'.
+==10745== 
+==10745== Events    : Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+==10745== Collected : 75023 20008 16007 11 0 0 11
+==10745== 
+==10745== I   refs:      75,023
+==10745== I1  misses:        11
+==10745== LLi misses:        11
+==10745== I1  miss rate:   0.01%
+==10745== LLi miss rate:   0.01%
+==10745== 
+==10745== D   refs:      36,015  (20,008 rd + 16,007 wr)
+==10745== D1  misses:         0  (     0 rd +      0 wr)
+==10745== LLd misses:         0  (     0 rd +      0 wr)
+==10745== D1  miss rate:    0.0% (   0.0%   +    0.0%  )
+==10745== LLd miss rate:    0.0% (   0.0%   +    0.0%  )
+==10745== 
+==10745== LL refs:           11  (    11 rd +      0 wr)
+==10745== LL misses:         11  (    11 rd +      0 wr)
+==10745== LL miss rate:     0.0% (   0.0%   +    0.0%  )

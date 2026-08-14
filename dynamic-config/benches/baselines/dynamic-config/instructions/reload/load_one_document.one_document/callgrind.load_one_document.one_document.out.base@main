@@ -1,0 +1,1881 @@
+# callgrind format
+version: 1
+creator: callgrind-3.22.0
+pid: 10747
+cmd:  /home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5 --iai-run reload 1 0 instructions::reload::load_one_document
+part: 1
+thread: 1
+
+
+desc: I1 cache: 32768 B, 64 B, 8-way associative
+desc: D1 cache: 32768 B, 64 B, 8-way associative
+desc: LL cache: 8388608 B, 64 B, 16-way associative
+
+desc: Timerange: Basic block 0 - 79012
+desc: Trigger: Program termination
+
+positions: line
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+summary: 24151 6293 4888 663 36 148 652 17 75
+
+
+ob=/usr/lib/x86_64-linux-gnu/libc.so.6
+fl=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+fn=__memcmp_avx2_movbe
+73 13 0 0 1 0 0 1
+80 13
+81 13
+156 13 0 0 1 0 0 1
+166 13 13
+167 13 13
+168 13
+171 26 13
+401 13 0 0 2 0 0 1
+402 13
+407 13
+408 13
+409 13
+410 13
+411 13
+414 13 13
+415 13 13
+416 13
+417 13
+420 13
+421 13
+
+fl=./io/../sysdeps/unix/sysv/linux/getcwd.c
+fn=getcwd
+49 14 1 8 1 0 0 1
+55 2
+80 5 1 0 1 0 0 1
+81 5 2
+76 1 0 1 1 0 0 1
+66 2
+131 12 10 0 2 0 0 2
+84 3 1 0 2 0 0 2
+88 4 1 1
+
+fl=./csu/../csu/libc-start.c
+fn=__libc_start_main@@GLIBC_2.34
+cfi=./csu/../sysdeps/nptl/libc_start_call_main.h
+cfn=(below main)
+calls=1 29 
+360 24151 6293 4888 663 36 148 652 17 75
+
+fl=./malloc/./malloc/malloc.c
+fn=alloc_perturb
+1985 72 24
+1987 24 24
+
+fn=_int_realloc
+4914 16 0 12 1 0 1
+4925 8 2
+4926 10 2
+4927 8
+4933 4
+4935 4
+4936 6 2
+4938 8
+4941 4
+4955 1
+5008 2
+4955 2
+5012 1
+4955 1
+5012 2
+5010 2
+5029 1
+5030 18 14
+4951 2 1
+5021 1 0 0 1 0 0 1
+5017 1
+5020 1
+5025 1
+5021 1
+5020 1 0 1
+5021 1 0 1
+5024 1 0 1
+5025 2 0 1
+cfn=_int_free
+calls=1 4495 
+5025 54 15 8
+5025 1
+4952 1 0 0 1 0 0 1
+4953 1
+4951 2
+4955 4 0 0 1 0 0 1
+4957 1
+4955 1
+4957 1
+4955 2
+4956 1
+4955 2 0 1
+4959 1
+4956 1 0 1
+4957 1 0 1 0 0 1 0 0 1
+4959 1
+
+fn=realloc
+3407 33 0 18
+3413 6 3
+3417 6
+3424 6
+5241 3 3
+3433 3
+5242 9
+5241 6
+5243 6 3
+3489 1
+3538 27 21
+5244 3
+3441 6
+3443 2
+3444 4
+3456 6 4
+fi=./malloc/./malloc/arena.c
+153 6
+fe=./malloc/./malloc/malloc.c
+3464 8
+3465 4
+1326 4
+1345 12
+3475 4
+3506 4 2
+3508 12 0 4 1
+cfn=_int_realloc
+calls=3 4914 
+3508 185 36 27 4 0 2 3 0 1
+3508 2
+3509 10 2 0 1
+fi=./malloc/./malloc/arena.c
+153 8 2
+fe=./malloc/./malloc/malloc.c
+3509 4
+
+fn=malloc
+3294 336 0 168 0 0 5 0 0 3
+3301 84 42
+1326 84
+1345 196
+3311 56
+3313 168 84
+3316 84 42
+3326 48 24
+3354 144 120
+3318 126 42
+3178 36 18
+3182 36
+3186 18
+3190 18
+3186 54 18 18
+3190 18 0 18
+3191 18 0 18
+3354 108 90
+3328 96 0 24 0 0 1
+cfn=_int_malloc
+calls=36 3846 
+3328 3324 606 312 1 0 33 0 0 27
+3329 120 24
+fi=./malloc/./malloc/arena.c
+153 48
+fe=./malloc/./malloc/malloc.c
+
+fn=_int_malloc
+3846 264 24 168 0 0 6 0 0 3
+1326 48
+1345 135
+3887 30
+1794 15 15
+3914 30
+3979 12
+3916 24
+3919 6 6
+3921 12
+3977 18
+4060 24 24
+4059 24
+4058 24
+4059 48 0 24 0 0 4 0 0 3
+4060 48 24
+4058 48 24
+4070 120 24 24
+3887 18
+3914 18 9
+3980 24
+3982 24 24
+3980 24
+3982 48
+3914 27 0 0 1
+1345 9
+3919 18 9
+3921 18
+3930 45
+4487 288 216
+4257 72
+4263 24
+4334 72
+4330 24
+4331 24
+4332 24
+4331 24
+4332 24
+4333 48 24
+4334 72
+4339 96
+4343 72
+4346 96 24
+4343 72
+4346 96 24
+4343 72
+4346 60 15
+4343 30
+4443 24 24
+4444 48 24
+4446 48 24
+4449 72
+4070 9
+3979 54
+4460 72 0 24 0 0 4 0 0 2
+cfn=alloc_perturb
+calls=39 1985 
+4460 96 48
+4461 24
+4452 48
+4454 48
+4453 24 0 24
+4454 24
+4451 24
+4454 24
+4456 24
+4454 96 0 24
+4456 24 0 24 0 0 19 0 0 19
+4459 48
+
+fn=free
+3359 42
+3363 84
+3359 126 0 84
+3373 42
+3359 126 0 84
+3371 42 42
+3375 42 42
+3371 42 42
+3375 84
+3392 126 84
+fi=./malloc/./malloc/arena.c
+153 126
+fe=./malloc/./malloc/malloc.c
+3398 126 0 42
+cfn=_int_free
+calls=56 4495 
+3398 2413 658 329 2 0 0 1
+3401 42 0 42
+3402 252 210
+
+fn=_int_free
+4495 301 0 172 1
+4499 129 43
+4505 172
+4506 86
+4510 215
+4518 172 86
+4517 86
+4518 86 43
+4547 43 43
+4527 43 43
+4521 43
+4527 86 43
+4547 172 43
+1792 7 7
+4561 14
+4572 28 7 0 1 0 0 1
+4574 21 7
+1992 7 7
+4593 7
+1992 14
+4595 7 0 7
+4596 7
+4600 14
+4602 7 7
+4600 7 7
+4602 7
+4606 14
+4608 21 0 7
+4609 7 0 7
+4628 26
+4658 258 215
+3163 36 36
+3167 36
+3163 36 0 36
+3165 144 36 36
+3166 36 0 36
+3167 36 0 36
+4550 36
+
+fl=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+fn=__memcpy_avx_unaligned_erms
+255 52
+256 52
+262 52
+263 52
+265 23 23
+266 23
+267 23
+270 2 2
+271 2 0 2
+272 2 0 2
+275 4 2
+305 29
+306 29
+308 27
+309 27
+311 16
+315 16
+316 5
+317 5
+318 3 3 0 0 1 0 0 1
+319 3
+320 3 3
+321 3 0 3
+323 3 0 3
+325 5 5
+331 11 11 0 0 1 0 0 1
+332 11 11
+333 11 0 11
+334 11 0 11
+335 11 11
+342 2 2 0 0 1 0 0 1
+343 2 2
+344 2 0 2 0 0 1 0 0 1
+345 2 0 2
+347 2 2
+364 11 11
+365 11 11
+366 11 0 11
+367 11 0 11
+368 11 11
+375 3 3
+376 3 3
+377 3 0 3 0 0 2 0 0 1
+378 3 0 3 0 0 1 0 0 1
+379 3 0 3 0 0 1
+380 3 0 3
+381 6 3
+386 21 21
+387 21
+392 21
+393 21
+395 21 21
+396 21
+397 21
+399 18 18 0 0 1
+400 18 18
+401 18 18
+402 18 18
+403 18 18
+404 18 18
+405 18 0 18 0 0 5
+406 18 0 18 0 0 2
+407 18 0 18 0 0 4
+408 18 0 18 0 0 3
+409 18 0 18 0 0 5
+410 18 0 18 0 0 6
+411 18 0 18
+412 18 0 18
+413 36 18
+
+fl=./csu/../sysdeps/nptl/libc_start_call_main.h
+fn=(below main)
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=main
+calls=1 0 
+58 24151 6293 4888 663 36 148 652 17 75
+
+fl=./io/../sysdeps/unix/sysv/linux/statx.c
+fn=statx
+27 4 0 0 1 0 0 1
+28 10
+32 4
+38 4 2
+
+fl=./io/../sysdeps/unix/sysv/linux/open64.c
+fn=open
+30 2 0 1 1 0 0 1
+33 1
+30 10 1 4 0 0 1
+33 6 0 0 1 0 0 1
+41 9 1
+43 8 6 0 1 0 0 1
+
+fl=./io/../sysdeps/unix/sysv/linux/close.c
+fn=close
+26 1 0 0 1 0 0 1
+27 6 1
+28 1 1
+
+fl=./string/../sysdeps/x86_64/multiarch/strlen-avx2.S
+fn=__strlen_avx2
+52 1
+65 1
+66 1
+67 1
+70 1
+72 1
+73 1
+76 1 1
+77 1
+85 1
+86 1
+143 1
+156 1
+157 1
+158 1
+164 2 1
+221 1
+236 1 1
+242 1
+243 1
+244 1
+246 1 1 0 0 1 0 0 1
+247 1
+248 1
+249 1
+
+fl=./io/../sysdeps/unix/sysv/linux/read.c
+fn=read
+25 2 0 0 1 0 0 1
+26 12 2
+27 2 2
+
+ob=/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+fl=???
+fn=0x000000000001f540
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=(below main)
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+ob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+fl=???
+fn=instructions::load_one_document::one_document
+cfn=instructions::load_one_document::__iai_callgrind_wrapper_mod::load_one_document
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=instructions::load_one_document::__iai_callgrind_wrapper_mod::load_one_document
+0 31 0 24 5 0 0 5
+cfn=dynamic_config::loader::load::<instructions::Pool>
+calls=1 0 
+0 23998 6256 4849 656 36 148 646 17 75
+0 11 5 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 106 29 13
+0 5 3 0 1 0 0 1
+
+fn=std::sys::fs::unix::try_statx
+0 70 6 42 4 1 8 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/statx.c
+cfn=statx
+calls=2 27 
+0 22 2 0 1 0 0 1
+0 149 48 43 6 0 2 6
+
+fn=core::fmt::write
+0 123 15 30 3 1 2 3
+cfn=<alloc::string::String as core::fmt::Write>::write_str
+calls=3 0 
+0 232 64 49
+0 57 12 12 3 0 0 3
+cfn=<&str as core::fmt::Display>::fmt
+calls=3 0 
+0 333 105 68 13 4 3 13 2
+0 45 21 3 1 0 0 1
+
+fn=<serde_json::read::StrRead as serde_json::read::Read>::parse_str
+0 621 109 84 11 0 3 11 0 3
+
+fn=__rustc::__rust_alloc
+0 45 5 0 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=5 3294 
+0 778 164 79 1 0 4 0 0 4
+
+fn=dynamic_config::loader::sections::merge_profile_variant
+0 18 7 6 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 2
+
+fn=<dynamic_config::source::LoadSpec>::full_env_prefix
+0 20 7 6 3 0 0 3
+
+fn=dynamic_config::loader::sections::merge_file
+0 19 2 7 4 0 1 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 4
+0 4 1 1 0 1
+cfn=<figment::providers::data::Data<_>>::file::find
+calls=1 0 
+0 1497 335 244 54 5 22 51 4 3
+0 18 5 9 1 0 0 1
+cfn=<figment::figment::Figment>::provide::<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>
+calls=1 0 
+0 12771 3219 2566 329 17 84 325 6 57
+0 8 7 0 1 0 0 1
+
+fn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::parse_integer
+0 126 16 8 5 0 0 5
+cfn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::parse_number
+calls=2 0 
+0 64 20 14 4 0 0 4
+
+fn=<figment::profile::ProfileTag as core::convert::From<&figment::profile::Profile>>::from
+0 32 12 0 2 0 0 2
+
+fn=<figment::figment::Figment>::merged
+0 18 4 6 2 0 0 2
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::alloc::Global>
+calls=1 0 
+0 1733 401 261 22 2 9 22 2 8
+0 12 3 4 2 0 0 2
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=1 0 
+0 94 18 17 11 1 0 11 1
+0 9 1 3 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=1 0 
+0 94 18 17
+0 9 3 3 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+calls=1 0 
+0 562 111 78 14 0 0 14
+0 6 2 1 1 0 0 1
+cfn=<figment::profile::Profile>::is_custom
+calls=1 0 
+0 8 3 0 2 0 0 2
+0 11 2 3 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+calls=1 0 
+0 1110 321 277 39 0 5 38 0 5
+0 9 2 3 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+calls=1 0 
+0 997 305 266 6 0 0 6
+0 10 2 6 1 0 0 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+calls=1 0 
+0 159 49 39 10 0 0 10
+0 8 6 0 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>
+0 13 1 7 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 34 10 9 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=3 3294 
+0 552 114 54
+0 21 3 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=3 255 
+0 45 9 6
+0 107 34 28 4 2 3 4 2 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 190 38 18 0 0 1 0 0 1
+0 7 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 12 6 1 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>'2
+calls=1 0 
+0 470 104 67 2 0 5 2 0 4
+0 30 12 13 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>'2
+0 13 1 7
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 181 36 18 0 0 2 0 0 1
+0 22 4 7 0 0 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 184 38 18 0 0 1 0 0 1
+0 7 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 50 21 13 2 0 1 2 0 1
+
+fn=<core::marker::PhantomData<alloc::string::String> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+0 20 5 5 3 1 0 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 7 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 12 5 4 2 0 0 2
+
+fn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>
+0 67 14 15 8 0 0 8
+cfn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>'2
+calls=1 0 
+0 23 10 7 1 0 0 1
+0 12 9 1 1 0 0 1
+
+fn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>'2
+0 23 10 7 1 0 0 1
+
+fn=<core::marker::PhantomData<u16> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+0 38 15 6 8 1 0 8 1
+
+fn=instructions::main
+cfn=instructions::reload::__run
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=dynamic_config::loader::load::<instructions::Pool>
+0 9 1 5 2 1 1 2 0 1
+cfn=dynamic_config::loader::merged
+calls=1 0 
+0 15536 3938 3113 438 28 133 430 11 61
+0 8 3 1 2 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 5 0 3
+cfn=<figment::figment::Figment>::extract::<instructions::Pool>
+calls=1 0 
+0 6375 1704 1308 176 6 14 175 6 13
+0 9 3 3 2 0 0 2
+cfn=core::ptr::drop_glue::<figment::figment::Figment>
+calls=1 0 
+0 2020 592 408 36 1 0 36
+0 6 5
+
+fn=alloc::fmt::format::format_inner
+0 205 11 17 6 3 0 5 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 90 24 14
+0 14 1 4 1 0 1 1
+cfn=core::fmt::write
+calls=1 0 
+0 406 107 84 20 4 5 20 1
+0 16 2 8 1
+cfn=core::fmt::write
+calls=2 0 
+0 384 110 78 0 1 0 0 1
+0 42 24 6 0 0 1
+
+fn=<core::fmt::Formatter>::pad
+0 75 30 18 4 0 1 4
+cfn=<alloc::string::String as core::fmt::Write>::write_str
+calls=3 0 
+0 243 66 50 8 2 2 8 2
+
+fn=<serde_json::de::MapAccess<_> as serde_core::de::MapAccess>::next_key_seed::has_next_key::<serde_json::read::StrRead>
+0 618 133 99 5 0 2 5 0 2
+
+fn=<figment::figment::Figment>::select::<alloc::string::String>
+0 17 3 8 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 4 2 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 16 8 3 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+
+fn=<alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0 29 6 12 3 0 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 1
+0 10 2 3 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 1
+0 44 22 14 4 0 0 4
+
+fn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as figment::coalesce::Coalescible>::coalesce
+0 56 5 31 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 49 13 15
+0 17 0 11 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 27 12 9 4 0 0 4
+0 9 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=3 0 
+0 208 65 52
+0 165 62 54 7 0 0 7
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=3 0 
+0 389 108 86
+0 23 5 2 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 54 24 18
+0 37 6 10 3 0 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 27 12 9
+0 13 0 4 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 49 13 15 6 0 0 6
+0 9 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=3 0 
+0 208 65 52
+0 138 53 48 4 0 0 4
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=3 0 
+0 525 132 97 13 0 5 12 0 5
+0 18 5 2 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 54 24 18
+0 32 22 4 1 0 0 1
+
+fn=core::str::converts::from_utf8
+0 111 23 6
+
+fn=std::env::current_dir
+0 12 1 7 2 0 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 181 36 18 0 0 5 0 0 1
+0 8 1 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/getcwd.c
+cfn=getcwd
+calls=1 49 
+0 48 16 10 7 0 0 7
+0 4 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/strlen-avx2.S
+cfn=__strlen_avx2
+calls=1 52 
+0 26 4 0 0 1 0 0 1
+0 9 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=1 3407 
+0 203 40 26 4 0 0 1
+0 19 10 5 2 0 1 2
+
+fn=<alloc::raw_vec::RawVecInner>::finish_grow
+0 42 1 16 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=1 3407 
+0 42 10 6
+0 10 2 2 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 87 24 14 0 0 1
+0 67 16 16 5 0 0 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=realloc
+calls=1 3407 
+0 145 26 17 2 0 2 2 0 1
+0 18 7 3 1 0 0 1
+
+fn=std::sys::fs::metadata
+0 14 1 5 1 0 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 22 6 4 0 0 2
+0 106 12 2 4 0 0 4
+cfn=std::sys::fs::unix::try_statx
+calls=1 0 
+0 121 28 43 11 1 6 11 1
+0 6 2 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 8 5
+
+fn=<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>> as figment::provider::Provider>::data
+0 22 6 9 5 1 1 5
+cfn=std::fs::read_to_string::inner
+calls=1 0 
+0 753 162 129 36 0 8 36 0 3
+0 8 3 1
+cfn=<figment::providers::data::Json as figment::providers::data::Format>::from_str::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+calls=1 0 
+0 8059 2018 1647 155 5 44 153 2 42
+0 4 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 14 9 1 2 1 0 2
+cfn=<figment::profile::Profile>::collect
+calls=1 0 
+0 228 52 40 4 0 2 4 0 2
+0 27 4 12 4 0 0 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 49 13 15 9 0 0 9
+0 2 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 120 39 24 1 0 0 1
+0 32 8 11 3 0 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 49 13 15 0 0 1
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 120 39 24
+0 57 21 19 6 0 0 6
+cfn=alloc::fmt::format::format_inner
+calls=1 0 
+0 330 80 58 2 1 0 0 1
+0 7 3 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 190 38 18 0 0 1 0 0 1
+0 7 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 8 2 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 5 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+calls=1 0 
+0 226 50 36 6 0 4 6 0 4
+0 7 4 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 4 0 1 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 27 12 9
+0 15 3 1 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 27 12 9
+0 9 3 3 2 0 0 2
+
+fn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::parse_number
+0 64 20 14 4 0 0 4
+
+fn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::end_map
+0 54 15 3 3 0 0 3
+
+fn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>
+0 49 9 18 2 0 0 2
+cfn=<figment::profile::ProfileTag as core::convert::From<&figment::profile::Profile>>::from
+calls=3 0 
+0 24 9 0 2 0 0 2
+0 45 6 4 1 0 0 1
+cfn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>'2
+calls=1 0 
+0 39 13 7
+0 37 19 0 6 0 0 6
+
+fn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>'2
+0 17 3 6
+cfn=<figment::profile::ProfileTag as core::convert::From<&figment::profile::Profile>>::from
+calls=1 0 
+0 8 3
+0 14 7 1
+
+fn=dynamic_config::loader::aliases_pass::apply_aliases
+0 14 2 7 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 10 7 0 1 0 0 1
+
+fn=<uncased::borrowed::UncasedStr as core::cmp::Ord>::cmp
+0 321 27 0 5 1 0 5 1
+
+fn=core::ptr::drop_glue::<figment::figment::Figment>
+0 9 3 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 22 3 10 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+calls=1 0 
+0 49 13 15 9 0 0 9
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+calls=1 0 
+0 120 39 24 1 0 0 1
+0 11 3 1
+cfn=core::ptr::drop_glue::<figment::metadata::Metadata>
+calls=1 0 
+0 198 65 33 3 1 0 3
+0 10 4 0 1 0 0 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+calls=1 0 
+0 1513 437 306 19 0 0 19
+
+fn=std::rt::lang_start_internal
+cfn=std::rt::lang_start::<()>::{closure#0}
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=instructions::reload::__run
+cfn=instructions::load_one_document::one_document
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=dynamic_config::loader::sections::validated_profile
+0 38 14 14 3 0 3 3
+
+fn=<figment::figment::Figment>::provide::<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>
+0 25 3 11 4 1 1 4
+cfn=alloc::fmt::format::format_inner
+calls=1 0 
+0 497 119 95 26 6 7 26 3
+0 24 5 10 3 1 0 3
+cfn=<alloc::collections::btree::map::BTreeMap<figment::value::tag::Tag, figment::metadata::Metadata>>::insert
+calls=1 0 
+0 227 50 37 4 0 7 4 0 3
+0 7 1 2 1 0 0 1
+cfn=<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>> as figment::provider::Provider>::data
+calls=1 0 
+0 10677 2674 2137 242 8 61 238 3 52
+0 5 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 1
+0 4 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 1
+0 129 20 13 15 0 0 15
+cfn=<figment::value::value::Value>::map_tag::<<figment::figment::Figment>::provide<dynamic_config::loader::sections::Named<dynamic_config::loader::sections::Sections<figment::providers::data::Data<figment::providers::data::Json>>>>::{closure#1}::{closure#0}>
+calls=3 0 
+0 194 56 29 11 0 0 11
+0 22 3 3 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>> as figment::coalesce::Coalescible>::coalesce
+calls=1 0 
+0 475 148 137 15 0 0 15
+0 15 6 6 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 4 2 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 4
+0 5 4 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 15 9 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 190 38 18 0 0 1 0 0 1
+0 7 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 22 6 4 0 0 1 0 0 1
+0 22 8 12 2 0 1 2
+
+fn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+0 327 66 124 8 0 1 8
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=3 3359 
+0 255 75 42
+0 480 157 158 11 0 0 11
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+0 532 174 160 10 0 0 10
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 340 100 56
+0 100 84 4 1 0 0 1
+
+fn=core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(alloc::string::String, figment::value::value::Value), <[(alloc::string::String, figment::value::value::Value)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as core::iter::traits::collect::FromIterator<(alloc::string::String, figment::value::value::Value)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>, <figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from::{closure#0}>>::{closure#0}>::{closure#0}>
+0 47 12 12 3 0 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=2 73 
+0 44 10
+0 18 7 0 2 0 0 2
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+0 40 10 14 5 0 0 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 226 48 25 0 0 1 0 0 1
+0 50 18 22 1 0 3 1 0 3
+
+fn=<figment::figment::Figment>::extract::<instructions::Pool>
+0 12 1 7 1 0 0 1
+cfn=<figment::figment::Figment>::merged
+calls=1 0 
+0 4849 1251 984 115 3 14 114 3 13
+0 134 29 17 11 1 0 11 1
+cfn=<figment::value::de::ConfiguredValueDe as serde_core::de::Deserializer>::deserialize_ignored_any::<serde_core::de::ignored_any::IgnoredAny>
+calls=1 0 
+0 102 33 23 10 0 0 10
+0 9 4 1 2 0 0 2
+cfn=<core::marker::PhantomData<alloc::string::String> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+calls=1 0 
+0 97 26 19 6 1 0 6 1
+0 8 4 1 2 0 0 2
+cfn=<core::marker::PhantomData<u16> as serde_core::de::DeserializeSeed>::deserialize::<figment::value::de::ConfiguredValueDe>
+calls=1 0 
+0 38 15 6 8 1 0 8 1
+0 28 11 8 6 0 0 6
+cfn=core::ptr::drop_glue::<figment::value::value::Value>
+calls=1 0 
+0 1090 323 242 15 0 0 15
+0 8 7
+
+fn=core::ptr::drop_glue::<figment::metadata::Metadata>
+0 8 3 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 9 4 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 11 8 0 1 1 0 1
+
+fn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+cfn=instructions::main
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0 40 4 8 2 0 1 2
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=2 0 
+0 143 34 31 3 0 1 3
+0 45 14 8 4 0 0 4
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=1 0 
+0 193 34 27 7 0 2 7 0 1
+0 10 6 2
+
+fn=<std::path::Path>::is_file
+0 11 1 6 1 0 0 1
+cfn=std::sys::fs::metadata
+calls=1 0 
+0 307 64 63 17 1 9 17 1
+0 13 8 0 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::value::tag::Tag, figment::metadata::Metadata>>::insert
+0 17 2 7 2 0 1 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 181 36 18 0 0 4 0 0 1
+0 29 12 12 2 0 2 2 0 2
+
+fn=<figment::providers::data::Json as figment::providers::data::Format>::from_str::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+0 16 0 12 2 0 0 2
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as serde_core::de::Deserialize>::deserialize::<&mut serde_json::de::Deserializer<serde_json::read::StrRead>>
+calls=1 0 
+0 8009 2006 1630 150 5 44 148 2 42
+0 34 12 5 3 0 0 3
+
+fn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as serde_core::de::Deserialize>::deserialize::<&mut serde_json::de::Deserializer<serde_json::read::StrRead>>
+0 36 4 15 4 0 0 4
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=1 0 
+0 283 62 47 21 1 1 21 0 1
+0 3 0 1
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=1 0 
+0 58 17 12
+0 31 11 3 3 0 0 3
+cfn=<&mut serde_json::de::Deserializer<serde_json::read::StrRead> as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>
+calls=1 0 
+0 7230 1814 1466 115 4 39 113 2 38
+0 33 11 17 3 0 0 3
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=1 0 
+0 278 64 56 0 0 3 0 0 3
+0 16 6 6 2 0 0 2
+cfn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::end_map
+calls=1 0 
+0 18 5 1
+0 23 12 6 2 0 1 2
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::dedup_sorted_iter::DedupSortedIter<alloc::string::String, figment::value::value::Value, alloc::vec::into_iter::IntoIter<(alloc::string::String, figment::value::value::Value)>>>
+0 42 12 12 3 0 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+0 18 14 0 1 0 0 1
+
+fn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+0 206 46 80 9 0 0 9
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=2 3359 
+0 170 50 28
+0 98 63 15 5 0 0 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 78 20 25 9 0 0 9
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 17 14 1 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove::<figment::profile::Profile>
+0 120 18 48 3 0 0 3
+cfn=<uncased::borrowed::UncasedStr as core::cmp::Ord>::cmp
+calls=3 0 
+0 321 27 0 5 1 0 5 1
+0 43 4 5 3 0 0 3
+cfn=<alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+calls=1 0 
+0 109 32 29 8 0 0 8
+0 34 16 11 4 0 0 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 38 25 5 2 0 0 2
+
+fn=<figment::profile::Profile>::is_custom
+0 8 3 0 2 0 0 2
+
+fn=<alloc::collections::btree::map::IntoIter<figment::value::tag::Tag, figment::metadata::Metadata>>::dying_next
+0 67 13 24 9 0 0 9
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 17 14 1 1 0 0 1
+
+fn=std::rt::lang_start::<()>::{closure#0}
+cfn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=dynamic_config::loader::merged
+0 13 2 7 1 0 1 1 0 1
+cfn=dynamic_config::loader::sections::validated_profile
+calls=1 0 
+0 19 7 7 3 0 1 3
+0 29 8 9 6 2 0 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 3
+0 4 0 1
+cfn=dynamic_config::loader::merge_listed
+calls=1 0 
+0 14692 3698 2928 406 24 125 398 10 60
+0 8 3 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 13 4 4 3 1 0 3
+cfn=<dynamic_config::source::LoadSpec>::full_env_prefix
+calls=1 0 
+0 20 7 6 3 0 0 3
+0 16 5 1 5 0 0 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 3
+0 7 2 3
+cfn=dynamic_config::loader::aliases_pass::apply_aliases
+calls=1 0 
+0 54 19 15 3 0 0 3
+0 10 2 4 1 0 0 1
+cfn=alloc::fmt::format::format_inner
+calls=1 0 
+0 330 80 58 0 1 0 0 1
+0 4 0 1 1 0 0 1
+cfn=<figment::figment::Figment>::select::<alloc::string::String>
+calls=1 0 
+0 217 64 44 4 0 0 4
+0 10 7 0 1 0 0 1
+
+fn=<figment::providers::data::Data<_>>::file::find
+0 16 2 7 2 2 2 2 1
+cfn=std::env::current_dir
+calls=1 0 
+0 510 110 72 16 1 7 13 1 1
+0 16 4 4 1 0 0 1
+cfn=<std::path::Path>::_join
+calls=1 0 
+0 514 104 74 15 1 3 15 1 2
+0 4 3 1
+cfn=<std::path::Path>::is_file
+calls=1 0 
+0 331 73 69 19 1 9 19 1
+0 12 7 3 1 0 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 9 7
+
+fn=<&str as core::fmt::Display>::fmt
+0 15 9 0 1 2 0 1
+cfn=<core::fmt::Formatter>::pad
+calls=3 0 
+0 318 96 68 12 2 3 12 2
+
+fn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+0 80 0 48 1 0 1 1 0 1
+cfn=<serde_json::de::MapAccess<_> as serde_core::de::MapAccess>::next_key_seed::has_next_key::<serde_json::read::StrRead>
+calls=8 0 
+0 618 133 99 5 0 2 5 0 2
+0 62 26 15 1 1 0 1
+cfn=<serde_json::read::StrRead as serde_json::read::Read>::parse_str
+calls=5 0 
+0 500 90 70 11 0 1 11 0 1
+0 124 63 8 1 0 0 1
+cfn=__rustc::__rust_alloc
+calls=5 0 
+0 823 169 79 2 0 4 1 0 4
+0 35 5 5 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=5 255 
+0 76 15 10
+0 25 0 15
+
+fn=<&mut serde_json::de::Deserializer<serde_json::read::StrRead> as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>
+0 62 7 19 6 1 3 6 1 3
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=1 0 
+0 444 92 62 1 0 5 0 0 5
+0 9 0 3
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=3 0 
+0 992 209 142 0 0 1 0 0 1
+0 102 29 18 4 0 0 4
+cfn=<&mut serde_json::de::Deserializer<serde_json::read::StrRead> as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>'2
+calls=3 0 
+0 2963 701 562 71 1 20 70 1 20
+0 60 18 21 2 0 1 2
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=3 0 
+0 728 190 164 23 1 9 23 0 9
+0 19 7 8
+cfn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::end_map
+calls=1 0 
+0 18 5 1
+0 56 23 17
+cfn=<figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from
+calls=1 0 
+0 1766 527 445 8 1 0 8
+0 11 6 4
+
+fn=<&mut serde_json::de::Deserializer<serde_json::read::StrRead> as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>'2
+0 176 25 34 2 0 2 2 0 2
+cfn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::parse_integer
+calls=2 0 
+0 190 36 22 9 0 0 9
+0 43 6 11 1 1 0 1 1
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=1 0 
+0 464 96 66 0 0 1 0 0 1
+0 3 0 1
+cfn=<serde_json::de::MapAccess<serde_json::read::StrRead> as serde_core::de::MapAccess>::next_key_seed::<core::marker::PhantomData<alloc::string::String>>
+calls=1 0 
+0 102 25 20
+0 38 11 6
+cfn=<&mut serde_json::de::Deserializer<serde_json::read::StrRead> as serde_core::de::Deserializer>::deserialize_any::<figment::value::de::ValueVisitor>'2
+calls=1 0 
+0 160 35 27 0 0 1 0 0 1
+0 20 6 7 0 0 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+calls=1 0 
+0 278 64 56 0 0 7 0 0 7
+0 9 2 3 1 0 1 1 0 1
+cfn=<serde_json::read::StrRead as serde_json::read::Read>::parse_str
+calls=1 0 
+0 121 19 14 0 0 2 0 0 2
+0 16 6 8 2 0 0 2
+cfn=<serde_json::de::Deserializer<serde_json::read::StrRead>>::end_map
+calls=1 0 
+0 18 5 1 3 0 0 3
+0 29 13 7 4 0 0 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 190 38 18 0 0 2 0 0 2
+0 7 1 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 103 39 35 4 0 0 4
+cfn=<figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from
+calls=1 0 
+0 1132 300 246 45 0 4 44 0 4
+0 11 6 4
+
+fn=<alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, figment::value::value::Value>>::insert_entry
+0 100 25 43 3 0 1 3 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=3 3294 
+0 543 108 54 0 0 10 0 0 10
+0 129 29 43 5 1 6 5 0 6
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 11 3 2 0 0 1 0 0 1
+0 23 9 7 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 12 3 2
+0 91 45 33 3 0 1 3 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>, alloc::alloc::Global>
+0 14 1 8 3 0 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 24 5 7 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 45 12 7
+0 7 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 13 3 2
+0 10 3 1 1 0 0 1
+cfn=<alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<alloc::string::String, figment::value::value::Value, alloc::alloc::Global>
+calls=1 0 
+0 1539 349 219 12 2 9 12 2 8
+0 36 15 9 3 0 0 3
+
+fn=core::ptr::drop_glue::<figment::value::value::Value>
+0 116 40 36 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 106 29 13
+0 14 0 8 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 98 26 30 9 0 0 9
+0 48 16 8 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 361 104 55
+0 16 0 4
+cfn=core::ptr::drop_glue::<figment::value::value::Value>'2
+calls=4 0 
+0 490 153 111 1 0 0 1
+0 12 0 4
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=4 0 
+0 328 104 76
+0 14 4
+
+fn=core::ptr::drop_glue::<figment::value::value::Value>'2
+0 118 45 36
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 7 0 4
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 49 13 15
+0 15 5 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 85 25 14
+0 4 0 1
+cfn=core::ptr::drop_glue::<figment::value::value::Value>'2
+calls=1 0 
+0 19 8 6
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 120 39 24 1 0 0 1
+0 4 1
+
+fn=(below main)
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./csu/../csu/libc-start.c
+cfn=__libc_start_main@@GLIBC_2.34
+calls=1 242 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=dynamic_config::loader::merge_listed
+0 14 2 7 2 0 1 2
+cfn=dynamic_config::loader::sections::validated_profile
+calls=1 0 
+0 19 7 7 0 0 2
+0 47 16 12 5 1 1 5
+cfn=dynamic_config::loader::sections::merge_file
+calls=1 0 
+0 14347 3579 2835 389 23 111 382 10 60
+0 11 3 1 2 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 4
+0 6 0 3 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 14 9 4 1 0 0 1
+cfn=dynamic_config::loader::sections::merge_profile_variant
+calls=1 0 
+0 48 17 14 2 0 2 2
+0 11 3 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 2
+0 6 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8
+0 7 3 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 30 10 8 0 0 2
+0 12 9 0 2 0 0 2
+
+fn=<std::sys::fs::unix::File>::open_c
+0 39 8 9 5 0 1 5 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/open64.c
+cfn=open
+calls=1 30 
+0 36 8 5 3 0 1 3
+0 24 11 2 2 0 0 2
+
+fn=std::io::default_read_to_end::small_probe_read::<std::fs::File>
+0 21 2 9 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/read.c
+cfn=read
+calls=1 25 
+0 8 2
+0 24 9 1 2 0 0 2
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>
+0 25 3 15 3 0 0 3
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 124 39 24 5 0 0 5
+0 35 10 15 5 0 0 5
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 49 13 15 7 0 0 7
+0 15 5 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=1 3359 
+0 104 29 13 1 0 0 1
+0 3 0 1
+cfn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+calls=1 0 
+0 1184 341 236 4 0 0 4
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 120 39 24 2 0 0 2
+0 10 7 0 1 0 0 1
+
+fn=main
+cfn=std::rt::lang_start_internal
+calls=1 0 
+0 24151 6293 4888 663 36 148 652 17 75
+
+fn=<std::path::Path>::_join
+0 17 1 8 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 190 38 18 0 0 1 0 0 1
+0 7 1 1 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 12 3 2
+0 18 3 4 2 0 0 2
+cfn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+calls=1 0 
+0 228 42 33 10 0 2 10 0 1
+0 17 5 3 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 11 3 2 0 1 0 0 1
+0 14 8 3
+
+fn=<alloc::string::String as core::fmt::Write>::write_str
+0 110 24 36 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=6 255 
+0 92 18 12 0 2 0 0 2
+0 64 36 8 1 0 0 1
+cfn=<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+calls=2 0 
+0 203 50 43 6 0 2 6
+0 6 2
+
+fn=std::fs::read_to_string::inner
+0 23 1 12 2 0 1 2 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=1 255 
+0 22 6 4 0 0 1 0 0 1
+0 105 12 2 4 0 0 4
+cfn=<std::sys::fs::unix::File>::open_c
+calls=1 0 
+0 99 27 16 10 0 2 10 0 1
+0 9 2 1 2 0 0 2
+cfn=std::sys::fs::unix::try_statx
+calls=1 0 
+0 120 28 42 0 0 4
+0 42 3 8 4 0 0 4
+cfn=std::io::default_read_to_end::small_probe_read::<std::fs::File>
+calls=1 0 
+0 53 13 10 4 0 0 4
+0 24 4 2 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/read.c
+cfn=read
+calls=1 25 
+0 8 2 0 1 0 0 1
+0 21 8 3 2 0 0 2
+cfn=core::str::converts::from_utf8
+calls=1 0 
+0 111 23 6
+0 11 4 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./io/../sysdeps/unix/sysv/linux/close.c
+cfn=close
+calls=1 26 
+0 8 2 0 1 0 0 1
+0 14 7 1 2 0 0 2
+cfn=<alloc::raw_vec::RawVecInner>::finish_grow
+calls=1 0 
+0 75 18 16
+0 8 2 2 1 0 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>::insert
+0 114 22 47 4 0 0 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=3 73 
+0 66 15 0 3 0 0 3
+0 127 14 40 3 0 0 3
+cfn=<alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, figment::value::value::Value>>::insert_entry
+calls=5 0 
+0 909 222 184 12 1 19 12 0 19
+0 278 89 83 5 0 0 5
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=6 73 
+0 132 30 0 1
+0 112 16 8 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 226 48 25 0 0 1 0 0 1
+0 234 102 72 6 0 4 6 0 4
+
+fn=<figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from
+0 72 8 34 3 0 1 3 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 235 50 25 0 0 2 0 0 2
+0 52 2 30 3 0 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 98 26 30 8 0 0 8
+0 12 0 8
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=4 0 
+0 328 104 76 2 0 0 2
+0 186 82 64 4 0 0 4
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=4 3294 
+0 310 74 39 0 0 1 0 0 1
+0 28 4 4 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+cfn=__memcpy_avx_unaligned_erms
+calls=4 255 
+0 58 12 8
+0 52 12 16 1 0 0 1
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=4 3359 
+0 340 100 56 1
+0 92 24 36 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=2 0 
+0 54 24 18
+0 32 10 8 3 0 0 3
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=2 3294 
+0 90 24 14
+0 316 94 124 8 1 0 8
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+cfn=__memcmp_avx2_movbe
+calls=2 73 
+0 44 10
+0 114 40 38 5 0 0 5
+cfn=core::ptr::drop_glue::<alloc::collections::btree::dedup_sorted_iter::DedupSortedIter<alloc::string::String, figment::value::value::Value, alloc::vec::into_iter::IntoIter<(alloc::string::String, figment::value::value::Value)>>>
+calls=2 0 
+0 230 76 40 4 0 0 4
+0 45 22 11 3 0 0 3
+cfn=core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(alloc::string::String, figment::value::value::Value), <[(alloc::string::String, figment::value::value::Value)]>::sort_by<<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value> as core::iter::traits::collect::FromIterator<(alloc::string::String, figment::value::value::Value)>>::from_iter<core::iter::adapters::map::Map<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>, <figment::value::value::Value as core::convert::From<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::from::{closure#0}>>::{closure#0}>::{closure#0}>
+calls=1 0 
+0 109 29 12 5 0 0 5
+0 1
+
+fn=<figment::profile::Profile>::collect
+0 18 4 9 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=malloc
+calls=1 3294 
+0 181 36 18 0 0 1 0 0 1
+0 29 12 13 2 0 1 2 0 1
+
+fn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>> as figment::coalesce::Coalescible>::coalesce
+0 34 3 20 4 0 0 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 27 12 9
+0 8 1 1 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 27 12 9
+0 29 4 10 4 0 0 4
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 49 13 15
+0 3 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 120 39 24
+0 36 13 11 3 0 0 3
+cfn=<alloc::collections::btree::map::BTreeMap<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::insert
+calls=1 0 
+0 90 26 25
+0 9 2 1 1 0 0 1
+cfn=<alloc::collections::btree::map::IntoIter<figment::profile::Profile, alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>>::dying_next
+calls=1 0 
+0 27 12 9
+0 16 11 2 1 0 0 1
+
+fn=core::ptr::drop_glue::<alloc::collections::btree::map::BTreeMap<alloc::string::String, figment::value::value::Value>>
+0 26 3 15 2 0 0 2
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=1 0 
+0 49 13 15
+0 33 11 6 2 0 0 2
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./malloc/./malloc/malloc.c
+cfn=free
+calls=3 3359 
+0 318 87 39
+0 12 0 3
+cfn=core::ptr::drop_glue::<figment::value::value::Value>
+calls=3 0 
+0 513 153 103
+0 9 0 3
+cfn=<alloc::collections::btree::map::IntoIter<alloc::string::String, figment::value::value::Value>>::dying_next
+calls=3 0 
+0 208 65 52
+0 16 9
+
+totals: 24151 6293 4888 663 36 148 652 17 75

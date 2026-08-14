@@ -1,0 +1,108 @@
+# callgrind format
+version: 1
+creator: callgrind-3.22.0
+pid: 10745
+cmd:  /home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5 --iai-run read_path 1 0 instructions::read_path::current_thousand
+part: 1
+thread: 1
+
+
+desc: I1 cache: 32768 B, 64 B, 8-way associative
+desc: D1 cache: 32768 B, 64 B, 8-way associative
+desc: LL cache: 8388608 B, 64 B, 16-way associative
+
+desc: Timerange: Basic block 0 - 99017
+desc: Trigger: Program termination
+
+positions: line
+events: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+summary: 75023 20008 16007 11 0 0 11
+
+
+ob=/usr/lib/x86_64-linux-gnu/libc.so.6
+fl=./csu/../csu/libc-start.c
+fn=__libc_start_main@@GLIBC_2.34
+cfi=./csu/../sysdeps/nptl/libc_start_call_main.h
+cfn=(below main)
+calls=1 29 
+360 75023 20008 16007 11 0 0 11
+
+fl=./csu/../sysdeps/nptl/libc_start_call_main.h
+fn=(below main)
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=main
+calls=1 0 
+58 75023 20008 16007 11 0 0 11
+
+ob=/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+fl=???
+fn=0x000000000001f540
+cob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+cfi=???
+cfn=(below main)
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+ob=/home/runner/work/dynamic-config/dynamic-config/target/release/deps/instructions-5f4e732ad1a97df5
+fl=???
+fn=std::rt::lang_start_internal
+cfn=std::rt::lang_start::<()>::{closure#0}
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+cfn=instructions::main
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=(below main)
+cob=/usr/lib/x86_64-linux-gnu/libc.so.6
+cfi=./csu/../csu/libc-start.c
+cfn=__libc_start_main@@GLIBC_2.34
+calls=1 242 
+0 75023 20008 16007 11 0 0 11
+
+fn=std::rt::lang_start::<()>::{closure#0}
+cfn=std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=<arc_swap::debt::list::LocalNode>::with::<arc_swap::strategy::hybrid::HybridProtection<alloc::sync::Arc<instructions::Once>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Once>>>::load::{closure#0}>
+0 11000 3000 3000 2 0 0 2
+cfn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Once>>>::load::{closure#0}
+calls=1000 0 
+0 33000 10000 5000 5 0 0 5
+0 6000 3000
+
+fn=main
+cfn=std::rt::lang_start_internal
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=instructions::current_thousand::__iai_callgrind_wrapper_mod::current_thousand
+0 10014 1000 4007 2 0 0 2
+cfn=<arc_swap::debt::list::LocalNode>::with::<arc_swap::strategy::hybrid::HybridProtection<alloc::sync::Arc<instructions::Once>>, <arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Once>>>::load::{closure#0}>
+calls=1000 0 
+0 50000 16000 8000 7 0 0 7
+0 15009 3008 4000 2 0 0 2
+
+fn=<arc_swap::strategy::hybrid::HybridStrategy<arc_swap::strategy::hybrid::DefaultConfig> as arc_swap::strategy::sealed::InnerStrategy<alloc::sync::Arc<instructions::Once>>>::load::{closure#0}
+0 33000 10000 5000 5 0 0 5
+
+fn=instructions::main
+cfn=instructions::read_path::__run
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=instructions::read_path::__run
+cfn=instructions::current_thousand::installed
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+fn=instructions::current_thousand::installed
+cfn=instructions::current_thousand::__iai_callgrind_wrapper_mod::current_thousand
+calls=1 0 
+0 75023 20008 16007 11 0 0 11
+
+totals: 75023 20008 16007 11 0 0 11
