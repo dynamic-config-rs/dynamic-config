@@ -1,8 +1,8 @@
 # Releasing
 
-Sixteen crates. Fourteen publish to crates.io in four waves, versioned
-together; the Python wheels follow in a fifth, on a version of their
-own.
+Eighteen crates. Fourteen publish to crates.io in four waves, versioned
+together; the Python wheels follow in a fifth and the npm packages in a
+sixth, each on a version of its own.
 
 The waves are dependency order: the macro and the `no_std` crate, then
 the engine, then `dynamic-config-store-core` — which every store crate
@@ -23,8 +23,11 @@ so a release that did not touch it is a no-op.
 workspace's — prepare, land, let CI publish:
 
 ```sh
-./scripts/release-python.sh --status     # versions here and on PyPI
-./scripts/release-python.sh patch        # bump + rotate the changelog + commit
+./scripts/release-python.sh --status     # versions here and on PyPI, both wheels
+./scripts/release-python.sh --check      # would a prepare work, and why not
+./scripts/release-python.sh patch        # bump both + rotate both + commit
+cargo check -p dynamic-config-python     # the lockfile follows the bump
+git add Cargo.lock && git commit --amend --no-edit
 git push origin dev && ./scripts/promote.sh
 ./scripts/release-python.sh --publish    # dispatch the wheel wave
 ```
@@ -32,25 +35,34 @@ git push origin dev && ./scripts/promote.sh
 A workspace release carries the wheels along automatically; the dispatch
 is for a Python-only one, where there are no crates to wait for.
 
-**Two distributions, one rotation.** `dynamic-config-python-remote` is a
-second wheel — `dynamic-config-py[remote]` resolves to it — and
-`release-python.sh` knows about one changelog:
+**Two distributions, one version.** `dynamic-config-python-remote` is a
+second wheel — `dynamic-config-py[remote]` resolves to it — and it moves
+with the first, always. That was an open question through 0.6 and it is
+settled: they are built from one commit by one job, the extra resolves to
+a *pair*, CI asserts the two manifests agree, and the remote wheel imports
+`Format` and `RemoteSource` from the base one, so a gap between them is a
+combination nobody has tested. The cost is stated rather than hidden: a
+fix to the etcd binding bumps the base wheel too, and its changelog will
+carry a version whose entry says nothing changed there.
 
-```sh
-changelog="dynamic-config-python/CHANGELOG.md"
-```
+`release-python.sh` moves all five files in one commit — both manifests,
+both changelogs, and the `dynamic-config-py>=…` floor in the remote
+wheel's `pyproject.toml`, which lags into a broken pair if it is left
+behind.
 
-So `dynamic-config-python-remote/CHANGELOG.md` is rotated by nobody:
-`cargo release` skips the crate (`release = false`) and the Python flow
-does not name it. **Move its `## [Unreleased]` block under the new version
-heading by hand before tagging**, the way the file's own template asks —
-otherwise a wheel ships to PyPI with a changelog saying nothing has been
-released. CI already checks that the two `Cargo.toml` versions agree, which
-is the adjacent mistake and not this one.
+**`--check` before you prepare.** It refuses a version that is already on
+PyPI, and that is not hypothetical: `dynamic-config-py` 0.1.0 shipped with
+0.5, the 0.6 wheel wave prepared 0.1.0 again, and `maturin upload
+--skip-existing` made the whole wave a silent no-op. It also checks that
+the two manifests agree, that the floor matches, and that there is
+something under `## [Unreleased]` to release.
 
-Whether the two wheels should version together at all — and therefore
-whether `release-python.sh` should take a list of changelogs — is an open
-decision, not an oversight; the check above is what holds until it is made.
+Neither Python changelog carries a compare-link footer, and that is
+deliberate: these packages have no tag of their own — the repository's
+tags are workspace versions — so a `[Unreleased]: …/compare/vX…HEAD`
+definition points at crate releases that have nothing to do with the
+wheel, and there is no bracketed version heading for it to pair with.
+The rotation writes unbracketed headings for the same reason.
 
 ```text
 dynamic-config-macros          first, always
@@ -68,7 +80,7 @@ dynamic-config-embedded        independent — published in the first wave
 
 `dynamic-config` depends on `dynamic-config-macros` with an exact requirement
 (`=x.y.z`), so a version mismatch is impossible — and so the macro crate must
-always go first. The seven store crates depend on `dynamic-config` the same way,
+always go first. The eight store crates depend on `dynamic-config` the same way,
 which is why they come last. `dynamic-config-embedded` depends on neither, so
 CI publishes it in the first wave alongside the macros.
 
@@ -225,6 +237,47 @@ nowhere else.
 Check docs.rs built each crate with `all-features = true`, so feature-gated
 items carry their badges — and that each companion rendered *its own* README
 rather than the workspace one.
+
+## The npm wave
+
+Two packages — `dynamic-config-node` and `dynamic-config-node-remote` —
+built by the `addons` matrix and published by `publish-npm`, after the
+crates are on crates.io. They version together and independently of the
+crates, for the reason the wheels do: each embeds the engine rather than
+depending on a published version of it.
+
+**The name is not `dynamic-config`.** That belongs to an unrelated
+package by another author, so this takes the qualified name — the same
+answer `dynamic-config-py` is on PyPI. Checked before the first release
+rather than discovered during it.
+
+**Five native runners, not cross-compilation.** The addon links against
+the platform's own C runtime, and a cross build that "works" is one
+nobody has loaded on the machine it targets. Each runner builds both
+addons, runs both suites *against the artefact that will ship*, and
+uploads it.
+
+**One package per platform, plus a wrapper.** `scripts/pack-platforms.mjs`
+writes `dynamic-config-node-linux-x64-glibc` and its four siblings, and
+rewrites the wrapper's `optionalDependencies` to name exactly what was
+built. npm installs only the one whose `os`/`cpu` match, so an install
+downloads one binary rather than five. The platform packages publish
+first: a wrapper whose optional dependencies are not on the registry yet
+is an install that fails.
+
+**What an operator has to have ready**, and neither is in the
+repository:
+
+1. `NPM_TOKEN` as a repository secret, with publish rights.
+2. Nothing else — the packages are unscoped, so no organisation is
+   involved, and `--provenance` needs only the `id-token: write` the job
+   already declares.
+
+A platform whose build failed is a platform the release does not ship:
+the packing script warns and leaves it out of `optionalDependencies`
+rather than publishing a wrapper that points at a package nobody
+uploaded. That is a partial release, and the fix is a rerun — npm
+versions are as permanent as PyPI's.
 
 ## Version policy
 

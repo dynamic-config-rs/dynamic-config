@@ -1,6 +1,6 @@
 # Examples
 
-Twenty-seven of them, each showing one idea. All run from the workspace root.
+Twenty-eight of them, each showing one idea. All run from the workspace root.
 
 ## Getting started
 
@@ -63,6 +63,7 @@ Twenty-seven of them, each showing one idea. All run from the workspace root.
 | [`encrypted`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/encrypted.rs) | `age`, `json` | A `secrets.json.age` next to a plain `config.json`: generated key, real ciphertext, and what the wrong key looks like. |
 | [`schema`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/schema.rs) | `schema`, `json` | A JSON Schema for the file two config types share, with secrets marked and `required` dropped. |
 | [`no_macro`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/no_macro.rs) | `json` | `load`, `LoadSpec`, `Layer` and `ConfigCell` without the attribute. |
+| [`ini_provider`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/ini_provider.rs) | `json`, `figment` | A format this crate does not read, plugged in as a source: `Source::provider` is the whole extension point, and the layer stack above it is unchanged. |
 
 ```sh
 cargo run -p dynamic-config --example errors      --features json

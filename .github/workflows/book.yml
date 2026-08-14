@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths:
       - "book/**"
+      - "book-python/**"
+      - "book-node/**"
       - ".github/workflows/book.yml"
   workflow_dispatch:
 
@@ -43,6 +45,15 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - run: mdbook build book
+      # The Python binding's book, published *inside* the first one's output
+      # rather than beside it: one Pages deployment, two directories —
+      # `/dynamic-config/` and `/dynamic-config/python/`. A reader who does
+      # need to cross over is one link away and no DNS is involved.
+      #
+      # Built second on purpose: `mdbook build book` empties `book/book`
+      # first, so the other order would publish an empty `python/`.
+      - run: mdbook build book-python --dest-dir book/book/python
+      - run: mdbook build book-node --dest-dir book/book/node
 
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:

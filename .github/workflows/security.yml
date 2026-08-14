@@ -81,6 +81,27 @@ jobs:
             echo "::error::hand-written unsafe in the Python extension"
             exit 1
           fi
+          # The Node addon, for the same reason: `#[napi]` expands to
+          # `unsafe impl` and `unsafe fn` for the Node-API conversions. One
+          # hand-written exception is audited in place — the `ToNapiValue`
+          # that hands a JSON document to an async task's promise — and it
+          # delegates to the conversion `serde_json` already has.
+          # Comment lines are the two that *explain* the exemption; what
+          # is being looked for is code.
+          # Both addons: the stores one has its own hand-written
+          # `ToNapiValue`, and a gate that scanned only the first would
+          # have let anything into the second.
+          stray_node=$(grep -rn 'unsafe' \
+              dynamic-config-node/src/ dynamic-config-node-remote/src/ \
+            | grep -v 'outcome.rs' \
+            | grep -v 'node-remote/src/lib.rs:[0-9]*: *unsafe fn to_napi_value' \
+            | grep -v 'node-remote/src/lib.rs:[0-9]*: *unsafe { Value::to_napi_value' \
+            | grep -v ':[0-9]*://' \
+            | grep -v 'unsafe_op_in_unsafe_fn' || true)
+          if [ -n "$stray_node" ]; then
+            echo "::error::hand-written unsafe in the Node addon: $stray_node"
+            exit 1
+          fi
           # Tests, examples and benches are separate crates, so the lib's
           # `forbid` does not reach them — the whole no-unsafe claim would
           # be one bench file away from fiction if nothing looked. Exactly
@@ -96,6 +117,59 @@ jobs:
             echo "::error::unsafe outside the audited exemption: $stray"
             exit 1
           fi
+
+  osv:
+    name: advisories, every ecosystem
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      # One scanner over every ecosystem rather than one per ecosystem, and
+      # deliberately *not* a second copy of cargo-deny: OSV aggregates RustSec,
+      # PyPA and GitHub advisories, so it carries entries RustSec does not and
+      # the two disagreeing is information rather than noise.
+      #
+      # What it closes is a real gap: the wheels ship Pydantic,
+      # pydantic-settings and msgspec as runtime dependencies of a published
+      # artefact, and cargo-deny has never heard of any of them.
+      #
+      # The binary, pinned and checksummed like every other download here.
+      # An action would be one more third party in a job about third parties.
+      - name: install osv-scanner
+        run: |
+          curl -sSL -o osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.5.0/osv-scanner_linux_amd64
+          echo "edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c  osv-scanner" \
+            | sha256sum -c -
+          chmod +x osv-scanner
+      # Neither wheel commits a lockfile, and neither should — a library that
+      # pinned its dependencies would pin its users'. What is auditable is
+      # what somebody installing today actually resolves, so it is resolved
+      # here and the frozen result is what gets scanned.
+      - name: resolve what the wheels install
+        run: python scripts/resolve-python-audit.py /tmp/audit-venv /tmp/python-requirements.txt
+      # `osv-scanner.toml` at the root carries the exemptions, each with the
+      # reason and what would expire it. It is a second list beside
+      # deny.toml's on purpose: cargo-deny refuses an ignore that matches
+      # nothing it raises, so an advisory only OSV reports cannot be answered
+      # there.
+      # `|| true`, and the classification is the next step's: the scanner
+      # exits non-zero for *any* finding, and an unmaintained crate with no
+      # published fix is not something a pull request here can answer.
+      # Failing on those is how a gate becomes one people learn to ignore.
+      - name: scan
+        run: |
+          ./osv-scanner scan source \
+            --lockfile Cargo.lock \
+            --lockfile "requirements.txt:/tmp/python-requirements.txt" \
+            --format json --output osv.json || true
+      # Fails on anything with a fix available, warns on anything without
+      # one, and writes both halves into the job summary either way.
+      - name: report
+        run: python scripts/audit-report.py osv.json "$GITHUB_STEP_SUMMARY"
 
   secrets-in-diagnostics:
     name: secrets stay out of diagnostics
@@ -141,7 +215,7 @@ jobs:
   # — which is the whole point of running it.
   security-ok:
     name: Security is green
-    needs: [deny, unsafe, secrets-in-diagnostics, supply-chain]
+    needs: [deny, osv, unsafe, secrets-in-diagnostics, supply-chain]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

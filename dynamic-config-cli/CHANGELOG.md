@@ -26,6 +26,17 @@ when.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-08-14
+
+### Fixed
+
+- **`documentation` pointed at another crate.** This crate carried none of
+  the workspace's shared metadata, so it inherited the engine's
+  `docs.rs/dynamic-config` link — a reader following it from crates.io
+  landed on a library rather than on this binary. It now names its own,
+  along with the categories and keywords a search for a configuration CLI
+  would actually match.
+
 ## [0.6.0] — 2026-08-13
 
 ## [0.5.0] — 2026-08-12
@@ -56,7 +67,8 @@ when.
   `--secret` to mask) and `diff` (path-only difference between two
   documents) from a shell, the load restated as flags.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0

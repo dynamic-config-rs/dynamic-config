@@ -402,8 +402,8 @@ A store layers above the files and below the environment. `current()`
 never touches the network: `refresh_remote()` (or `refresh_remote_async`)
 is the explicit round trip, and a store's watch pushes documents into
 the sink from `remote_sink()`, which reloads through the remembered
-builder — validation, hooks, cache and all. Seven store crates ship;
-[Remote Stores](remote-stores.md) has the contract.
+builder — validation, hooks, cache and all. Eight store crates ship — seven
+over a network, and git; [Remote Stores](remote-stores.md) has the contract.
 
 ## Diagnostics
 

@@ -10,8 +10,8 @@ repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/dynamic-config-macros"
 authors.workspace = true
-categories.workspace = true
-keywords.workspace = true
+categories = ["config", "development-tools::procedural-macro-helpers"]
+keywords = ["config", "macro", "derive", "hot-reload", "settings"]
 exclude.workspace = true
 
 [lib]

@@ -45,9 +45,8 @@ dynamic-config man > /usr/local/share/man/man1/dynamic-config.1
 
 ## Stability
 
-Experimental tier: the flag surface may still move between minor
-releases. The diagnostics it prints hold the same guarantees as the
-library's own.
+Beta, like every crate here: the flag surface is settled. The diagnostics it
+prints hold the same guarantees as the library's own.
 
 ## MSRV
 

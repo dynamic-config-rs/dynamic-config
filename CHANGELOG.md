@@ -25,6 +25,144 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-08-14
+
+### Added
+
+- **Node.js bindings**, as `dynamic-config-node` on npm: the engine, the
+  watcher, the runtime layers, remote sources written in JavaScript and
+  the whole diagnostic surface, through Node-API. A validator is a
+  function, so Zod, Ajv or a plain function of your own all work and none
+  of them is a dependency; `DynamicConfig<T>` is generic over whatever the
+  validator returns, so `current()` is `T` under `strict: true`.
+
+  The load runs on a worker thread and reaches the event loop only to
+  validate and to fire hooks — which is what keeps the property this whole
+  design is for: a document the schema refuses installs nothing and leaves
+  the previous one serving, from the watcher exactly as from an explicit
+  reload. It is also why there is no `initSync`: a synchronous load would
+  be the loop waiting for itself.
+
+  Twelve examples, a book of its own at `/dynamic-config/node/`, a
+  `tsc --strict` gate over the definitions a caller sees, and a CI matrix
+  across Node 18, 20, 22 and 24 — Node-API is ABI-stable, but the
+  JavaScript half is ordinary code that a version can break. The release
+  workflow gained an npm wave: five native runners, one prebuilt binary
+  each, published as optional dependencies with provenance.
+- **`dynamic-config-node-remote`**: the eight Rust stores for Node — etcd,
+  Consul, Vault, NATS, Redis, S3, Firestore and git — as a second package,
+  for the reason they are a second wheel in Python. Each is a class with
+  an async `fetch()` and a `describe()`, which is the shape the base
+  package's `setRemote` already took, so the two meet through a documented
+  surface rather than through each other's internals. `useStore` is the
+  bridge: a round trip must not sit on the event loop, and the remote
+  layer is filled from a worker thread and must be handed a synchronous
+  answer. Credentials may be **functions** that mint a fresh token per
+  fetch, TLS material may be files *or* bytes, and the four stores that
+  push — Consul, Redis, etcd, NATS — can be watched.
+- **The Node binding caught up with the Python one**: `changes()` as an
+  async iterator, `replace(document)` for a document this library did not
+  fetch, `setDefaults(values)` for a whole object at once, and
+  `strictEnv()`. What is deliberately still absent is `initSync`, and the
+  book says why where a reader meets it.
+- **A version table per binding**, the shape the Rust book's MSRV table
+  is: which Python lines and which Node lines are supported, which are
+  tested, and that raising either floor is a breaking change.
+- **A `Patterns & Style` chapter in all three books** — one configuration
+  per subsystem, read `current()` where you use it, hooks wake things
+  rather than doing the work, what belongs in CI and what at startup, and
+  the naming the files and variables use.
+- **`Values.sub(path)`** in the Python binding: the subtree at a path, as
+  a `Values` of its own, so a subsystem can be handed a section without
+  being told where in the document it sits. `Snapshot::sub` is the Rust
+  equivalent.
+- **Every crate and package is Beta**, and the store crates' promotion is
+  evidence rather than time: each is tested against a real server, each
+  watch loop's failure branches are enumerated in its own documentation,
+  and three are unplugged mid-watch by `just chaos`. **After 0.6.1, only
+  security fixes and hotfixes until 1.0** — the three books say so where a
+  reader will meet it.
+
+### Changed
+
+- **A watch refused before its first round trip no longer reports the
+  store as unreachable**, in `dynamic-config-etcd` and
+  `dynamic-config-nats`. `RemoteStatus::reachable()` is *whether the store
+  answered the last time it was asked*, and a source with no format or an
+  unwatchable key shape never asks — so `Some(false)` there was a status
+  saying something untrue about a store that may be perfectly healthy.
+  `dynamic-config-redis` and `dynamic-config-s3` already behaved this way;
+  0.6.1's audit of all seven watch loops settled the split. Each crate's
+  changelog carries its half, and every failure branch is now a table in
+  its own crate's documentation.
+
+  `just chaos` is the evidence: toxiproxy in front of a store that never
+  restarts, three loop shapes, and the pair an alert reads — `remote_up`
+  goes to zero *while the staleness clock keeps running*.
+
+### Fixed
+
+- **Four counts in the prose that the workspace had outgrown**, and a test
+  that fails on the fifth: the ROADMAP said sixteen crates were on crates.io
+  when fourteen publish, two pages said seven store crates when git made it
+  eight, and `lib.rs`'s precedence chain had been missing `secrets_dir` since
+  it landed — so the crate's front page described a layer order the loader
+  did not have. `doc_surface` now counts the crates, compares the two copies
+  of the precedence chain character for character, and checks that every
+  example has a row in the book's table. The last one found `ini_provider`,
+  which had compiled and run in CI for two releases with no way to find it.
+
+### Added
+
+- **Advisories are scanned across every ecosystem, not just Cargo.** The
+  wheels ship Pydantic, pydantic-settings and msgspec as runtime
+  dependencies of a published artefact, and `cargo-deny` has never heard of
+  any of them. An `osv-scanner` job now reads the Cargo lockfile *and* what
+  the wheels' extras resolve to today, against a database that aggregates
+  RustSec, PyPA and GitHub advisories — so it is independent of
+  `cargo-deny` rather than a second copy of it, and the two disagreeing is
+  information.
+
+  It fails on an advisory **with a fix available** and warns on one
+  without: a repository that goes red for somebody else's release schedule
+  is a gate people learn to ignore. `osv-scanner.toml` carries the narrow
+  third case — a fix that exists and is pinned out of reach upstream — each
+  entry with the reason and what would expire it.
+- **Every GitHub release carries an SBOM per ecosystem**, CycloneDX JSON:
+  one document per crate and one for the wheels' resolved dependencies.
+  Attached, not gating.
+
+### Changed
+
+- **The Python binding has a book of its own**, at
+  [`/dynamic-config/python/`](https://ctolon.github.io/dynamic-config/python/).
+  Eleven chapters describing an engine through another language were a third
+  of the Rust book's sidebar, and a Python reader arriving from PyPI landed
+  in a table of contents whose first twenty entries were Rust. The store
+  crates deliberately stay: a Consul chapter is read by whoever read the
+  builder tour.
+
+  **Published URLs did not move** — those chapters were already served from
+  `/dynamic-config/python/…` — and `/dynamic-config/python.html` is now a
+  stub that links onward, so nothing that pointed at either breaks. One Pages
+  deployment, two directories; the link checker takes both books' sources.
+
+### Changed
+
+- **Every crate's crates.io metadata says what that crate is.** The stores
+  inherited `categories = ["config", "development-tools"]` and one set of
+  five keywords from the workspace, so a search for `etcd` or `vault`
+  matched none of them and a client for a key/value store was filed under
+  development tools. Each crate now carries its own: the stores are
+  `api-bindings`, the server is `web-programming::http-server`, the macro
+  crate is `development-tools::procedural-macro-helpers`, the CLI is
+  `command-line-utilities`, and the keywords name the store rather than
+  repeating the engine's. `dynamic-config-cli` also gained the
+  `documentation` link it was inheriting from another crate.
+- **Both wheels declare the interpreters they are tested against.** PyPI
+  filters on the per-version classifiers, and `requires-python` alone does
+  not populate them.
+
 ## [0.6.0] — 2026-08-13
 
 ### Added
@@ -397,7 +535,7 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   No client type appears in any signature, which is the point twice over: an
   enterprise behind a private CA can now reach the four stores that had no
   door at all, and the surface is data, so the
-  [remote wheel](book/src/python/remote-stores.md) finally has something to
+  [remote wheel](book-python/src/remote-stores.md) finally has something to
   bind to.
 
   `Vault`, `Consul` and `Firestore` take it as `.with_tls(..)`; `Etcd`,
@@ -434,7 +572,7 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   way out, because a binding that ignored either would be a security bug.
   The wheel enables `dynamic-config-etcd/tls` and `dynamic-config-redis/tls`,
   without which those two would have no TLS constructor to call, and
-  `book/src/python/limitations.md` no longer lists TLS as a capability the
+  `book-python/src/limitations.md` no longer lists TLS as a capability the
   Rust crates have and the wheels do not. Custom proxies and `watch()`
   still are. A runnable example,
   `dynamic-config-python-remote/examples/09_private_ca_and_client_certificate.py`.
@@ -647,10 +785,10 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   Every blocking call has an async twin (`init_async`, `load_async`,
   `reload_async`, `changed_async`) and an executor knob to choose which
   pool pays for it, thirteen runnable examples ship with the package, and the chapter has its own sections for
-  [async](book/src/python/async.md),
-  [data types](book/src/python/types.md),
-  [web frameworks](book/src/python/frameworks.md) and
-  [limitations](book/src/python/limitations.md).
+  [async](book-python/src/async.md),
+  [data types](book-python/src/types.md),
+  [web frameworks](book-python/src/frameworks.md) and
+  [limitations](book-python/src/limitations.md).
 - `Builder::validate` accepts closures, not just function pointers: a
   validator that needs *context* — a policy object, a schema, another
   runtime's validator — could not be written as a `fn`, and that is the
@@ -911,7 +1049,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0

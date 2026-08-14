@@ -7,6 +7,14 @@ rust-version = "1.85"
 license.workspace = true
 description = "Command-line diagnostics for dynamic-config: explain a value, diff two documents"
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/dynamic-config-cli"
+authors.workspace = true
+# Not the workspace's: this is a binary somebody installs, and the two
+# categories that say so are the ones a search should match.
+categories = ["config", "command-line-utilities"]
+keywords = ["config", "cli", "diagnostics", "explain", "diff"]
+exclude.workspace = true
 readme = "README.md"
 
 [[bin]]

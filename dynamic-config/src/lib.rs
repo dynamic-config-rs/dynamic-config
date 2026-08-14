@@ -77,8 +77,8 @@
 //! # Precedence
 //!
 //! ```text
-//! set_default < discovered < config.toml < secrets.json < remote < APP_DB_* < bind_env < set_flag < set_override
-//!  (runtime)   (search path)   (first)      (last file)   (etcd…) (environment) (by name)  (CLI)     (runtime)
+//! set_default < discovered < config.toml < secrets.json < remote < secrets_dir < APP_DB_* < bind_env < set_flag < set_override
+//!  (runtime)   (search path)   (first)      (last file)   (etcd…)   (a mount)   (environment) (by name)  (CLI)     (runtime)
 //! ```
 //!
 //! Files merge left to right and tables merge key by key, so a small

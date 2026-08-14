@@ -372,15 +372,31 @@ mod watching {
         }
         assert_eq!(Watched::current().port, 9107, "the edit should reload");
 
-        let seen = seen.lock().unwrap();
-        let reason = seen
-            .iter()
-            .find(|reason| matches!(reason, ReloadReason::FileChanged(_)))
-            .expect("the watcher's reload is a file change");
+        // The snapshot is swapped in *before* the hooks are dispatched —
+        // `ConfigCell::store` says so where it wakes async waiters first — so
+        // `current()` reaching 9107 does not mean this hook has run yet.
+        // Polling for the reason rather than reading the list once is the
+        // difference between a test that holds and one that holds until the
+        // machine is busy: it failed exactly once, inside a full workspace
+        // run, having passed thirty consecutive runs on its own.
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let path = loop {
+            let found = seen.lock().unwrap().iter().find_map(|reason| match reason {
+                ReloadReason::FileChanged(path) => Some(path.clone()),
+                _ => None,
+            });
 
-        let ReloadReason::FileChanged(path) = reason else {
-            unreachable!("just matched")
+            if let Some(path) = found {
+                break path;
+            }
+
+            assert!(
+                Instant::now() < deadline,
+                "the watcher's reload is a file change"
+            );
+            std::thread::sleep(Duration::from_millis(25));
         };
+
         assert!(
             path.ends_with("ops-watched.json"),
             "the reason must name the file that changed, got {}",

@@ -177,7 +177,7 @@ impl<T: DeserializeOwned> Builder<T> {
                      declaration says it with `.secrets([..])` — the Python \
                      binding spells that `DynamicConfig(..., secrets=[..])`. \
                      Or ask for `CacheMode::Full`, which redacts nothing and \
-                     says so",
+                     says so — `cache(path, \"full\")` from Python",
                 ));
             }
         }

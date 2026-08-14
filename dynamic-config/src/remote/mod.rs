@@ -52,7 +52,7 @@
 //!
 //! ## What a fetch reports about itself
 //!
-//! [`Remote`] records a [`RemoteStatus`] — how many documents have arrived,
+//! [`Remote`] records a [`RemoteStatus`](crate::RemoteStatus) — how many documents have arrived,
 //! when the last one did, how long the last pull took, and how many fetches
 //! have returned nothing since one returned a document. It is the fetch half
 //! of the picture [`ConfigStatus`](crate::ConfigStatus) starts, in the same
@@ -62,7 +62,7 @@
 //! Neither the document nor the store's description can reach it. A store's
 //! description is its URL and a store URL routinely embeds
 //! `user:password@host`, so nothing derived from
-//! [`describe`](Remote::describe) is recorded, spanned or labelled — the name
+//! [`describe`](crate::Remote::describe) is recorded, spanned or labelled — the name
 //! a metric carries is supplied by whoever renders it, exactly as it is for a
 //! `ConfigStatus`.
 //!
@@ -80,7 +80,7 @@
 //! way a single trait cannot honestly cover.
 //!
 //! What the loop pushes through is here: a document arrives, [`Remote::install`]
-//! puts it in the slot, and a [`RemoteSink`]'s `apply` reloads exactly the way
+//! puts it in the slot, and a [`RemoteSink`](crate::RemoteSink)'s `apply` reloads exactly the way
 //! a file change does — hooks, diffing, validation, the cache.
 //!
 //! The two halves are cancelled differently, and neither imposes a runtime:
@@ -92,193 +92,36 @@
 //!   the matching [`RemoteWatch`].
 //!
 //! [`Vault`]: https://docs.rs/dynamic-config-vault
+//!
+//! ## The files
+//!
+//! One concern each, and the split follows the vocabulary rather than the
+//! line count: `Fetched` and the two traits are what a *store* implements
+//! (`source`); `RemoteStatus` is what an operator reads (`status`);
+//! `Remote` is the slot a configuration type owns (here); `RemoteSink` is
+//! the door a watch loop pushes through (`sink`); and the blocking watch
+//! handle is `watch`. Every name below is re-exported at the crate root
+//! exactly where it was.
 
-use std::sync::{Arc, Weak};
+mod sink;
+mod source;
+mod status;
+mod watch;
 
-use crate::sync::atomic::{AtomicBool, Ordering};
+pub use sink::RemoteSink;
+#[cfg(feature = "async")]
+pub use source::AsyncRemoteSource;
+pub use source::{Fetched, RemoteSource};
+pub use status::RemoteStatus;
+pub use watch::{RemoteWatch, Watching};
+
+use std::sync::Arc;
+
 use crate::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::error::{Error, ErrorKind};
 use crate::reload::FailureStatus;
-use crate::source::Format;
-
-/// A document a remote store handed back.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Fetched {
-    /// The document text, in `format`.
-    pub text: String,
-    /// How to parse it.
-    pub format: Format,
-}
-
-impl Fetched {
-    /// A document and the format it is written in.
-    #[must_use]
-    pub fn new(text: impl Into<String>, format: Format) -> Self {
-        Self {
-            text: text.into(),
-            format,
-        }
-    }
-}
-
-// The document is the one thing a `Debug` of this type must never print:
-// a remote store's flagship use case is serving secrets, and `Fetched` is
-// what every watch callback receives — one `tracing::debug!(?document)` away
-// from a log. The length is enough to debug with.
-impl std::fmt::Debug for Fetched {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Fetched")
-            .field("format", &self.format)
-            .field("bytes", &self.text.len())
-            .finish()
-    }
-}
-
-/// A remote store that can be read without an async runtime.
-///
-/// The right trait for anything with a plain HTTP API — Consul and Vault both
-/// are — because implementing it needs no runtime and using it needs no
-/// runtime either. `fetch` may block; it is called from
-/// `refresh_remote()`, never from `load()`.
-pub trait RemoteSource: Send + Sync + 'static {
-    /// Reads the current document.
-    ///
-    /// # Errors
-    ///
-    /// Whatever going wrong looks like for this store. Use
-    /// [`Error::remote`](crate::Error::remote) so the failure is categorised
-    /// consistently, or [`Error::auth`](crate::Error::auth) for a credential
-    /// the store itself refused — that is the distinction a watch loop backs
-    /// off on rather than stopping.
-    fn fetch(&self) -> Result<Fetched, Error>;
-
-    /// How to name this source in an error or a report.
-    fn describe(&self) -> String;
-}
-
-/// A remote store that is read asynchronously.
-///
-/// The right trait for a client that is async to begin with — etcd speaks gRPC
-/// and NATS is a streaming protocol, so both are. Used through
-/// `refresh_remote_async().await`.
-///
-/// The lifetime-bound boxed future rather than `async fn`: this trait is
-/// object-safe on purpose, so a configuration type can hold one without being
-/// generic over it.
-#[cfg(feature = "async")]
-#[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub trait AsyncRemoteSource: Send + Sync + 'static {
-    /// Reads the current document.
-    ///
-    /// # Errors
-    ///
-    /// As [`RemoteSource::fetch`].
-    fn fetch(
-        &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Fetched, Error>> + Send + '_>>;
-
-    /// How to name this source in an error or a report.
-    fn describe(&self) -> String;
-}
-
-/// What is true of a remote source right now, for an operator asking.
-///
-/// The fetch half of the picture [`ConfigStatus`](crate::ConfigStatus)
-/// starts, and deliberately the *same* picture rather than a second one:
-/// the same [`FailureStatus`] type, the same `consecutive_failures` meaning
-/// zero-is-healthy, the same recorded-where-it-happens rule, and the same
-/// rendering through [`telemetry::Exposition`](crate::telemetry::Exposition).
-/// Two vocabularies for one question is how two surfaces come to disagree
-/// after the first bug.
-///
-/// The two do not overlap, and the split is worth stating because it is the
-/// distinction an operator is actually asking about:
-///
-/// | Question | Where it is answered |
-/// |---|---|
-/// | did the **store** answer | here |
-/// | did the **document** install | [`ConfigStatus`](crate::ConfigStatus) |
-///
-/// A fetch that returned an unchanged document is a success here and is not
-/// an install there, which is exactly the case neither surface could report
-/// before this type existed.
-///
-/// # What it does not carry
-///
-/// **No document, no key, and no description of the store.** A store's
-/// description is its URL, and a store URL routinely embeds
-/// `user:password@host` — so nothing here is derived from
-/// [`describe`](Remote::describe), and the name a metric is labelled with
-/// is the caller's own, exactly as it is for a `ConfigStatus`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct RemoteStatus {
-    /// Documents this slot has received since the process started, whether
-    /// pulled by [`refresh`](Remote::refresh) or pushed through
-    /// [`RemoteSink::apply`].
-    pub fetches: u64,
-    /// When the last of them arrived. `None` before the first.
-    pub last_fetch: Option<Instant>,
-    /// How long the last *pulled* fetch took.
-    ///
-    /// `None` before the first pull, and `None` again after a document
-    /// arrives by push: a watch loop's own round trip is timed by the store
-    /// crate that made it, and reporting the previous pull's duration beside
-    /// a push's timestamp would be a number that is not about the fetch it
-    /// appears to describe.
-    pub last_fetch_duration: Option<Duration>,
-    /// The most recent fetch that returned nothing, if there has been one.
-    /// Kept after a later success: it is history, and
-    /// [`consecutive_failures`](Self::consecutive_failures) is the health.
-    pub last_failure: Option<FailureStatus>,
-    /// Fetches that returned nothing since one returned a document.
-    /// **Zero means healthy.**
-    pub consecutive_failures: u32,
-}
-
-impl RemoteStatus {
-    /// Whether the store answered the last time it was asked.
-    ///
-    /// Three states rather than two, and the third is the point: `None`
-    /// before anything has been asked of the store at all. A source that has
-    /// been installed and never fetched is not *down* — reporting it as down
-    /// is how a scrape at startup pages somebody — so the metric is absent
-    /// rather than zero, exactly as `last_success_seconds` is.
-    #[must_use]
-    pub fn reachable(&self) -> Option<bool> {
-        if self.fetches == 0 && self.consecutive_failures == 0 {
-            return None;
-        }
-
-        Some(self.consecutive_failures == 0)
-    }
-
-    /// A status with nothing recorded yet.
-    ///
-    /// `const`, because [`Remote::new`] is: a `Remote` lives in a `static`.
-    /// `Default` cannot be, which is the only reason this exists.
-    const fn empty() -> Self {
-        Self {
-            fetches: 0,
-            last_fetch: None,
-            last_fetch_duration: None,
-            last_failure: None,
-            consecutive_failures: 0,
-        }
-    }
-
-    /// How long ago the last document arrived from the store.
-    ///
-    /// `None` before the first. Monotonic, for the reason
-    /// [`ConfigStatus::stale_for`](crate::ConfigStatus::stale_for) is: a wall
-    /// clock going backwards under NTP would make a fresh fetch look stale.
-    #[must_use]
-    pub fn stale_for(&self) -> Option<Duration> {
-        self.last_fetch.map(|at| at.elapsed())
-    }
-}
 
 /// The remote source for one configuration type, and its last document.
 ///
@@ -288,7 +131,7 @@ impl RemoteStatus {
 /// # What it records about itself
 ///
 /// Every fetch this type performs and every delivery it accepts is counted
-/// into a [`RemoteStatus`], on the same terms `ConfigCell` records a
+/// into a [`RemoteStatus`](crate::RemoteStatus), on the same terms `ConfigCell` records a
 /// [`ConfigStatus`](crate::ConfigStatus): recorded where it happens, read by
 /// an atomic-cheap [`status`](Self::status), and never on the read path —
 /// `load()` reads [`document`](Self::document), which this does not touch.
@@ -312,15 +155,15 @@ struct State {
     /// source that is no longer installed is discarded, never stored.
     ///
     /// It is *source identity*, and that is the whole of it: a
-    /// [`RemoteSink`] holds one for the life of a watch loop, so anything
+    /// [`RemoteSink`](crate::RemoteSink) holds one for the life of a watch loop, so anything
     /// that moves this number ends that loop.
     generation: u64,
-    /// Bumped by [`clear`](Remote::clear), and by nothing else.
+    /// Bumped by [`clear`](crate::Remote::clear), and by nothing else.
     ///
     /// A counter of its own rather than a bump of `generation`, because the
     /// two questions differ: clearing drops the *document* and leaves the
     /// source installed. Folding it into `generation` made every live
-    /// [`RemoteSink`] permanently stale — a watch loop whose store had not
+    /// [`RemoteSink`](crate::RemoteSink) permanently stale — a watch loop whose store had not
     /// changed and whose stream was still delivering would have every later
     /// push refused for belonging to a source that had been "replaced". The
     /// in-flight fetch a `clear` must still discard is fenced on this.
@@ -557,7 +400,7 @@ impl Remote {
         }
     }
 
-    /// The generation a sink created now would carry; see [`RemoteSink`].
+    /// The generation a sink created now would carry; see [`RemoteSink`](crate::RemoteSink).
     pub(crate) fn generation(&self) -> u64 {
         self.state().generation
     }
@@ -702,7 +545,7 @@ impl Remote {
     /// like any other, and a document a caller explicitly dropped must not
     /// come back from a round trip that started before they dropped it.
     ///
-    /// The *source* is left alone, and so is every [`RemoteSink`] taken from
+    /// The *source* is left alone, and so is every [`RemoteSink`](crate::RemoteSink) taken from
     /// it: a watch loop delivering from the same store keeps delivering, and
     /// its next push installs normally. Dropping the document is not
     /// replacing the store, and only replacing the store ends a watch.
@@ -748,162 +591,11 @@ fn none_installed() -> Error {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Stopping a blocking watch
-// ---------------------------------------------------------------------------
-
-/// A running blocking watch, from the caller's side.
-///
-/// Dropping it stops the loop — the same contract the file watcher's
-/// `WatchHandle` has, for the same reason: a watch nobody owns is a leak nobody
-/// asked for. [`detach`](Self::detach) is the way to say *this one really should
-/// run forever*.
-///
-/// Only blocking loops need this. An async watch is a future: drop it and it is
-/// cancelled, on any executor.
-///
-/// ```no_run
-/// # use dynamic_config::RemoteWatch;
-/// # struct Consul;
-/// # impl Consul {
-/// #     fn watch(&self, _: dynamic_config::Watching, _: fn(dynamic_config::Fetched) -> Result<(), dynamic_config::Error>) -> Result<(), dynamic_config::Error> { Ok(()) }
-/// # }
-/// # fn example(consul: Consul) {
-/// # fn apply(_: dynamic_config::Fetched) -> Result<(), dynamic_config::Error> { Ok(()) }
-/// let watch = RemoteWatch::new();
-/// let watching = watch.watching();
-///
-/// std::thread::spawn(move || consul.watch(watching, apply));
-///
-/// // ... and later, or by dropping `watch`:
-/// watch.stop();
-/// # }
-/// ```
-#[must_use = "dropping the handle stops the watch; bind it, or call `.detach()` \
-              to watch for the rest of the process"]
-#[derive(Debug)]
-pub struct RemoteWatch {
-    running: Arc<AtomicBool>,
-}
-
-impl RemoteWatch {
-    /// A handle for a watch that has not been handed to a loop yet.
-    pub fn new() -> Self {
-        Self {
-            running: Arc::new(AtomicBool::new(true)),
-        }
-    }
-
-    /// The loop's half of this handle.
-    ///
-    /// Hand it to the watch; keep the `RemoteWatch` yourself.
-    #[must_use]
-    pub fn watching(&self) -> Watching {
-        Watching {
-            running: Arc::downgrade(&self.running),
-        }
-    }
-
-    /// Stops the loop at its next check.
-    ///
-    /// *At its next check* is the whole caveat, and it is not small: a loop
-    /// parked in a blocking query does not return until the store answers or
-    /// the wait expires, so the store's wait time is the worst-case delay. Each
-    /// companion crate documents its own.
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::Release);
-    }
-
-    /// Whether the loop has been told to stop.
-    #[must_use]
-    pub fn is_stopped(&self) -> bool {
-        !self.running.load(Ordering::Acquire)
-    }
-
-    /// Watches for the remainder of the process.
-    ///
-    /// Leaks the handle on purpose, exactly as the file watcher's
-    /// `WatchHandle::detach` does: a watch that must never stop has no owner to
-    /// hold it, and pretending otherwise is how it ends up stopped at the end of
-    /// `main`'s first statement.
-    pub fn detach(self) {
-        std::mem::forget(self);
-    }
-}
-
-impl Default for RemoteWatch {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Drop for RemoteWatch {
-    fn drop(&mut self) {
-        self.stop();
-    }
-}
-
-/// The loop's half of a [`RemoteWatch`].
-///
-/// A `Weak`, so a handle that is dropped without anyone remembering to call
-/// `stop` still ends the loop: the upgrade fails and
-/// [`keep_going`](Self::keep_going) answers `false`.
-#[derive(Debug, Clone)]
-pub struct Watching {
-    running: Weak<AtomicBool>,
-}
-
-impl Watching {
-    /// Whether the loop should go round again.
-    ///
-    /// `false` once the caller called [`RemoteWatch::stop`] or dropped the
-    /// handle. Check it before every request, not only after one: a loop that
-    /// checks only on the way out issues one more query than it was asked to.
-    #[must_use]
-    pub fn keep_going(&self) -> bool {
-        self.running
-            .upgrade()
-            .is_some_and(|running| running.load(Ordering::Acquire))
-    }
-
-    /// Sleeps for `total`, waking early if the watch is stopped.
-    ///
-    /// The polling loop every blocking store crate writes: sleep a slice,
-    /// check [`keep_going`](Self::keep_going), repeat — so a stopped watch
-    /// ends within a quarter second instead of at the end of its interval.
-    /// Here once, rather than once per store crate.
-    pub fn sleep_for(&self, total: Duration) {
-        const SLICE: Duration = Duration::from_millis(250);
-
-        let mut slept = Duration::ZERO;
-
-        while slept < total && self.keep_going() {
-            std::thread::sleep(SLICE.min(total - slept));
-            slept += SLICE;
-        }
-    }
-
-    /// A token for a watch that should never stop.
-    ///
-    /// For a loop the caller genuinely wants to outlive everything, so there is
-    /// no handle to hold. Prefer [`RemoteWatch::detach`], which says the same
-    /// thing at the point where somebody decided it.
-    #[must_use]
-    pub fn forever() -> Self {
-        // A `Weak` that can never upgrade would stop the loop immediately, so
-        // this leaks one live flag — one allocation, once, for the life of the
-        // process.
-        let running = Box::leak(Box::new(Arc::new(AtomicBool::new(true))));
-
-        Self {
-            running: Arc::downgrade(running),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::source::Format;
+    use crate::sync::atomic::Ordering;
 
     struct Fake(&'static str);
 
@@ -1290,173 +982,5 @@ mod tests {
             remote.document().is_none(),
             "a new source answering with the old store's values would be a puzzle"
         );
-    }
-}
-
-/// A fenced door for a remote watch loop's pushes.
-///
-/// Created by the generated `remote_sink()` *after* the source is
-/// installed, it remembers which source that was. [`apply`](Self::apply)
-/// installs the document and reloads — unless the source has since been
-/// replaced, in which case it refuses: a watch loop serving yesterday's
-/// store cannot overwrite today's, by construction rather than by the old
-/// documentation's request to please stop the loop first.
-///
-/// Cheap to clone; each wiring of a watch loop should take its own —
-/// **once, where the loop starts**. A sink taken per delivery reads the
-/// generation of that moment and fences nothing.
-#[derive(Clone, Copy)]
-pub struct RemoteSink {
-    remote: &'static Remote,
-    generation: u64,
-    reload: fn() -> Result<(), Error>,
-    name: &'static str,
-}
-
-impl RemoteSink {
-    /// Not public API: called by the generated `remote_sink()`.
-    #[doc(hidden)]
-    #[must_use]
-    pub fn new(
-        remote: &'static Remote,
-        reload: fn() -> Result<(), Error>,
-        name: &'static str,
-    ) -> Self {
-        Self {
-            remote,
-            generation: remote.generation(),
-            reload,
-            name,
-        }
-    }
-
-    /// How the fetches from the store behind this sink have gone.
-    ///
-    /// The door a `#[dynamic_config]` type has to its
-    /// [`RemoteStatus`]: the slot itself is generated private, and a sink is
-    /// the public handle on it — which is also where the question belongs,
-    /// since a sink is what a watch loop holds.
-    ///
-    /// Taking a sink *only* to read this is fine and costs an atomic load:
-    /// the generation a sink captures fences
-    /// [`apply`](Self::apply) and nothing else. A loop that will deliver
-    /// documents still takes its own, once, where it starts.
-    ///
-    /// ```no_run
-    /// # struct DbConfig;
-    /// # impl DbConfig {
-    /// #     fn remote_sink() -> dynamic_config::RemoteSink { unimplemented!() }
-    /// # }
-    /// let status = DbConfig::remote_sink().status();
-    ///
-    /// if status.reachable() == Some(false) {
-    ///     eprintln!("the store has stopped answering");
-    /// }
-    /// ```
-    ///
-    /// With the `telemetry` feature, `Exposition::add_remote` renders the
-    /// same status as Prometheus text; see
-    /// [the telemetry module](crate::telemetry). The example above stays
-    /// feature-free on purpose, because this method is not.
-    #[must_use]
-    pub fn status(&self) -> RemoteStatus {
-        self.remote.status()
-    }
-
-    /// Reports an attempt to reach the store that came back with nothing.
-    ///
-    /// A watch loop is the half of a store this crate cannot see.
-    /// [`apply`](Self::apply) records a delivery, so a *working* watch keeps
-    /// [`RemoteStatus`] current — but a loop whose stream broke, whose
-    /// blocking query is erroring or whose credential was refused delivers
-    /// nothing, and would otherwise say nothing: `reachable` would report the
-    /// last delivery rather than the last attempt, and a store that stopped
-    /// answering an hour ago would look healthy until something called
-    /// `refresh`.
-    ///
-    /// What it moves is deliberately narrow — the failure streak and the last
-    /// failure, and nothing else. `fetches`, `last_fetch` and
-    /// `last_fetch_duration` are left alone, so
-    /// `dynamic_config_remote_last_fetch_seconds` keeps *ageing* while
-    /// `dynamic_config_remote_up` goes to zero, which is the pair an alert
-    /// wants. The stored document is untouched: a failed attempt is no reason
-    /// to stop serving what the last good one produced.
-    ///
-    /// Fenced on the sink's generation exactly as [`apply`](Self::apply) is,
-    /// so a loop still winding down after its source was replaced cannot
-    /// charge its failures to the replacement. A stale report is dropped
-    /// silently, and there is nothing to handle: a loop must never have to
-    /// deal with a failure to report a failure.
-    ///
-    /// The error's kind and key path are recorded and nothing else — a
-    /// store's address never enters a [`RemoteStatus`], for the reason its
-    /// own documentation gives.
-    pub fn failed(&self, error: &Error) {
-        // The fence is inside `record_fetch_failure`, under the same lock
-        // that reads the generation: a check here and a write there would
-        // leave a window for a replacement to land between them.
-        self.remote.record_fetch_failure(error, self.generation);
-    }
-
-    /// Installs a document the watch pushed, and reloads.
-    ///
-    /// Everything a file change would do happens here too — validation,
-    /// the reload hooks, the cache — because it is the same code path,
-    /// reached with a document instead of a filesystem event. A failure
-    /// leaves the previous snapshot serving.
-    ///
-    /// # Errors
-    ///
-    /// If the source has been replaced since this sink was created —
-    /// checked before the reload *and again after it*, because a
-    /// replacement can land while the reload runs — or if the resulting
-    /// configuration does not load or validate.
-    pub fn apply(&self, document: Fetched) -> Result<(), Error> {
-        self.remote.install_if(self.generation, document)?;
-
-        let outcome = (self.reload)();
-
-        // The reload read the slot as it stood while it ran. If the source
-        // was replaced mid-flight — after `install_if` said yes — what just
-        // installed may derive from this sink's document even though the
-        // fence now belongs to the replacement. Reload once more against
-        // the slot as it stands, so the replacement's state has the last
-        // word, then refuse like any other stale push.
-        if self.remote.generation() != self.generation {
-            let _ = (self.reload)();
-
-            let error = Error::new(
-                crate::ErrorKind::Backend,
-                "the remote source this sink was created for was replaced \
-                 while its delivery reloaded; the replacement's state was \
-                 restored — stop the old watch loop and take a fresh sink \
-                 from `remote_sink()`",
-            );
-            crate::__log_remote_failure(self.name, &error);
-
-            return Err(error);
-        }
-
-        match outcome {
-            Ok(()) => {
-                crate::__log_remote_reload(self.name, None);
-
-                Ok(())
-            }
-            Err(error) => {
-                crate::__log_remote_failure(self.name, &error);
-
-                Err(error)
-            }
-        }
-    }
-}
-
-impl std::fmt::Debug for RemoteSink {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RemoteSink")
-            .field("config", &self.name)
-            .field("generation", &self.generation)
-            .finish_non_exhaustive()
     }
 }

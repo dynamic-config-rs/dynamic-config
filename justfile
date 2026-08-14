@@ -3,6 +3,13 @@
 # The container-backed suites are separate: they need a Docker daemon, and a
 # contributor without one should still be able to run everything else.
 
+# What cargo names a cdylib here. Node loads the addon under one name on
+# every platform, so this is the only place the difference is spelled —
+# and a contributor on macOS gets a build rather than a `cp` that cannot
+# find a `.so`.
+lib_prefix := if os() == "windows" { "" } else { "lib" }
+lib_suffix := if os() == "macos" { ".dylib" } else if os() == "windows" { ".dll" } else { ".so" }
+
 default: check
 
 # fmt, clippy, tests, docs — the whole gate, locally. No Docker needed:
@@ -18,15 +25,21 @@ fmt:
 lint:
     cargo clippy --workspace --all-targets --all-features \
         --exclude dynamic-config-python \
-        --exclude dynamic-config-python-remote -- -D warnings
+        --exclude dynamic-config-python-remote \
+        --exclude dynamic-config-node --exclude dynamic-config-node-remote -- -D warnings
     cargo clippy --workspace --all-targets --no-default-features \
         --exclude dynamic-config-python \
-        --exclude dynamic-config-python-remote -- -D warnings
-    # Their own lines, lib only: an extension module links no libpython, so
-    # it has no test target to build — and clippy over `--all-targets`
-    # would try.
+        --exclude dynamic-config-python-remote \
+        --exclude dynamic-config-node --exclude dynamic-config-node-remote -- -D warnings
+    # Their own lines, lib only: an extension module links no libpython and
+    # an addon links no Node, so neither has a test target to build — and
+    # clippy over `--all-targets` would try. The stores addon is also the
+    # one crate that needs `protoc`, which is why no workspace-wide run
+    # reaches it.
     cargo clippy -p dynamic-config-python --lib -- -D warnings
     cargo clippy -p dynamic-config-python-remote --lib -- -D warnings
+    cargo clippy -p dynamic-config-node --lib -- -D warnings
+    cargo clippy -p dynamic-config-node-remote --lib -- -D warnings
 
 # The whole suite, plus the two configurations that only exist with features
 # off. The container crates are excluded — their tests drive real servers and
@@ -38,7 +51,8 @@ test:
         --exclude dynamic-config-redis --exclude dynamic-config-s3 \
         --exclude dynamic-config-firestore --exclude dynamic-config-embedded \
         --exclude dynamic-config-python \
-        --exclude dynamic-config-python-remote
+        --exclude dynamic-config-python-remote \
+        --exclude dynamic-config-node --exclude dynamic-config-node-remote
     # The server's TLS suite needs its own line: it has no `full` feature, so
     # the workspace run above builds it with defaults and never compiles the
     # handshake, the key-permission refusal or the mTLS tests.
@@ -65,7 +79,7 @@ mocks:
 # the suite, the type checker and the linter against it. Needs a venv
 # (`python -m venv .venv && . .venv/bin/activate && pip install -e
 # 'dynamic-config-python[dev]'`, or the same list by hand: maturin
-# pytest pytest-asyncio pydantic pydantic-settings mypy ruff).
+# pytest pytest-asyncio pydantic pydantic-settings msgspec mypy ruff).
 # `CARGO_TARGET_DIR` per recipe, and it is not a nicety: both wheels' cdylib
 # is `[lib] name = "_core"`, so they write the same `lib_core.so`. Sharing a
 # target directory makes the second `maturin develop` report "Finished in
@@ -186,6 +200,65 @@ containers:
                -p dynamic-config-redis -p dynamic-config-s3 \
                -p dynamic-config-firestore
 
+# The Node bindings: build the addon, then run the suite and the examples
+# against it. Needs Node 18 or newer; nothing else — the suite is
+# `node --test` and the facade is JavaScript with a hand-written `.d.ts`,
+# so `npm install` is not part of this.
+#
+# `CARGO_TARGET_DIR` is shared with the workspace here, unlike the two
+# Python recipes: this crate's cdylib has a name of its own, so nothing
+# collides. The extension comes from `lib_suffix` at the top of this file.
+node:
+    cargo build -p dynamic-config-node
+    cp target/debug/{{ lib_prefix }}dynamic_config_node{{ lib_suffix }} dynamic-config-node/index.node
+    cd dynamic-config-node && node --test tests/*.test.js
+    # The types a caller sees, checked the way their CI checks them —
+    # skipped with a word rather than failing when TypeScript is not
+    # installed, because `npm install -D typescript` is a choice this
+    # recipe should not make for a contributor who is fixing Rust.
+    cd dynamic-config-node && if [ -x node_modules/.bin/tsc ]; then \
+        node_modules/.bin/tsc -p tests/typing/tsconfig.json && \
+        node_modules/.bin/tsc -p examples/tsconfig.json; \
+      else \
+        echo "skipping the type check: npm install -D typescript"; \
+      fi
+    # Every runnable example. Three want a framework and say so rather
+    # than failing when it is absent, so this needs no `npm install` —
+    # what it proves without one is that they still start and exit.
+    cd dynamic-config-node && for example in examples/*.mjs; do \
+        echo "→ $example"; node "$example" > /dev/null || exit 1; \
+      done
+
+# The eight stores for Node, as a second package. Needs Node 18 or newer
+# and nothing else: the suite constructs every store, checks that no
+# description carries a credential, and drives the failure a store that is
+# not there produces. A document actually arriving is the store crates'
+# container suites, which already run against real servers.
+node-remote:
+    cargo build -p dynamic-config-node-remote
+    cp target/debug/{{ lib_prefix }}dynamic_config_node_remote{{ lib_suffix }} dynamic-config-node-remote/index.node
+    # The base package, linked the way npm would install it.
+    mkdir -p dynamic-config-node-remote/node_modules
+    ln -sfn ../../dynamic-config-node dynamic-config-node-remote/node_modules/dynamic-config-node
+    cd dynamic-config-node-remote && node --test tests/*.test.js
+
+# Chaos: a store unplugged mid-watch, and put back.
+#
+# Needs Docker, and starts *two* containers per test — the store, and a
+# toxiproxy in front of it. The proxy rather than a stopped container is the
+# whole trick: a restarted container comes back on a different host port, so
+# "it recovered" could never be asserted against a source pointing at the old
+# one. Nothing here restarts.
+#
+# They are `#[ignore]`d, so `just containers` skips them and this is what runs
+# them. Three loops, one per shape: Redis' subscription and etcd's stream end
+# loudly, Consul's blocking query recovers on its own. The three pollers prove
+# the same property in `just mocks`, with a scripted 500 and no Docker at all.
+chaos:
+    cargo test -p dynamic-config-redis --test chaos -- --ignored --nocapture
+    cargo test -p dynamic-config-consul --test chaos -- --ignored --nocapture
+    cargo test -p dynamic-config-etcd --test chaos -- --ignored --nocapture
+
 # The `no_std` crate, on a host and for a target with no `std` at all.
 embedded:
     cargo test -p dynamic-config-embedded --features std,async
@@ -267,6 +340,10 @@ examples:
 # (`cargo install mdbook`).
 book:
     mdbook build book
+    # The binding's own book, into the first one's output — the layout CI
+    # publishes: `/dynamic-config/` and `/dynamic-config/python/`.
+    mdbook build book-python --dest-dir book/book/python
+    mdbook build book-node --dest-dir book/book/node
 
 # Regenerate the compile-fail expectations after an intentional change.
 bless:

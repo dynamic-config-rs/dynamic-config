@@ -25,6 +25,16 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-08-14
+
+### Changed
+
+- **The cache refusal spells the second way out in Python too.** It already
+  translated `.secrets([..])` into `DynamicConfig(..., secrets=[..])` and then
+  offered `CacheMode::Full` — a name Python does not have. It now names
+  `cache(path, "full")` beside it, so both ways out of the refusal are
+  readable by whoever hit it.
+
 ## [0.6.0] — 2026-08-13
 
 ### Added
@@ -695,7 +705,8 @@ Initial release.
 - Diagnostics report paths and types, never values — enforced by its own
   test suite.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ctolon/dynamic-config/compare/v0.3.0...v0.4.0

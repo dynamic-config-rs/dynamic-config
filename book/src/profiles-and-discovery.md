@@ -12,8 +12,8 @@ DbConfig::builder("db")
 order. **Every** directory with a
 match contributes one file, layered in search order — so `/etc` defaults,
 `~/.config` overrides and a local `./config.toml` all apply, in that order.
-(Go's Viper stops at the first hit; the reason to list `/etc` *and* `~` is to
-layer them.)
+(Stopping at the first hit would make naming both pointless: a machine-wide
+file and a user's file are layers, not alternatives.)
 
 Within one directory the extensions are tried `.toml`, `.json`, `.yaml`, `.yml`,
 skipping any whose feature is off, and the first hit wins — so a stray

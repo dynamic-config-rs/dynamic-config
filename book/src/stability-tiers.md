@@ -1,23 +1,35 @@
 # Stability Tiers
 
-Not every crate in this workspace makes the same promise. Two tiers, and every
-crate is in exactly one of them:
+Every crate in this workspace is **Beta**, and one is deliberately not a
+tier at all.
 
 | Crate | Tier |
 |---|---|
 | `dynamic-config` | **Beta** |
 | `dynamic-config-macros` | **Beta** |
-| `dynamic-config-etcd` | Experimental |
-| `dynamic-config-consul` | Experimental |
-| `dynamic-config-nats` | Experimental |
-| `dynamic-config-redis` | Experimental |
-| `dynamic-config-vault` | Experimental |
-| `dynamic-config-s3` | Experimental |
-| `dynamic-config-firestore` | Experimental |
-| `dynamic-config-git` | Experimental |
-| `dynamic-config-embedded` | Experimental |
-| `dynamic-config-server` | Experimental |
+| `dynamic-config-etcd` | **Beta** |
+| `dynamic-config-consul` | **Beta** |
+| `dynamic-config-nats` | **Beta** |
+| `dynamic-config-redis` | **Beta** |
+| `dynamic-config-vault` | **Beta** |
+| `dynamic-config-s3` | **Beta** |
+| `dynamic-config-firestore` | **Beta** |
+| `dynamic-config-git` | **Beta** |
+| `dynamic-config-embedded` | **Beta** |
+| `dynamic-config-server` | **Beta** |
+| `dynamic-config-cli` | **Beta** |
+| `dynamic-config-py`, `dynamic-config-py-remote` | **Beta** |
+| `dynamic-config-node`, `dynamic-config-node-remote` | **Beta** |
 | `dynamic-config-store-core` | no API — see below |
+
+**The store crates were Experimental until 0.6.1, and what moved them is
+evidence rather than time.** Each is tested against a real server in a
+container; each watch loop's failure branches are enumerated in a table in
+that crate's own documentation; three of them are unplugged mid-watch by
+`just chaos` — toxiproxy in front of a store that never restarts — and
+asserted to report the outage without losing the document they were
+serving. The surfaces stopped moving two releases ago. That is what the
+old tier said the path out was, and this is it.
 
 ## What Beta promises
 
@@ -36,17 +48,25 @@ renamed or removed in a patch release. `__private` and `__fuzz` are the two,
 and neither appears in this book for the same reason it does not appear in the
 API documentation.
 
-## What Experimental promises
+## What happens between here and 1.0
 
-The eight store crates, the embedded crate and the server are
-**Experimental**. They work, they are tested (the store crates against real
-servers in containers, the git store against real repositories, the embedded
-crate against a real `thumbv7em-none-eabihf` build, the server against its own
-router), and the contracts described in this book hold — but their APIs may
-change shape without ceremony: a release may rename, restructure or remove
-things with no deprecation cycle, noted in the changelog but not negotiated
-there. Pin an exact version if you depend on one. The path out of Experimental
-is use: a crate whose surface has stopped moving gets promoted to Beta.
+**Only security fixes and hotfixes.** The surface is what it is going to
+be for 0.x: no new sources, no new stores, no new methods on the settled
+types. What still lands is a defect that produces a wrong answer, a
+security advisory, and documentation — and each of those goes out as a
+patch.
+
+That is a change of intent, not of policy, and it is worth saying plainly
+because the two read the same from outside: a project that publishes
+weekly because it is growing and a project that publishes rarely because
+it is finished both look quiet. This one is the second.
+
+**What it means for a program that depends on this.** Pin the minor
+version and take patches automatically; a patch will not break you, and
+the release that could is the 1.0 that is being worked towards. An API
+that would be nicer is a 1.0 candidate — written down in
+[the roadmap](https://github.com/ctolon/dynamic-config/blob/main/ROADMAP.md)
+with its argument — rather than something to slip into a 0.x.
 
 ## `dynamic-config-store-core` promises nothing
 

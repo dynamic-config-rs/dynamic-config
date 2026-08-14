@@ -115,6 +115,25 @@ fn generates_section(text: &str, heading: &str) -> Vec<String> {
     rows
 }
 
+/// Every `.md` under `directory`, as paths relative to the repository.
+fn collect_markdown(directory: &Path, into: &mut Vec<PathBuf>, repo: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+
+        if path.is_dir() {
+            collect_markdown(&path, into, repo);
+        } else if path.extension().and_then(|extension| extension.to_str()) == Some("md") {
+            if let Ok(relative) = path.strip_prefix(repo) {
+                into.push(relative.to_path_buf());
+            }
+        }
+    }
+}
+
 fn read(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
 }
@@ -235,10 +254,10 @@ fn the_readmes_agree_on_one_version() {
     // A README that contributes *nothing* is the exact regression this gate
     // exists for — a snippet deleted, or rewritten into a shape the parser
     // no longer sees — so per-file accounting is part of the assertion.
-    // Two crates are legitimately exempt: the CLI and the Python
-    // extension are *installed* rather than depended on (`cargo install`,
-    // `pip install`), and neither install line carries a version by
-    // design.
+    // Three crates are legitimately exempt: the CLI, the Python extension
+    // and the Node addon are *installed* rather than depended on (`cargo
+    // install`, `pip install`, `npm install`), and none of those install
+    // lines carries a version by design.
     let mut empty: Vec<String> = Vec::new();
 
     for readme in &readmes {
@@ -272,8 +291,9 @@ fn the_readmes_agree_on_one_version() {
 
         let contributed = versions.values().map(Vec::len).sum::<usize>() > before;
         let rendered = readme.display().to_string();
-        let exempt =
-            rendered.contains("dynamic-config-cli") || rendered.contains("dynamic-config-python");
+        let exempt = rendered.contains("dynamic-config-cli")
+            || rendered.contains("dynamic-config-python")
+            || rendered.contains("dynamic-config-node");
 
         if !contributed && !exempt {
             empty.push(readme.display().to_string());
@@ -293,5 +313,400 @@ fn the_readmes_agree_on_one_version() {
         versions.len(),
         1,
         "the READMEs disagree on the release version: {versions:#?}"
+    );
+}
+
+/// Every number this repository's prose commits to, counted from the
+/// workspace instead of remembered.
+///
+/// "Sixteen crates", "fourteen publish", "eight store crates" — each one is a
+/// claim with no compiler behind it, and each one is wrong the day a crate is
+/// added. This is that compiler. It found two: the ROADMAP said sixteen
+/// crates were on crates.io when fourteen publish, and two pages still said
+/// seven store crates when git made it eight.
+///
+/// Phrases rather than bare nouns, because "crates" alone means two different
+/// numbers a sentence apart — *sixteen crates in one workspace*, *fourteen
+/// crates on crates.io* — and a test that could not tell them apart would
+/// have to be taught to ignore one of them.
+///
+/// Only derivable counts are checked. How many chapters a book has, or how
+/// many examples run, needs a judgement call, and a test that has to be
+/// taught the judgement is a second place for it to be wrong.
+#[test]
+fn the_prose_counts_match_the_workspace() {
+    let repo = repo();
+
+    let Ok(entries) = fs::read_dir(&repo) else {
+        eprintln!("skipped: not a repository checkout");
+        return;
+    };
+
+    let mut members = 0_usize;
+    let mut published = 0_usize;
+    let mut stores = 0_usize;
+
+    for entry in entries.filter_map(Result::ok) {
+        let manifest = entry.path().join("Cargo.toml");
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        if !name.starts_with("dynamic-config") || !manifest.exists() {
+            continue;
+        }
+
+        let text = fs::read_to_string(&manifest).expect("a manifest is readable");
+
+        members += 1;
+
+        if !text.contains("publish = false") {
+            published += 1;
+        }
+
+        // A store crate is one that *reads a document from somewhere else*,
+        // and depending on the shared store crate is the honest marker —
+        // the family is defined by what it uses rather than by a list here,
+        // which would need updating for exactly the reason this test exists.
+        //
+        // Three crates use it without being one, and all three are named
+        // rather than pattern-matched away: the server *serves* what a
+        // store fetched, and the two binding packages *package* the
+        // family.
+        let consumer = matches!(
+            name.as_str(),
+            "dynamic-config-store-core"
+                | "dynamic-config-server"
+                | "dynamic-config-python-remote"
+                | "dynamic-config-node-remote"
+        );
+
+        if text.contains("dynamic-config-store-core") && !consumer {
+            stores += 1;
+        }
+    }
+
+    // One table, asked both questions: *what could a page be saying* — it
+    // is the candidate list below — and *what does the workspace say*. Two
+    // lists would drift, and did: the candidates used to stop at seventeen
+    // while the workspace had eighteen members, so the two loudest claims
+    // in the repo were the two this test could not see.
+    const WORDS: [(usize, &str); 17] = [
+        (4, "four"),
+        (5, "five"),
+        (6, "six"),
+        (7, "seven"),
+        (8, "eight"),
+        (9, "nine"),
+        (10, "ten"),
+        (11, "eleven"),
+        (12, "twelve"),
+        (13, "thirteen"),
+        (14, "fourteen"),
+        (15, "fifteen"),
+        (16, "sixteen"),
+        (17, "seventeen"),
+        (18, "eighteen"),
+        (19, "nineteen"),
+        (20, "twenty"),
+    ];
+
+    let word = |number: usize| -> &'static str {
+        WORDS
+            .iter()
+            .find_map(|(value, spelled)| (*value == number).then_some(*spelled))
+            .unwrap_or_else(|| panic!("no word for {number}; add it to WORDS, and check the prose"))
+    };
+
+    // Each phrase, and the number it is a claim about. A phrase that appears
+    // nowhere is not an error — prose is allowed to not say a thing — but a
+    // phrase that appears with the wrong number is.
+    let claims: [(&str, usize); 8] = [
+        ("crates in one workspace", members),
+        ("crates share", members),
+        // The first half of "Eighteen crates. Fourteen publish to
+        // crates.io": two numbers in one sentence, matched by one row each.
+        ("crates.", members),
+        ("crates on crates.io", published),
+        ("to crates.io", published),
+        ("publish to crates.io", published),
+        ("store crates", stores),
+        ("stores ship", stores),
+    ];
+
+    // The workspace's own numbers, spelled, before a single page is read.
+    // This is what makes WORDS a gate rather than a lookup: a workspace
+    // that grows past the table stops here, saying so, instead of quietly
+    // checking prose against a number it has no word for.
+    for (_, count) in claims {
+        let _ = word(count);
+    }
+
+    // The five top-level documents, and every page of all three books —
+    // which is where "the seven store crates" survived two releases after
+    // git made it eight, because nothing counted them.
+    let mut documents: Vec<PathBuf> = [
+        "README.md",
+        "ROADMAP.md",
+        "RELEASING.md",
+        "CONTRIBUTING.md",
+        "AGENTS.md",
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .collect();
+
+    for book in ["book/src", "book-python/src", "book-node/src"] {
+        collect_markdown(&repo.join(book), &mut documents, &repo);
+    }
+
+    let mut wrong: Vec<String> = Vec::new();
+
+    for name in &documents {
+        let Some(text) = read(&repo.join(name)) else {
+            continue;
+        };
+
+        let name = name.display();
+
+        for (line_number, line) in text.lines().enumerate() {
+            let lowered = line.to_lowercase();
+
+            for (phrase, count) in claims {
+                for (candidate, spelled) in WORDS {
+                    let claim = format!("{spelled} {phrase}");
+
+                    if lowered.contains(&claim) && candidate != count {
+                        wrong.push(format!(
+                            "{name}:{}: says \"{claim}\", and there are {count}",
+                            line_number + 1
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        wrong.is_empty(),
+        "prose that disagrees with the workspace:\n  {}",
+        wrong.join("\n  ")
+    );
+}
+
+/// The precedence chain is written in two places, and they are the same
+/// string.
+///
+/// The crate front page and the book's own chapter both draw it, because both
+/// are somebody's first page. Two copies of an ordering is two chances to be
+/// wrong about it, and one of them already was: `secrets_dir` landed in the
+/// book's chain and never reached `lib.rs`, so the front page described a
+/// layer order the loader had not had for two releases.
+#[test]
+fn the_precedence_chain_is_the_same_in_both_places() {
+    let repo = repo();
+
+    let (Some(front_page), Some(chapter)) = (
+        read(&repo.join("dynamic-config/src/lib.rs")),
+        read(&repo.join("book/src/sources-and-precedence.md")),
+    ) else {
+        eprintln!("skipped: not a repository checkout");
+        return;
+    };
+
+    /// The `set_default < … < set_override` line, with the prose stripped
+    /// off: `//! ` in Rust, nothing in Markdown.
+    fn chain(text: &str) -> Option<String> {
+        text.lines()
+            .map(|line| line.trim_start_matches("//!").trim())
+            .find(|line| line.starts_with("set_default <"))
+            .map(str::to_owned)
+    }
+
+    let front = chain(&front_page).expect("lib.rs draws the chain");
+    let book = chain(&chapter).expect("the chapter draws the chain");
+
+    assert_eq!(
+        front, book,
+        "the crate front page and the book disagree about layer order; the \
+         loader's own `LAYERS` table in `loader/mod.rs` is the tiebreak"
+    );
+}
+
+/// Every example has a row in the book's table.
+///
+/// The table is how anybody finds them, and an example nobody can find is an
+/// example nobody runs — which is the state `ini_provider` was in for two
+/// releases, with the count above the table saying twenty-seven while
+/// twenty-eight compiled.
+#[test]
+fn every_example_is_in_the_books_table() {
+    let repo = repo();
+
+    let (Ok(entries), Some(table)) = (
+        fs::read_dir(repo.join("dynamic-config/examples")),
+        read(&repo.join("book/src/examples.md")),
+    ) else {
+        eprintln!("skipped: not a repository checkout");
+        return;
+    };
+
+    let mut missing: Vec<String> = Vec::new();
+    let mut examples = 0_usize;
+
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+
+        if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+            continue;
+        }
+
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("an example has a name")
+            .to_owned();
+
+        examples += 1;
+
+        // The row links to the file, so the path is the thing to look for:
+        // a name alone would match this example being *mentioned* in another
+        // row's prose.
+        if !table.contains(&format!("examples/{stem}.rs")) {
+            missing.push(stem);
+        }
+    }
+
+    assert!(
+        missing.is_empty(),
+        "examples with no row in book/src/examples.md: {missing:?}"
+    );
+
+    // And the count in the sentence above the table.
+    let counted = match examples {
+        26 => "twenty-six",
+        27 => "twenty-seven",
+        28 => "twenty-eight",
+        29 => "twenty-nine",
+        30 => "thirty",
+        other => panic!("no word for {other} examples; add it, and check the prose"),
+    };
+
+    assert!(
+        table.to_lowercase().contains(&format!("{counted} of them")),
+        "the book says something other than \"{counted} of them\", and there \
+         are {examples}"
+    );
+}
+
+/// Every store's documented call is the call it takes.
+///
+/// `#[napi(constructor)]` generates a **positional** constructor, so a store
+/// whose summary line has drifted is not a cosmetic problem: a caller
+/// following it passes a timeout where the TLS options go. Three had drifted
+/// by 0.6.1 — Vault's `format`, Redis's `tls`, Firestore's `accessTokenFn`
+/// and `tls` — each an argument that could only be found by reading the Rust,
+/// which is not where a JavaScript caller looks.
+///
+/// `a | b | c` in a summary stands for the three slots exactly one of which
+/// is filled: a key, a list of keys, or a prefix.
+#[test]
+fn every_store_documents_the_arguments_it_takes() {
+    let Some(source) = read(&repo().join("dynamic-config-node-remote/src/lib.rs")) else {
+        eprintln!("skipped: not a repository checkout");
+        return;
+    };
+
+    /// `timeout_ms: Option<u32>` → `timeoutMs?`.
+    fn parameter(line: &str) -> Option<String> {
+        let (name, rest) = line.trim().trim_end_matches(',').split_once(':')?;
+        let mut camel = String::new();
+        let mut upper = false;
+
+        for character in name.trim().chars() {
+            match character {
+                '_' => upper = true,
+                other if upper => {
+                    camel.extend(other.to_uppercase());
+                    upper = false;
+                }
+                other => camel.push(other),
+            }
+        }
+
+        if rest.contains("Option<") {
+            camel.push('?');
+        }
+
+        Some(camel)
+    }
+
+    let lines: Vec<&str> = source.lines().collect();
+    let mut wrong: Vec<String> = Vec::new();
+    let mut checked = 0;
+
+    for (number, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        let Some(documented) = trimmed
+            .strip_prefix("/// `(")
+            .and_then(|rest| rest.strip_suffix(")`"))
+        else {
+            continue;
+        };
+
+        // The constructor this line is about, and the parameters it takes.
+        let Some(opens) = lines[number..]
+            .iter()
+            .position(|line| line.trim() == "pub fn new(")
+        else {
+            continue;
+        };
+        let start = number + opens + 1;
+        let taken: Vec<String> = lines[start..]
+            .iter()
+            .take_while(|line| !line.trim().starts_with(") ->"))
+            .filter(|line| !line.trim().starts_with("//"))
+            .filter_map(|line| parameter(line))
+            .collect();
+
+        // `key | keys | prefix` is three optional slots written as the one
+        // choice a caller actually makes — so each alternative is optional
+        // whether or not the summary bothered to say so.
+        let claimed: Vec<String> = documented
+            .split(',')
+            .flat_map(|entry| {
+                let alternatives = entry.contains('|');
+
+                entry.split('|').map(move |name| {
+                    let name = name.trim();
+
+                    if alternatives && !name.ends_with('?') {
+                        format!("{name}?")
+                    } else {
+                        name.to_owned()
+                    }
+                })
+            })
+            .collect();
+
+        checked += 1;
+
+        if claimed != taken {
+            wrong.push(format!(
+                "dynamic-config-node-remote/src/lib.rs:{}: says ({}), and it takes ({})",
+                number + 1,
+                claimed.join(", "),
+                taken.join(", ")
+            ));
+        }
+    }
+
+    assert!(
+        checked >= 8,
+        "found {checked} documented constructors; there are eight stores, so \
+         this test has stopped finding them and is passing on nothing"
+    );
+    assert!(
+        wrong.is_empty(),
+        "a store's summary line is not its signature:\n  {}",
+        wrong.join("\n  ")
     );
 }

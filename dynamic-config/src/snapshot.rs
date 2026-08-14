@@ -204,10 +204,10 @@ impl Snapshot {
 
     /// The table at `path`, as a snapshot of its own.
     ///
-    /// The analogue of Viper's `Sub`: hand a subsystem the part of the
-    /// configuration it owns and nothing else. Provenance follows: the sub-
-    /// snapshot's [`source_of`](Self::source_of) answers for its own,
-    /// re-rooted paths.
+    /// Hands a subsystem the part of the configuration it owns and nothing
+    /// else — the pool's settings without the credentials beside them.
+    /// Provenance follows: the sub-snapshot's
+    /// [`source_of`](Self::source_of) answers for its own, re-rooted paths.
     #[must_use]
     pub fn sub(&self, path: &str) -> Option<Self> {
         match self.at(path)? {

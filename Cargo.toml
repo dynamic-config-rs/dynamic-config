@@ -16,11 +16,13 @@ members = [
     "dynamic-config-server",
     "dynamic-config-python",
     "dynamic-config-python-remote",
+    "dynamic-config-node",
+    "dynamic-config-node-remote",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 rust-version = "1.71"
 license = "MIT"
@@ -39,12 +41,12 @@ exclude = [
 ]
 
 [workspace.dependencies]
-dynamic-config-macros = { version = "=0.6.0", path = "dynamic-config-macros" }
-dynamic-config = { version = "=0.6.0", path = "dynamic-config", default-features = false }
+dynamic-config-macros = { version = "=0.6.1", path = "dynamic-config-macros" }
+dynamic-config = { version = "=0.6.1", path = "dynamic-config", default-features = false }
 # The store crates' shared internals. Published because cargo will not let a
 # published crate depend on one that is not — not because anything outside
 # this workspace should name it.
-dynamic-config-store-core = { version = "=0.6.0", path = "dynamic-config-store-core" }
+dynamic-config-store-core = { version = "=0.6.1", path = "dynamic-config-store-core" }
 
 # One profile for the benchmark to be worth reading.
 [profile.bench]

@@ -1,5 +1,9 @@
 # Comparisons
 
+> What this engine is built on and whose ideas it took is
+> [CREDITS.md](https://github.com/ctolon/dynamic-config/blob/main/CREDITS.md).
+> This page is about the differences.
+
 This page is for the decision *before* the one this book otherwise answers:
 whether to use this crate at all. Three alternatives come up every time —
 `serde` and a format crate on their own, [config-rs](https://docs.rs/config),

@@ -158,7 +158,7 @@ dynamic-config explain pool.max_size --file config.toml --key db --env APP_
 dynamic-config diff old.toml new.toml --key db     # paths only, never values
 ```
 
-That is `dynamic-config-cli`, an Experimental workspace member. A CLI cannot
+That is `dynamic-config-cli`, a workspace member of its own. A CLI cannot
 see your attribute, so the flags restate the load — they have to match what
 the application declares, or the answer is about a different load.
 

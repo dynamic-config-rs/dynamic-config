@@ -7,9 +7,10 @@
 # Pre-1.0, a breaking change bumps the *minor* and everything else the patch —
 # which is what `minor` and `patch` above mean here.
 #
-# Publishing itself happens in CI, triggered by the tag this creates; see
-# .github/workflows/release.yml. Nothing here talks to crates.io, so a release
-# from a laptop cannot bypass the checks.
+# Publishing itself happens in CI: `release.yml` runs on every push to
+# `main`, notices the workspace version is new, and publishes. Nothing here
+# talks to crates.io, so a release from a laptop cannot bypass the checks —
+# and nothing here tags, either (see below).
 
 # One version across the workspace. The crates depend on each other by exact
 # version, so they cannot usefully move apart.
@@ -20,9 +21,11 @@ consolidate-commits = true
 #
 # `main` accepts no direct pushes — not even from admins — so the release
 # commit travels like every other change: on a branch, through a pull
-# request, past the gates. The tag is created by hand on `main` *after* the
-# merge, because a tag minted here would point at a commit that is not the
-# one `main` ends up with.
+# request, past the gates. The tag is minted by CI at the merge commit,
+# after publishing succeeded, because a tag created here would point at a
+# commit that is not the one `main` ends up with — the squash-merge makes
+# a new one — and a tag that exists before the publish is a tag for a
+# release that may never have happened.
 publish = false
 push = false
 tag = false

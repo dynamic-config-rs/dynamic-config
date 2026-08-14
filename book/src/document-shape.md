@@ -10,7 +10,7 @@ example: [`document_shape`](examples.md) and
 | Question | Answer |
 |---|---|
 | Must a file be sectioned? | No. `whole_document()` reads `{"host": …, "port": …}` with nothing above it. |
-| A key the file has and the type does not name? | Ignored by the load; `check()` names it. `deny_unknown_fields` / `extra="forbid"` / a dataclass refuse it. |
+| A key the file has and the type does not name? | Ignored by the load; `check()` names it. `deny_unknown_fields` / `extra="forbid"` / `forbid_unknown_fields` / a dataclass refuse it. |
 | Two files, half the type in each? | One configuration. Later files win where they overlap. |
 | A field no source supplies? | The load fails naming the field, unless a default or an `Option` covers it. |
 
@@ -142,12 +142,15 @@ second-guess it:
 | Python, `BaseModel` by default | ignored |
 | Python, `model_config = ConfigDict(extra="forbid")` | a load error naming the key |
 | Python, `@dataclasses.dataclass` | **always** a load error naming the key |
+| Python, `msgspec.Struct` by default | ignored |
+| Python, `msgspec.Struct(forbid_unknown_fields=True)` | a load error naming the key |
 
 The dataclass row is not an oversight. A dataclass has no `extra` setting
 to consult, so there is nothing to choose from: the binding builds the
 instance itself and refuses what the class does not declare, saying
 `owner: Plain declares no such field`. If you need a dataclass to tolerate
-extra keys, give it a field to absorb them or use a Pydantic model.
+extra keys, give it a field to absorb them, or use a Pydantic model or a
+`msgspec.Struct` — both of which have a setting for it.
 
 ## 3. Two files, half the type in each
 

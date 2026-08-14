@@ -4,8 +4,7 @@ What is not in the crate yet and might be. Everything that shipped is described
 in [README.md](README.md); what will *not* be built, and why, is under
 [Not planned](book/src/limitations.md#not-planned) there.
 
-Tags: **[viper]** exists in Go's [Viper](https://github.com/spf13/viper) and does
-not here. **[figment]** is something the underlying loader,
+Tags: **[figment]** is something the underlying loader,
 [figment](https://docs.rs/figment), can do that this crate does not expose.
 **[own]** is neither — an idea from using the thing.
 
@@ -25,9 +24,11 @@ Python bindings, and **0.6 is the clearing release** — everything that had
 been waiting for a reason other than "nobody has asked", done in one wave so
 the surface stops accumulating.
 
-**0.6 is built and unreleased.** What landed is not here: the changelogs
-carry it, [README.md](README.md) describes the crate as it is, and this
-file keeps only what is still open. Three of its items were answered by
+**0.6 shipped** — fourteen crates on crates.io, two wheels on PyPI, the
+book published, the instruction-count gate armed with a committed
+baseline. What landed is not here: the changelogs carry it,
+[README.md](README.md) describes the crate as it is, and this file keeps
+only what is still open. Three of its items were answered by
 *measurement* rather than by code, and each answer is written where it
 belongs rather than here:
 
@@ -47,17 +48,31 @@ belongs rather than here:
   worse than today's sentence, and the state parameter leaks into four
   public signatures.
 
-**0.6 is complete.** Every item in it either landed or was answered by
-measurement; the entries below are what those answers left behind, and none
-of them is a design question any more.
+**0.6 is complete, and so are the two remainders it left.** Instruction
+counts: the workflow ran, the baseline is committed, and the gate now
+fails a pull request that regresses past the limits
+`benches/instructions.rs` declares. A remote fetch's reporting:
+`RemoteSink::failed` and `Attempts` are wired through `reporting_to` in
+all seven network stores, and git needs none of it because its watch is a
+poll and a poll is a fetch.
 
-1. [Instruction counts](#instruction-counts-not-just-wall-clock-own) — the
-   harness and the workflow landed and have **never executed**: there is no
-   valgrind where they were built. The gate arms itself the moment a
-   maintainer runs the workflow once and commits the baseline it uploads.
-2. [What a remote fetch does not yet report](#what-a-remote-fetch-does-not-yet-report-own)
-   — the door exists now (`RemoteSink::failed`); what is left is one call at
-   each failure site in the seven network watch loops.
+**0.6.1 is the release being built now**, and it is the last one that adds
+anything. Every crate and package moves to **Beta** with it: the store
+crates' surfaces stopped moving two releases ago, each is tested against a
+real server, each watch loop's failure branches are enumerated in its own
+documentation, and three of them are unplugged mid-watch by `just chaos`.
+
+**After it, only security fixes and hotfixes until 1.0.** No new sources,
+no new stores, no new methods on the settled types. What still ships is a
+defect that produces a wrong answer, a security advisory, and
+documentation — each as a patch. Anything that would be nicer is a 1.0
+candidate, written down here with its argument rather than slipped into a
+0.x.
+What it carries: the failure-branch *audit* behind the wiring above, with
+chaos tests that unplug each store; a documentation and manifest sweep; a
+Python book of its own; msgspec as a fifth Python schema; Node.js
+bindings at 0.0.1, with a book of their own; and a third-party dependency
+audit across all three ecosystems.
 
 Two 0.6 answers are worth keeping in view because they will be asked again:
 
@@ -83,38 +98,51 @@ Two 0.6 answers are worth keeping in view because they will be asked again:
 need for, the [runtime-agnostic S3 sleep](#runtime-agnostic-s3-watch-sleep-own)
 that is blocked on the AWS SDK, [serde_yaml](#serde_yamls-future-own) which
 moves when figment moves, [a ninth store](#a-store-nobody-has-asked-for-yet-own)
-nobody has asked for, [msgspec as a fifth Python
-schema](#msgspec-as-a-python-schema-own) waiting on somebody who actually
-wants it, and [a book per crate](#one-book-or-a-book-per-crate-own) — where
-the answer is probably per-crate entry *points* rather than fourteen books.
+nobody has asked for. The book question is
+[answered](#one-book-or-a-book-per-crate--answered-three-books-own): three
+books, one per audience.
 
 ---
 
 ## Telemetry
 
-### What a remote fetch does not yet report **[own]**
+### A watch that stopped delivering must not look healthy **[own]**
 
 The reload path, the fetch path, the server's `/metrics` and the Python
-binding all landed; [the book](book/src/telemetry.md) is the surface and the
-changelog is the history. One piece is left, and it is now a wiring job
-rather than a design question.
+binding all landed in 0.6; [the book](book/src/telemetry.md) is the surface
+and the changelog is the history. So did the piece that was open when 0.6
+was written: `RemoteSink::failed`, `Attempts`, and `reporting_to(sink)` on
+all seven network stores. git carries none of it, deliberately — its watch
+is a poll, and a poll is a fetch, which already records itself.
 
-**A watch loop's failed attempts do not reach `RemoteStatus`.** `apply`
-records a delivery, so a working watch keeps the status current — but a loop
-whose stream broke, whose blocking query is erroring or whose credential was
-refused delivers nothing, so `dynamic_config_remote_up` reports the last
-*delivery* rather than the last *attempt*, and a store that stopped answering
-an hour ago looks healthy until something calls `refresh_remote`.
+**The evidence landed in 0.6.1, and it changed two crates.** Every failure
+branch of the seven loops is now marked in a table in its own crate's
+documentation, under three rules that hold across all of them: a failure
+the loop survives by retrying **reports**; a recovery that *worked* stays
+**silent**, because only a delivery clears the streak and a five-minute
+token turning over on a healthy cluster must not park `remote_up` at zero;
+and a refusal that **never asked the store** reports nowhere.
 
-The door exists: `RemoteSink::failed(&error)`, fenced on the sink's
-generation exactly as `apply` is, moving only the failure streak and the last
-failure so the staleness clock keeps running. What remains is one call at
-each failure site in the seven network watch loops — Consul's retry branch,
-etcd's stream-error and range-read branches, Redis' failed fetch and dead
-subscription, NATS' stream error, and Vault, S3 and Firestore's poll
-failures — reached through one `reporting_to(sink)` builder option per store
-rather than a second `watch` method in seven crates. git needs none of it:
-its watch is a poll, and a poll is a fetch, which already records itself.
+The third rule is the one the audit settled rather than recorded. etcd and
+NATS reported a watch refused before its first round trip — no format, a
+key shape that cannot be watched — and Redis and S3 did not, each with a
+test asserting its own half. `RemoteStatus::reachable()`'s contract
+decides it: *whether the store answered the last time it was asked*. Those
+refusals never ask, and a status carries a kind and a path and **no
+message**, so `remote_up = 0` for a source typo is an alert about a
+healthy store that nothing downstream can correct. etcd and NATS were
+changed to match; the error still says exactly what is wrong, to the
+caller holding it.
+
+`just chaos` is the other half: toxiproxy in front of a store that never
+restarts, so a cut cable and a restored one are both assertable. Three
+loops are covered there, one per shape — Redis' subscription and etcd's
+stream **end loudly**, Consul's blocking query **recovers on its own** —
+and each asserts the pair an alert reads: `remote_up` goes to zero *while
+the staleness clock keeps running*, and the last good document is still
+being served. The three pollers (Vault, Firestore, S3) have the same
+property proven without Docker, by their scripted-server suites: a poll
+that fails reports, the loop survives, and the clock keeps ageing.
 
 ---
 
@@ -156,59 +184,50 @@ and an eighth done casually would be worse than none.
 
 ## Documentation
 
-### One book, or a book per crate **[own]**
+### One book, or a book per crate — **answered: three books** **[own]**
 
-Sixteen crates share one mdBook, and the chapters that are *about a crate*
-rather than about the engine are already the majority of it: eight store
-pages, the config server and its threat model, the CLI, ten Python pages.
-They are correct and they are in the wrong place — a reader who has added
-`dynamic-config-vault` to a project does not want the engine's builder tour
-first, and a store's own README is a paragraph pointing at a page in
-somebody else's book.
+Three, one per audience, and the question is closed. `book/` is the Rust
+book, `book-python/` and `book-node/` are the bindings', all three
+published from one Pages deployment as `/dynamic-config/`,
+`/dynamic-config/python/` and `/dynamic-config/node/`.
 
-**What a per-crate book would buy.** docs.rs already builds one thing per
-crate; a book beside it would match how the crates are actually consumed
-(one store at a time), let a store's chapter carry its own version, and stop
-the root book growing a section per crate forever.
+**A book per crate is not happening**, and the reason is the one the
+argument kept returning to: half the value of a store chapter is that it
+can say *this is the same `TlsConfig` every other store takes* and link to
+it. Split into fourteen books, that becomes an inter-book link no tool
+checks, and fourteen mdBook builds and fourteen link-check runs to
+maintain it. The split that *was* worth making is by **language**, because
+a Python or Node reader is not a Rust reader who wants a shorter chapter —
+they are somebody who will never write `#[dynamic_config]`.
 
-**What it would cost, and this is the decision.** Fourteen mdBook builds in
-CI instead of one, fourteen link-check runs, and — the part that is not
-mechanical — the cross-references. Half the value in the store chapters is
-that they can say *this is the same `TlsConfig` every other store takes* and
-link to it; split, that becomes an inter-book link that no tool checks and
-that breaks silently when a page is renamed. The Python pages are worse:
-they are the same engine described for another language, and half of what
-they say is "as the Rust side does, here".
-
-**The shape that is probably right** is neither: keep one book and make the
-per-crate entry points real. A `book/src/crates/{name}.md` per crate, linked
-from that crate's README as its front door, holding what is specific to it
-and linking inward for what is shared — so a reader arriving from crates.io
-lands on their crate and not on chapter one, without splitting a link graph
-that is doing real work. It is worth doing when a store's chapter is long
-enough that this is not just a redirect; today two of them are.
+What remains available, and costs nothing to add later if a store chapter
+ever grows long enough to need it, is a per-crate *entry point*: a page in
+the Rust book that a crate's README links to as its front door. Today two
+of the store chapters would be a redirect, which is why there is not one.
 
 ---
 
 ## The longer arc
 
-### Instruction counts, not just wall clock **[own]**
+### Instruction counts, not just wall clock **[own]** — shipped
 
 Wall-clock benchmarks on a shared runner cannot gate a regression: the noise
 is larger than the change worth catching. `iai-callgrind` counts instructions
 under valgrind, which is deterministic enough to fail a pull request.
 
-Not landed, and the reason is not "valgrind was missing" — it is that **the
-baseline cannot be produced from a laptop**. iai-callgrind's whole value is
-comparison against a committed baseline; it stores one under `target/`, which
-does not survive between CI runs. Wired up without one, every run would be a
-first run: it would print numbers and never fail. That is exactly the
-benchmark that silently does nothing, and it would cost a lockfile entry and
-a `cargo deny` review to have it.
+**Landed, and the shape is worth keeping** because the same trap waits for
+any deterministic benchmark: iai-callgrind compares against a baseline it
+stores under `target/`, which does not survive between CI runs — so wired up
+without a *committed* one, every run is a first run that prints numbers and
+can never fail. The gate is therefore two-state and says which state it is
+in: no baseline means measure and warn, a baseline means compare and fail
+past the limits `benches/instructions.rs` declares.
 
-What makes it landable is one maintainer action: a CI run on a branch that
-installs valgrind, runs `cargo bench --bench instructions --save-baseline
-main`, and commits what it produced.
+The baseline was produced the only way it can be: one CI run on the runner
+image the comparison will use, its `iai-baseline` artefact committed under
+`dynamic-config/benches/baselines/`. `current_once` is 85 instructions
+there — the number the README's claim about a snapshot read is measured
+against.
 
 ### The road to 1.0 is stabilisation, not features **[own]**
 
@@ -224,42 +243,6 @@ candidate.
 New capability proposals queue behind stability during that window. The problem worth
 solving by then is not a missing feature; it is that nothing this
 sophisticated has been beaten up by strangers yet.
-
-### msgspec as a Python schema **[own]**
-
-The binding's schema surface is an adapter — `validate`, `field_names`,
-`secret_paths`, `is_instance` — and there are four implementations of it
-already: Pydantic, a Pydantic dataclass, a plain `dataclasses.dataclass`,
-and `Values`, which is no schema at all.
-[msgspec](https://github.com/jcrist/msgspec) is the obvious fifth: a
-`msgspec.Struct` is a declaration in the same shape as the other two typed
-ones, it validates on decode, and it is markedly faster than Pydantic at
-exactly the thing this engine asks a schema to do — turn one resolved
-mapping into one instance, once per reload.
-
-**What makes it a decision rather than an afternoon.** The adapter's four
-questions map cleanly (`msgspec.convert` for the validate half,
-`msgspec.structs.fields` for the names), but two things do not:
-
-- **Secrets have no declaration.** Pydantic has `SecretStr`, a dataclass has
-  `field(metadata={"secret": True})`, and msgspec has neither — its
-  `Meta`/`Annotated` carries constraints, not a place for a library's own
-  flag. So either `Annotated[str, Meta(extra={"secret": True})]` becomes the
-  spelling, which is this package inventing a convention in somebody else's
-  namespace, or a msgspec configuration passes `secrets=[..]` the way a
-  `Values` one does. The second is honest and already exists; it is also a
-  second way to say a thing the other schemas say once.
-- **The error shape.** `InvalidError.errors` carries Pydantic's own report,
-  scrubbed of values, because a Python program branches on it. msgspec
-  raises a `ValidationError` with a message and no structured report, so a
-  msgspec configuration's `errors` would be empty — which is fine and has to
-  be *said*, or it reads as a bug.
-
-Neither is hard; both are decisions about a surface that is meant to look
-the same whichever schema you brought. Worth doing when somebody is
-actually reaching for msgspec — the extra is `dynamic-config-py[msgspec]`,
-the adapter is one file next to `_pydantic.py`, and the base install goes on
-depending on nothing.
 
 ### `WriteDurability` as API **[own]**
 0.1.0 fsyncs every atomic write, unconditionally. If someone measures real

@@ -144,9 +144,9 @@ fn serialization(error: impl std::fmt::Display) -> Error {
 
 /// As [`save`], but refuses if `path` already exists.
 ///
-/// Viper calls this `SafeWriteConfig`. The case is a setup wizard or a `--init`
-/// subcommand: writing a configuration somebody already wrote by hand, silently,
-/// is the one failure mode those have.
+/// The case is a setup wizard or a `--init` subcommand: overwriting a
+/// configuration somebody already wrote by hand, silently, is the one failure
+/// mode those have.
 ///
 /// Written directly rather than through a temporary file and a rename. The
 /// rename is what makes [`save`] atomic *against an existing file*, and there is

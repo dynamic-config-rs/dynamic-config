@@ -30,6 +30,9 @@ The loader is figment — layered providers, profile selection and loose typing 
 environment values are problems it already solves well. What this crate adds is
 everything around it: the attribute and its builder, the lock-free snapshot,
 the watcher, and a reload that cannot take the process down.
+[Comparisons](comparisons.md) is the row-by-row version of the table above, and
+[CREDITS.md](https://github.com/ctolon/dynamic-config/blob/main/CREDITS.md) is
+what this engine owes to each of them.
 
 ## The shape of the crate
 

@@ -241,6 +241,6 @@ It is a `Mapping` read by dotted path, and it gives up the same two
 things this chapter's Rust half does — a field list for `check()` to
 compare against, and a declaration of which paths are secret. See
 [`Values`: a configuration with no
-schema](python/types.md#values-a-configuration-with-no-schema).
+schema](https://ctolon.github.io/dynamic-config/python/types.html#values-a-configuration-with-no-schema).
 
 [`Value`]: https://docs.rs/dynamic-config/latest/dynamic_config/enum.Value.html

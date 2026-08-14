@@ -14,9 +14,10 @@
 //! ```
 //!
 //! Every directory that has a match contributes one, merged in the order the
-//! paths are listed — so the layering is the search order, and the last
-//! directory wins. This is where it differs from Go's Viper, which stops at the
-//! first hit: the whole reason to list `/etc` *and* `~` is to layer them.
+//! paths are listed — so the layering *is* the search order, and the last
+//! directory wins. Stopping at the first hit would make listing `/etc` *and*
+//! `~` pointless: the reason to name both is that a machine-wide file and a
+//! user's file are layers, not alternatives.
 //!
 //! Within one directory the extensions are tried in a fixed order and the first
 //! hit is taken, so a stray `config.json` next to a `config.toml` is resolved
