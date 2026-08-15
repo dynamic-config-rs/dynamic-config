@@ -76,7 +76,7 @@ jobs:
       # tests drive real servers in containers, which only one of these three
       # runners has.
       - run: >
-          cargo test --workspace --features full3
+          cargo test --workspace --features full
       # `no_std` and the workspace's `--features full` do not mix: this crate
       # has its own features and no `full`.
       - run: cargo test -p dynamic-config-embedded --features std,async
@@ -95,7 +95,7 @@ jobs:
       # parallel. Running the suite a second time single-threaded catches the
       # opposite mistake: a test that only passes because another one ran first.
       - run: >
-          cargo test --workspace --features full3
+          cargo test --workspace --features full
           -- --test-threads=1
         if: matrix.os == 'ubuntu-latest'
       # Doctests document the default feature set, so they are skipped when it
@@ -360,7 +360,7 @@ jobs:
             --exclude '^https://dynamic-config-rs\.github\.io'
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
             AGENTS.md CHANGELOG.md CREDITS.md docs/*.md scripts/README.md
-            dynamic-config-*/README.md dynamic-config-*/CHANGELOG.md
+            dynamic-config*/README.md dynamic-config*/CHANGELOG.md
             book/src/*.md .claude/skills/*/SKILL.md
           fail: true
 
@@ -413,7 +413,7 @@ jobs:
       # Chasing the number *up* is still explicitly not the game; the trend
       # lives in the job summaries and the lcov artifact feeds the detail.
       - run: >
-          cargo llvm-cov --workspace --features full3
+          cargo llvm-cov --workspace --features full
           --fail-under-lines 80
           --lcov --output-path lcov.info
       - name: summary
