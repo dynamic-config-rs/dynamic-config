@@ -78,56 +78,41 @@ runtime data, and it lives in runtime code.
   tokio, smol and Embassy all drive it. Blocking work never lands on your
   executor.
 - **Remote stores are explicit.** `refresh_remote()` does the network round
-  trip; `load()` never does. Eight store crates ship, each watching the way
-  its protocol allows — seven over a network, and git.
+  trip; `load()` never does. Eight store crates ship from
+  [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote),
+  each watching the way its protocol allows — seven over a network, and git.
 
 The full story — precedence, profiles, discovery, hot reload, encryption,
 schema export, units, the last-known-good cache, testing patterns — lives in
 [**the book**](https://dynamic-config-rs.github.io/).
 
-## The workspace
+## This repository, and the family
 
 | Crate | What | Stability |
 |---|---|---|
 | [`dynamic-config`](https://crates.io/crates/dynamic-config) | the engine: loading, layers, storage, watching | **Beta** |
 | [`dynamic-config-macros`](https://crates.io/crates/dynamic-config-macros) | `#[dynamic_config]` | **Beta** |
-| [`dynamic-config-etcd`](dynamic-config-etcd) | etcd, push watch over gRPC | **Beta** |
-| [`dynamic-config-consul`](dynamic-config-consul) | Consul KV, blocking queries | **Beta** |
-| [`dynamic-config-nats`](dynamic-config-nats) | NATS JetStream KV, push watch | **Beta** |
-| [`dynamic-config-redis`](dynamic-config-redis) | Redis, keyspace notifications | **Beta** |
-| [`dynamic-config-vault`](dynamic-config-vault) | Vault KV v2, version polling | **Beta** |
-| [`dynamic-config-s3`](dynamic-config-s3) | S3 & compatibles, ETag polling — needs tokio | **Beta** |
-| [`dynamic-config-firestore`](dynamic-config-firestore) | Firestore REST, `updateTime` polling | **Beta** |
-| [`dynamic-config-git`](dynamic-config-git) | a git repository, shallow single-ref fetch — GitHub, GitLab, Azure DevOps | **Beta** |
-| [`dynamic-config-embedded`](dynamic-config-embedded) | the same shape for `no_std` targets | **Beta** |
-| [`dynamic-config-server`](dynamic-config-server) | serves configuration over HTTP, per-caller authorisation | **Beta** |
-| [`dynamic-config-cli`](dynamic-config-cli) | `explain` and `diff` on the command line — `cargo install dynamic-config-cli` | **Beta** |
-| [`dynamic-config-python`](dynamic-config-python) | Python bindings — `pip install dynamic-config-py`; a dataclass, Pydantic or msgspec validates | **Beta** |
-| [`dynamic-config-python-remote`](dynamic-config-python-remote) | the stores for Python — `pip install "dynamic-config-py[remote]"` | **Beta** |
-| [`dynamic-config-node`](dynamic-config-node) | Node.js bindings — `npm install dynamic-config-node`; Zod, Ajv or a function of your own validates | **Beta** |
-| [`dynamic-config-node-remote`](dynamic-config-node-remote) | the stores for Node — `npm install dynamic-config-node-remote` | **Beta** |
+| [`dynamic-config-embedded`](https://crates.io/crates/dynamic-config-embedded) | the same shape for `no_std` targets | **Beta** |
+| [`dynamic-config-cli`](https://crates.io/crates/dynamic-config-cli) | `explain` and `diff` on the command line — `cargo install dynamic-config-cli` | **Beta** |
 
-`dynamic-config-store-core` is also published, and is not in the table: it
-is machinery the store crates share rather than something to depend on.
+The rest of the family is released from its own repository, each naming
+this engine with a caret so a patch here reaches it without a release
+there:
+
+| Repository | What it ships |
+|---|---|
+| [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote) | eight store crates — etcd, Consul, NATS, Redis, Vault, S3, Firestore, git — and `dynamic-config-server` |
+| [dynamic-config-python](https://github.com/dynamic-config-rs/dynamic-config-python) | `pip install dynamic-config-py`; a dataclass, Pydantic or msgspec validates |
+| [dynamic-config-node](https://github.com/dynamic-config-rs/dynamic-config-node) | `npm install dynamic-config-node`; Zod, Ajv or a function of your own validates |
 
 **Every crate is Beta**: breaking changes bump the minor pre-1.0 and are
-announced in the changelog; a patch never breaks. The store crates were
-Experimental until 0.6.1, and what promoted them is evidence — each is
-tested against a real server in a container, each watch loop's failure
-branches are enumerated in its own documentation, and three of them are
-unplugged mid-watch by `just chaos`.
+announced in the changelog; a patch never breaks.
 
 **Between here and 1.0, only security fixes and hotfixes land.** The
 surface is what it is going to be for 0.x: no new sources, no new stores,
 no new methods on the settled types. Pin the minor version and take
 patches automatically. Details in
 [Stability Tiers](https://dynamic-config-rs.github.io/stability-tiers.html).
-
-Every store follows the same contract — the current value is not announced
-at startup, a deleted key is not a change, transport failures retry, a
-panicking callback ends the watch with an error — and each documents its
-stop latency and change-detection rule side by side in
-[Store Crates at a Glance](https://dynamic-config-rs.github.io/remote/remote-stores/store-crates.html).
 
 ## MSRV
 
@@ -136,12 +121,11 @@ stop latency and change-detection rule side by side in
 | `dynamic-config` core | **1.71** |
 | `schema` feature | 1.74 (schemars) |
 | `watch` / `age` / `full` features | 1.85 (measured, not declared) |
-| store crates | 1.85 — nats/redis/s3: 1.88 (their clients) |
-| `dynamic-config-server` | 1.80 (axum) |
 | `dynamic-config-cli` | 1.85 |
-| `dynamic-config-python` | 1.85 — and CPython 3.9+, one abi3 wheel per platform, plus a `cp314t` manylinux wheel for free-threaded builds |
-| `dynamic-config-python-remote` | 1.88 (the AWS, NATS and Redis clients) |
 | `dynamic-config-embedded` | 1.83 |
+
+The store crates, the server and the bindings declare their own floors, in
+their own repositories — a companion pays for what it pulls in.
 
 MSRV changes are breaking. Every floor has a CI row against a real
 toolchain; the full table with reasons is in
@@ -149,16 +133,16 @@ toolchain; the full table with reasons is in
 
 ## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) is the short version;
-[the onboarding tour](docs/CONTRIBUTOR-ONBOARDING.md) walks every module.
+[CONTRIBUTING.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CONTRIBUTING.md) is the short version;
+[the onboarding tour](https://github.com/dynamic-config-rs/dynamic-config/blob/main/docs/CONTRIBUTOR-ONBOARDING.md) walks every module.
 What will *not* be built, and why, is in
 [Limitations & Not Planned](https://dynamic-config-rs.github.io/limitations.html);
-what might be is in [ROADMAP.md](ROADMAP.md).
+what might be is in [ROADMAP.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/ROADMAP.md).
 
 ## Credits
 
 What this engine is built on and whose ideas it took —
-[CREDITS.md](CREDITS.md).
+[CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md).
 
 ## License
 
