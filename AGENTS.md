@@ -13,32 +13,31 @@ the eleven companions' alike. The pre-release hook rewrites them all
 behind anyway. The book never carries the number at all —
 its snippets say `<version>`.
 
-Eighteen crates in one workspace, one version, published together —
-fourteen to crates.io, two to PyPI, two to npm:
+Four crates in one workspace, one version, published together to
+crates.io:
 
 ```text
 dynamic-config-macros      the proc macro; no stable API of its own
 dynamic-config             everything with behaviour — loading, layers, storage, watching
-dynamic-config-store-core  what the store crates share: the credential cache,
-                           URL redaction, the watch panic net. No stable API
-dynamic-config-etcd        \
-dynamic-config-consul       |
-dynamic-config-nats         |  one remote store each, behind a `RemoteSource`
-dynamic-config-redis        |  or `AsyncRemoteSource` implementation
-dynamic-config-vault        |
-dynamic-config-s3           |
-dynamic-config-firestore    |
-dynamic-config-git         /   (git: shallow single-ref fetch, any host)
 dynamic-config-embedded    a separate `no_std` crate, sharing no code
-dynamic-config-server      serves configuration over HTTP; a security boundary,
-                           so it starts from a threat model rather than a router
 dynamic-config-cli         the `explain`/`diff` binary
-dynamic-config-python      a PyO3 extension; ships to PyPI, never to crates.io
-                           (no dependencies — Pydantic is an extra)
-dynamic-config-python-remote  the stores for Python, a second wheel behind an
-                           extra: a wheel is built per platform, so seven
-                           clients cannot ride in the install that reads a file
 ```
+
+The rest of the family lives in its own repository, each naming this
+engine with a caret so a patch release here needs no release there:
+
+```text
+dynamic-config-remote      the eight stores, what they share, and the server
+                           github.com/dynamic-config-rs/dynamic-config-remote
+dynamic-config-python      two wheels on PyPI
+                           github.com/dynamic-config-rs/dynamic-config-python
+dynamic-config-node        two packages on npm
+                           github.com/dynamic-config-rs/dynamic-config-node
+```
+
+A change to this crate's public surface is a change three repositories may
+have to follow, and nothing in this build says so — which is what
+`.claude/hooks/binding-drift.sh` prints while the change is still in hand.
 
 `fuzz/` is its own workspace, so its lockfile and its nightly requirement
 touch none of the above.
@@ -52,37 +51,30 @@ both before building something that was already decided.
 
 ```sh
 just check        # fmt, clippy at both extremes, tests, docs, the no_std build
-just containers   # the seven remote stores, against real servers; needs Docker
 just embedded     # the no_std crate, on a host and for thumbv7em-none-eabihf
 just msrv         # every MSRV floor, against real toolchains
-just mocks        # the store crates' scripted-server tests; no Docker, seconds
 just hack         # every pairwise feature combination compiles
 just bless        # regenerate compile-fail expectations after an intended change
+just book         # this repository's book
 ```
 
+Nothing here needs Docker or a venv. The suites that did left with the
+stores and the bindings, and each of those repositories runs its own.
+
 There are skills in `.claude/skills/` for the tasks that recur:
-[adding a remote store](.claude/skills/add-remote-store/SKILL.md),
 [adding a Builder option](.claude/skills/add-macro-argument/SKILL.md),
 [adding a Cargo feature](.claude/skills/add-cargo-feature/SKILL.md),
-[changing the Python bindings](.claude/skills/change-python-bindings/SKILL.md),
 [triaging the security tab](.claude/skills/triage-security/SKILL.md), and
 [reviewing before a release](.claude/skills/review-for-release/SKILL.md). Read
 the relevant one before starting — each records decisions that are settled, so
 you do not spend the turn re-deriving them.
 
-There is one subagent, in `.claude/agents/`:
-[`python-binding-reviewer`](.claude/agents/python-binding-reviewer.md), for
-reviewing a change against the binding's invariants — the ones whose failures
-are silent, like validation moving after the install or a read crossing back
-into Rust.
-
 `.claude/hooks/binding-drift.sh` runs after every edit and names the files a
-change has to travel to. It is advisory: two surfaces here mirror each other
-with nothing to enforce it, and a stale stub only fails under
-`mypy --strict` while a stale API reference fails nowhere at all.
+change has to travel to. Here that is mostly *other repositories*: this
+crate's public surface is what the stores implement against and what both
+bindings wrap, and nothing in this build says when one of them goes stale.
 
-Never claim a change works without running `just check`. If Docker is
-unavailable, say so rather than skipping `just containers` silently.
+Never claim a change works without running `just check`.
 
 ## Rules that are not negotiable
 
@@ -211,39 +203,25 @@ facade crate, where the `cfg` means what it says (see
 - **A `CHANGELOG.md` entry** under `Unreleased` — the workspace one, and the
   companion crate's own if that is what changed.
 
-### If the change touches Python
+### If the change touches the public surface
 
-`dynamic-config-python` is two halves that mirror each other, and neither the
-compiler nor `cargo test` notices when one moves alone. A change to the
-compiled surface has to reach the facade (with a docstring — the package is
-fully documented, `help()` is its manual, and ruff's `pydocstyle` fails the
-gate without one), `_core.pyi`, `book-python/src/reference.md` and the
-pytest suite. The facade is one concern per file — `_config`, `_schema`,
-`_settings`, `_lifetime`, `_diagnostics`, `_decorator`, `_errors`,
-`_executor` — with `__init__.py` as the public surface and nothing else.
-Its gate is `just python`, not `just check`: an extension module links no
-libpython, so `cargo test --workspace` excludes it deliberately.
-
-Its version moves on its own — it is excluded from `cargo release`, because
-the wheel embeds the engine rather than depending on a published version of
-it. Bump it when the Python package changes, not when the crates do.
-
-Two rules there have already cost something. The secret list is derived from
-the model under **every** name a file could use — the field name and each
-alias shape Pydantic accepts — because picking one per field leaked the value
-into `explain` and into the redacted cache on disk. And a
-`pydantic_settings.BaseSettings` class declares sources this engine does not
-run: `DynamicConfig` warns about them and `from_settings` translates them, so
-a new source option should ask whether pydantic-settings has a spelling for
-it.
+Three repositories mirror this crate and nothing here notices when one goes
+stale: the stores implement `RemoteSource` against it, and both bindings
+wrap it. A signature change, a renamed variant, a new error kind — each is
+a pull request in
+[dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote),
+[dynamic-config-python](https://github.com/dynamic-config-rs/dynamic-config-python)
+and [dynamic-config-node](https://github.com/dynamic-config-rs/dynamic-config-node)
+waiting to happen. They name this crate with a caret, so they pick a patch
+release up on their own; what they cannot pick up on their own is a
+*breaking* one.
 
 ## Where things live
 
 | Looking for | Go to |
 |---|---|
 | what the crate does, and why each decision was made | `book/src/` — the book is the specification; `README.md` is the storefront |
-| the same, for the Python binding | `book-python/src/` — its own book since 0.6.1, published at `/dynamic-config/python/`. The Rust book keeps one stub page that links to it |
-| the same, for the Node binding | `book-node/src/`, published at `/dynamic-config/node/`; the crate is `dynamic-config-node`, the facade is `dynamic-config-node/js/`, and the npm package is `dynamic-config-node` |
+| the stores, the server, and the bindings | their own repositories, and their own books — [the family](book/src/family.md) is the map |
 | what is deliberately absent, and what would reopen it | `book/src/limitations.md` |
 | what might still be built | `ROADMAP.md` |
 | how a contributor gets started, and what every module does | `docs/CONTRIBUTOR-ONBOARDING.md` |
@@ -251,9 +229,7 @@ it.
 | loading, merging, precedence | `dynamic-config/src/loader/` |
 | what the attribute expands to | `dynamic-config-macros/src/expand/` |
 | storage and reload hooks | `dynamic-config/src/cell.rs` |
-| the Python bindings, inside | `book-python/src/internals.md`, then `dynamic-config-python/src/` |
-| the Node bindings, inside | `book-node/src/internals.md` — the thread rule is the whole design — then `dynamic-config-node/src/` |
-| what Python deliberately does not do | `book-python/src/limitations.md` |
+| what the site publishes, and how | [dynamic-config-rs.github.io](https://github.com/dynamic-config-rs/dynamic-config-rs.github.io) — four books, one deployment |
 
 ## Style
 

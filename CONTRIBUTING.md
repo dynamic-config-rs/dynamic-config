@@ -23,7 +23,6 @@ list of what exists, and more useful.
 
 ```sh
 just check              # what CI runs, in the order it fails fastest
-./scripts/ci-local.sh   # the same, plus containers and MSRV — the whole gate
 ```
 
 `scripts/` holds the flows around the checks — watching CI, promoting `dev`
@@ -40,7 +39,7 @@ Or by hand:
 ```sh
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features
-just test           # the workspace suite, minus the container-backed crates
+cargo test --workspace --features full
 cargo test -p dynamic-config --no-default-features --features json   # feature-off diagnostics
 RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --workspace --all-features --no-deps
 ```
@@ -51,98 +50,9 @@ The `no_std` crate has its own features and its own recipe:
 just embedded       # host tests + a thumbv7em build with no std at all
 ```
 
-Seven of the eight store crates drive real servers in containers and need a
-working Docker daemon — git is the exception, and its tests build a repository
-in a temporary directory like any other fixture. They fail rather than skipping when there is none: a
-test that quietly stops running is one nobody notices has stopped.
-
-```sh
-just containers     # all seven; or one at a time:
-cargo test -p dynamic-config-vault    # and -consul, -etcd, -nats, -redis, -s3, -firestore
-```
-
-Their scripted-server tests need no Docker and run in seconds:
-
-```sh
-just mocks
-```
-
-And the chaos suites take a store away *mid-watch* — a toxiproxy in front of
-a server that never restarts, so both the cut and the recovery are
-assertable. They are `#[ignore]`d, so nothing above runs them:
-
-```sh
-just chaos          # Redis, Consul, etcd — one per loop shape
-```
-
-Two containers per test and tens of seconds each, which is why they are a
-nightly and release gate rather than a per-commit one. What they pin is the
-pair an alert reads: `remote_up` goes to zero *while the staleness clock
-keeps running*, and the last good document is still being served.
-
-## The Node.js bindings
-
-```sh
-just node           # build the addon, run the suite, run every example
-```
-
-Node 18 or newer, and nothing else: the suite is `node --test` and the
-facade is JavaScript with a hand-written `.d.ts`, so there is no build
-step and no `npm install` in the loop. Three examples want a framework —
-they say so and exit cleanly without one.
-
-The type check is the exception, and it is skipped with a word rather than
-failing when TypeScript is absent:
-
-```sh
-cd dynamic-config-node && npm install -D typescript && npm run typecheck
-```
-
-It is not optional in CI. A regression in the `.d.ts` is invisible to a
-test suite — `config.current().host` runs perfectly well while the checker
-calls it `unknown` — which is why `tests/typing/usage.ts` exists and is
-compiled under `strict`, `exactOptionalPropertyTypes` and
-`noUncheckedIndexedAccess`.
-
-**What to know before changing the compiled half**: validation runs inside
-the load, on a worker thread, and reaches the event loop through a
-`ThreadsafeFunction`. That ordering is what makes a rejected document
-change nothing, and it is why nothing here is synchronous.
-`book-node/src/internals.md` is the whole argument.
-
-## The Python bindings, without a GIL
-
-`just python` runs the suite on whatever interpreter the venv holds. The
-free-threaded build is a second one, and it needs its own venv because the
-wheel is not abi3:
-
-```sh
-uv python install 3.14t
-uv venv --python 3.14t /tmp/ft && VIRTUAL_ENV=/tmp/ft uv pip install maturin pytest pytest-asyncio pydantic
-cd dynamic-config-python && VIRTUAL_ENV=/tmp/ft maturin develop --no-default-features
-VIRTUAL_ENV=/tmp/ft /tmp/ft/bin/python -m pytest tests -q
-```
-
-`maturin develop` uses the active venv, so it picks the free-threaded
-interpreter and emits a `cp314t` build. `maturin **build**` does not — without
-`-i` it builds an abi3 wheel against no interpreter in particular and ignores
-the venv entirely, so CI passes `-i python3.14t` and that flag is the
-load-bearing one. `--no-default-features` switches off the `abi3` Cargo
-feature as well; it does not change the tag, but it means pyo3 is never asked
-for abi3 and the build does not lean on pyo3's backward-compatibility fallback.
-Cargo features are additive, so abi3 has to be a default that is dropped rather
-than an opt-in. 3.14t and not 3.13t: PyO3 0.29 dropped 3.13t, following
-CPython.
-
-Two things are worth knowing before changing anything there. PyO3 has declared
-modules GIL-free *by default* since 0.28, so a module that says nothing is
-already making the claim — `src/lib.rs` writes `gil_used = false` out anyway,
-so the claim lives where it is made. And
-`tests/test_free_threaded.py::test_the_module_declares_itself_gil_free` asserts
-`sys._is_gil_enabled()` rather than watching for the interpreter's warning: the
-warning fires once per process at the first import, so a test that reloads the
-module and catches warnings passes either way.
-[Free-Threaded CPython](book-python/src/free-threading.md) is the audit.
+Nothing here needs Docker or a virtual environment. The suites that did
+left with the stores and the bindings, and each of those repositories runs
+its own.
 
 ## Instruction counts
 

@@ -1,88 +1,41 @@
 # Releasing
 
-Eighteen crates. Fourteen publish to crates.io in four waves, versioned
-together; the Python wheels follow in a fifth and the npm packages in a
-sixth, each on a version of its own.
+Four crates. Four publish to crates.io in three waves, versioned
+together.
 
 The waves are dependency order: the macro and the `no_std` crate, then
-the engine, then `dynamic-config-store-core` — which every store crate
-depends on — then the stores, the server and the CLI. A crate cannot be
-`publish = false` and be depended on by a published one: cargo resolves a
-path dependency of a published crate from the registry, so packaging
-fails before the release does.
+the engine, then the CLI. A crate cannot be `publish = false` and be
+depended on by a published one: cargo resolves a path dependency of a
+published crate from the registry, so packaging fails before the release
+does.
 
-**`dynamic-config-python` versions independently.** It is excluded from
-`cargo release` (`[package.metadata.release] release = false`) and
-carries its own number, because the wheel embeds the engine rather than
-depending on a published version of it — a Rust-only release has nothing
-in it for a Python user. Bump it when the Python package changes rather
-than when the crates do; the wheel wave uploads with `--skip-existing`,
-so a release that did not touch it is a no-op.
-
-`scripts/release-python.sh` is that flow, in the same shape as the
-workspace's — prepare, land, let CI publish:
-
-```sh
-./scripts/release-python.sh --status     # versions here and on PyPI, both wheels
-./scripts/release-python.sh --check      # would a prepare work, and why not
-./scripts/release-python.sh patch        # bump both + rotate both + commit
-cargo check -p dynamic-config-python     # the lockfile follows the bump
-git add Cargo.lock && git commit --amend --no-edit
-git push origin dev && ./scripts/promote.sh
-./scripts/release-python.sh --publish    # dispatch the wheel wave
-```
-
-A workspace release carries the wheels along automatically; the dispatch
-is for a Python-only one, where there are no crates to wait for.
-
-**Two distributions, one version.** `dynamic-config-python-remote` is a
-second wheel — `dynamic-config-py[remote]` resolves to it — and it moves
-with the first, always. That was an open question through 0.6 and it is
-settled: they are built from one commit by one job, the extra resolves to
-a *pair*, CI asserts the two manifests agree, and the remote wheel imports
-`Format` and `RemoteSource` from the base one, so a gap between them is a
-combination nobody has tested. The cost is stated rather than hidden: a
-fix to the etcd binding bumps the base wheel too, and its changelog will
-carry a version whose entry says nothing changed there.
-
-`release-python.sh` moves all five files in one commit — both manifests,
-both changelogs, and the `dynamic-config-py>=…` floor in the remote
-wheel's `pyproject.toml`, which lags into a broken pair if it is left
-behind.
-
-**`--check` before you prepare.** It refuses a version that is already on
-PyPI, and that is not hypothetical: `dynamic-config-py` 0.1.0 shipped with
-0.5, the 0.6 wheel wave prepared 0.1.0 again, and `maturin upload
---skip-existing` made the whole wave a silent no-op. It also checks that
-the two manifests agree, that the floor matches, and that there is
-something under `## [Unreleased]` to release.
-
-Neither Python changelog carries a compare-link footer, and that is
-deliberate: these packages have no tag of their own — the repository's
-tags are workspace versions — so a `[Unreleased]: …/compare/vX…HEAD`
-definition points at crate releases that have nothing to do with the
-wheel, and there is no bracketed version heading for it to pair with.
-The rotation writes unbracketed headings for the same reason.
+The stores, the server and the two bindings release from their own
+repositories, on their own schedules. They name this engine with a caret,
+so a release here does not oblige a release there — and a *breaking*
+release here does: `0.7` means each of them picks the new engine up
+deliberately, in its own time.
 
 ```text
 dynamic-config-macros          first, always
   └── dynamic-config           second
-        ├── dynamic-config-etcd
-        ├── dynamic-config-consul
-        ├── dynamic-config-nats        third, in any order
-        ├── dynamic-config-redis
-        ├── dynamic-config-vault
-        ├── dynamic-config-s3
-        └── dynamic-config-firestore
+        └── dynamic-config-cli third
 
 dynamic-config-embedded        independent — published in the first wave
 ```
 
-`dynamic-config` depends on `dynamic-config-macros` with an exact requirement
-(`=x.y.z`), so a version mismatch is impossible — and so the macro crate must
-always go first. The eight store crates depend on `dynamic-config` the same way,
-which is why they come last. `dynamic-config-embedded` depends on neither, so
-CI publishes it in the first wave alongside the macros.
+`dynamic-config` depends on `dynamic-config-macros` with an exact
+requirement (`=x.y.z`), so a version mismatch is impossible — and so the
+macro crate must always go first. The macro writes code against the
+engine's internals; two halves of different bridges is not a combination
+anybody should be able to resolve. `dynamic-config-embedded` depends on
+neither, so CI publishes it in the first wave alongside the macros.
+
+**Everything outside this repository names the engine with a caret**
+(`dynamic-config = "0.6"`). The store crates, the server and the bindings
+are things a user chooses *alongside* the engine, and an exact pin there
+would turn an engine upgrade into a wall: `dynamic-config 0.6.2` with
+`dynamic-config-etcd 0.6.1` is a resolution error rather than a version
+choice.
 
 ## The branch model
 
@@ -110,8 +63,8 @@ safe to redo; nothing before step 5 leaves the laptop.
 
 1. **Land the work on `dev`** through pull requests, entries accumulating
    under each touched crate's `## [Unreleased]` heading as they go.
-2. **Pre-flight.** `just check` on `dev` (plus `just containers` / `just
-   msrv` / `just hack` if the release touched stores, floors or features).
+2. **Pre-flight.** `just check` on `dev` (plus `just msrv` / `just hack` if
+   the release touched floors or features).
    Confirm the changelog entries sit under `## [Unreleased]` and **not**
    under a version heading you wrote yourself — `cargo release` inserts the
    dated heading, and a pre-written one becomes a duplicate it cannot see.
@@ -218,13 +171,6 @@ cargo publish -p dynamic-config-embedded    # depends on nothing here
 # wait for the index, usually under a minute
 cargo publish -p dynamic-config
 # wait again
-cargo publish -p dynamic-config-etcd
-cargo publish -p dynamic-config-consul
-cargo publish -p dynamic-config-nats
-cargo publish -p dynamic-config-redis
-cargo publish -p dynamic-config-vault
-cargo publish -p dynamic-config-s3
-cargo publish -p dynamic-config-firestore
 cargo publish -p dynamic-config-cli
 ```
 
@@ -238,66 +184,18 @@ Check docs.rs built each crate with `all-features = true`, so feature-gated
 items carry their badges — and that each companion rendered *its own* README
 rather than the workspace one.
 
-## The npm wave
-
-Two packages — `dynamic-config-node` and `dynamic-config-node-remote` —
-built by the `addons` matrix and published by `publish-npm`, after the
-crates are on crates.io. They version together and independently of the
-crates, for the reason the wheels do: each embeds the engine rather than
-depending on a published version of it.
-
-**The name is not `dynamic-config`.** That belongs to an unrelated
-package by another author, so this takes the qualified name — the same
-answer `dynamic-config-py` is on PyPI. Checked before the first release
-rather than discovered during it.
-
-**Five native runners, not cross-compilation.** The addon links against
-the platform's own C runtime, and a cross build that "works" is one
-nobody has loaded on the machine it targets. Each runner builds both
-addons, runs both suites *against the artefact that will ship*, and
-uploads it.
-
-**One package per platform, plus a wrapper.** `scripts/pack-platforms.mjs`
-writes `dynamic-config-node-linux-x64-glibc` and its four siblings, and
-rewrites the wrapper's `optionalDependencies` to name exactly what was
-built. npm installs only the one whose `os`/`cpu` match, so an install
-downloads one binary rather than five. The platform packages publish
-first: a wrapper whose optional dependencies are not on the registry yet
-is an install that fails.
-
-**What an operator has to have ready**, and neither is in the
-repository:
-
-1. `NPM_TOKEN` as a repository secret, with publish rights.
-2. Nothing else — the packages are unscoped, so no organisation is
-   involved, and `--provenance` needs only the `id-token: write` the job
-   already declares.
-
-A platform whose build failed is a platform the release does not ship:
-the packing script warns and leaves it out of `optionalDependencies`
-rather than publishing a wrapper that points at a package nobody
-uploaded. That is a partial release, and the fix is a rerun — npm
-versions are as permanent as PyPI's.
-
 ## Version policy
 
 - **Pre-1.0, a breaking change bumps the minor version** and everything else the
   patch. `0.0.x` is the pre-announcement series: the API is expected to move.
-- MSRV changes are breaking. Every figure in the README's MSRV table is part of
-  the public contract — including the companion crates' floors (1.85, or 1.88
-  where the client requires it: NATS, Redis, S3), which are higher than the
-  core's 1.71 on purpose: a companion pays for what it pulls in.
+- MSRV changes are breaking. Every figure in the README's MSRV table is part
+  of the public contract. The store crates, the server and the bindings
+  declare their own floors in their own repositories — a companion pays for
+  what it pulls in.
 - figment is the loader, and its behaviour is this crate's behaviour. A figment
   upgrade that changes how values are merged or how environment strings are read
   is a breaking change here even when no signature moves — `tests/loader.rs`
   exists to make that visible rather than surprising.
-- Four crates **do** re-export pieces of their client's API, so a major bump
-  in the client is breaking for them: etcd and NATS re-export `ConnectOptions`
-  and `Client`, Redis re-exports `redis::Client`, and S3 takes the SDK's
-  `SdkConfig` and `Client` in its signatures. That is the price of not
-  inventing a second vocabulary for credentials, and it is paid by those
-  crates alone. Nothing from `ureq` or `base64` appears in the Consul, Vault
-  or Firestore signatures.
 - The traces a value carries are contract too: `Origin::Remote` names whatever
   the source's own `describe()` returns, so changing that string in a companion
   crate changes what users see in an error.

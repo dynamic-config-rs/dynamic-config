@@ -2,7 +2,7 @@
 
 The Node.js binding has **a book of its own**:
 
-### → [dynamic-config for Node.js](https://ctolon.github.io/dynamic-config/node/)
+### → [dynamic-config for Node.js](https://dynamic-config-rs.github.io/node/)
 
 ```sh
 npm install dynamic-config-node
@@ -38,10 +38,10 @@ read by whoever read the [builder tour](builder-tour.md).
 
 | Chapter | What it answers |
 |---|---|
-| [API Reference](https://ctolon.github.io/dynamic-config/node/reference.html) | Every method, every argument, every default |
-| [Schemas](https://ctolon.github.io/dynamic-config/node/schemas.html) | Zod, Ajv, a function of your own, and no schema at all |
-| [Watching & Hooks](https://ctolon.github.io/dynamic-config/node/watching.html) | The watcher, `onReload`, `onChange`, and the rejected edit that changes nothing |
-| [Web Frameworks](https://ctolon.github.io/dynamic-config/node/frameworks.html) | Express, Fastify, NestJS, Next.js — and where the browser's boundary is |
-| [Remote Stores](https://ctolon.github.io/dynamic-config/node/remote-stores.html) | A store written in JavaScript, and where the eight Rust ones are |
-| [Implementation Details](https://ctolon.github.io/dynamic-config/node/internals.html) | The thread rule, and why every load is async |
-| [Limitations](https://ctolon.github.io/dynamic-config/node/limitations.html) | What it will not do, and why |
+| [API Reference](https://dynamic-config-rs.github.io/node/reference.html) | Every method, every argument, every default |
+| [Schemas](https://dynamic-config-rs.github.io/node/schemas.html) | Zod, Ajv, a function of your own, and no schema at all |
+| [Watching & Hooks](https://dynamic-config-rs.github.io/node/watching.html) | The watcher, `onReload`, `onChange`, and the rejected edit that changes nothing |
+| [Web Frameworks](https://dynamic-config-rs.github.io/node/frameworks.html) | Express, Fastify, NestJS, Next.js — and where the browser's boundary is |
+| [Remote Stores](https://dynamic-config-rs.github.io/node/remote-stores.html) | A store written in JavaScript, and where the eight Rust ones are |
+| [Implementation Details](https://dynamic-config-rs.github.io/node/internals.html) | The thread rule, and why every load is async |
+| [Limitations](https://dynamic-config-rs.github.io/node/limitations.html) | What it will not do, and why |

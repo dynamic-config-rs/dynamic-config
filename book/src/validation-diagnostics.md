@@ -45,7 +45,7 @@ what `#[config(secret)]` exists to prevent.
 
 It runs in an `on_reload` hook, so it applies to every reload, not only the
 watcher's: a document a
-[remote watch](remote-stores.md#watching-a-store) pushed through its sink
+[remote watch](https://dynamic-config-rs.github.io/remote/index.html#watching-a-store) pushed through its sink
 is reported the same way. A program with no config file at all, watching only
 a store, still learns what moved. For two resolved trees rather than two
 structs, `Snapshot::diff` answers the same question.

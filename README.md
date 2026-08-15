@@ -4,15 +4,15 @@
 
 **Hot-reloadable, layered configuration for Rust — one attribute, lock-free reads.**
 
-[![CI](https://github.com/ctolon/dynamic-config/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ctolon/dynamic-config/actions/workflows/ci.yml)
-[![Security](https://github.com/ctolon/dynamic-config/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/ctolon/dynamic-config/actions/workflows/security.yml)
+[![CI](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml)
+[![Security](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml)
 [![crates.io](https://img.shields.io/crates/v/dynamic-config.svg)](https://crates.io/crates/dynamic-config)
 [![docs.rs](https://img.shields.io/docsrs/dynamic-config)](https://docs.rs/dynamic-config)
-[![MSRV](https://img.shields.io/badge/MSRV-1.71-blue)](https://ctolon.github.io/dynamic-config/msrv-features.html)
+[![MSRV](https://img.shields.io/badge/MSRV-1.71-blue)](https://dynamic-config-rs.github.io/msrv-features.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ctolon/dynamic-config/badge)](https://scorecard.dev/viewer/?uri=github.com/ctolon/dynamic-config)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dynamic-config-rs/dynamic-config/badge)](https://scorecard.dev/viewer/?uri=github.com/dynamic-config-rs/dynamic-config)
 
-[**The Book**](https://ctolon.github.io/dynamic-config/) · [API docs](https://docs.rs/dynamic-config) · [Examples](https://github.com/ctolon/dynamic-config/tree/main/dynamic-config/examples) · [Changelog](CHANGELOG.md)
+[**The Book**](https://dynamic-config-rs.github.io/) · [API docs](https://docs.rs/dynamic-config) · [Examples](https://github.com/dynamic-config-rs/dynamic-config/tree/main/dynamic-config/examples) · [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -83,7 +83,7 @@ runtime data, and it lives in runtime code.
 
 The full story — precedence, profiles, discovery, hot reload, encryption,
 schema export, units, the last-known-good cache, testing patterns — lives in
-[**the book**](https://ctolon.github.io/dynamic-config/).
+[**the book**](https://dynamic-config-rs.github.io/).
 
 ## The workspace
 
@@ -121,13 +121,13 @@ unplugged mid-watch by `just chaos`.
 surface is what it is going to be for 0.x: no new sources, no new stores,
 no new methods on the settled types. Pin the minor version and take
 patches automatically. Details in
-[Stability Tiers](https://ctolon.github.io/dynamic-config/stability-tiers.html).
+[Stability Tiers](https://dynamic-config-rs.github.io/stability-tiers.html).
 
 Every store follows the same contract — the current value is not announced
 at startup, a deleted key is not a change, transport failures retry, a
 panicking callback ends the watch with an error — and each documents its
 stop latency and change-detection rule side by side in
-[Store Crates at a Glance](https://ctolon.github.io/dynamic-config/remote-stores/store-crates.html).
+[Store Crates at a Glance](https://dynamic-config-rs.github.io/remote/remote-stores/store-crates.html).
 
 ## MSRV
 
@@ -145,14 +145,14 @@ stop latency and change-detection rule side by side in
 
 MSRV changes are breaking. Every floor has a CI row against a real
 toolchain; the full table with reasons is in
-[MSRV & Features](https://ctolon.github.io/dynamic-config/msrv-features.html).
+[MSRV & Features](https://dynamic-config-rs.github.io/msrv-features.html).
 
 ## Contributing
 
 [CONTRIBUTING.md](CONTRIBUTING.md) is the short version;
 [the onboarding tour](docs/CONTRIBUTOR-ONBOARDING.md) walks every module.
 What will *not* be built, and why, is in
-[Limitations & Not Planned](https://ctolon.github.io/dynamic-config/limitations.html);
+[Limitations & Not Planned](https://dynamic-config-rs.github.io/limitations.html);
 what might be is in [ROADMAP.md](ROADMAP.md).
 
 ## Credits

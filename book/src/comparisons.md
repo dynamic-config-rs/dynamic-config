@@ -1,7 +1,7 @@
 # Comparisons
 
 > What this engine is built on and whose ideas it took is
-> [CREDITS.md](https://github.com/ctolon/dynamic-config/blob/main/CREDITS.md).
+> [CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md).
 > This page is about the differences.
 
 This page is for the decision *before* the one this book otherwise answers:
@@ -131,7 +131,7 @@ Three things, and they are the whole of the difference:
   your discipline rather than the library's.
 
 Around those sit the pieces that only make sense once configuration is live:
-[remote stores](remote-stores.md) under one watch contract, the last-known-good
+[remote stores](https://dynamic-config-rs.github.io/remote/) under one watch contract, the last-known-good
 cache, encrypted files, schema export, and a CLI that explains a load without
 running the program.
 

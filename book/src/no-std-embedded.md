@@ -1,6 +1,6 @@
 # On a Microcontroller
 
-[`dynamic-config-embedded`](https://github.com/ctolon/dynamic-config/tree/main/dynamic-config-embedded)
+[`dynamic-config-embedded`](https://github.com/dynamic-config-rs/dynamic-config/tree/main/dynamic-config-embedded)
 is a separate `no_std` crate: no filesystem, no allocator, no runtime.
 
 ```toml
@@ -129,5 +129,5 @@ returns. The section itself is a scan of `WAITERS` slots and at most one
 | `std` | | the `critical-section` implementation for tests and host simulators |
 
 MSRV 1.83. The
-[README](https://github.com/ctolon/dynamic-config/tree/main/dynamic-config-embedded)
+[README](https://github.com/dynamic-config-rs/dynamic-config/tree/main/dynamic-config-embedded)
 carries the full story.

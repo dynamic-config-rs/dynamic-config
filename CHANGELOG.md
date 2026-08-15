@@ -135,7 +135,7 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 ### Changed
 
 - **The Python binding has a book of its own**, at
-  [`/dynamic-config/python/`](https://ctolon.github.io/dynamic-config/python/).
+  [`/dynamic-config/python/`](https://dynamic-config-rs.github.io/python/).
   Eleven chapters describing an engine through another language were a third
   of the Rust book's sidebar, and a Python reader arriving from PyPI landed
   in a table of contents whose first twenty entries were Rust. The store
@@ -694,7 +694,7 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   `Debug`, and one working directory can no longer be claimed twice under
   two spellings. See `dynamic-config-git/CHANGELOG.md`.
 
-[Document Shape]: https://ctolon.github.io/dynamic-config/document-shape.html
+[Document Shape]: https://dynamic-config-rs.github.io/document-shape.html
 
 ### Security
 
@@ -1049,7 +1049,7 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0

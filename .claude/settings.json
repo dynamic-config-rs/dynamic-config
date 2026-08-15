@@ -16,19 +16,7 @@
       "Bash(cargo hack:*)",
       "Bash(cargo run:*)",
       "Bash(rustup:*)",
-      "Bash(just:*)",
-      "Bash(docker pull:*)",
-      "Bash(docker ps:*)",
-      "Bash(maturin:*)",
-      "Bash(python -m pytest:*)",
-      "Bash(python -m mypy:*)",
-      "Bash(mypy:*)",
-      "Bash(pytest:*)",
-      "Bash(vermin:*)",
-      "Bash(python examples/:*)",
-      "Bash(pip install:*)",
-      "Bash(pip show:*)",
-      "Bash(python -m venv:*)"
+      "Bash(just:*)"
     ],
     "deny": [
       "Bash(cargo publish:*)",
@@ -36,10 +24,7 @@
       "Bash(git push:*)",
       "Read(./**/*.creds)",
       "Read(./**/key.txt)",
-      "Read(./**/.env)",
-      "Bash(maturin upload:*)",
-      "Bash(maturin publish:*)",
-      "Bash(twine:*)"
+      "Read(./**/.env)"
     ]
   },
   "hooks": {

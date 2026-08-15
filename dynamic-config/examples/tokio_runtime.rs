@@ -9,8 +9,8 @@
 //! work goes — the `tokio` feature wires `spawn_blocking` in for you, so
 //! `load_async` reads files off the executor's threads without being asked.
 //!
-//! [`smol_runtime`]: https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/smol_runtime.rs
-//! [`embassy_runtime`]: https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/embassy_runtime.rs
+//! [`smol_runtime`]: https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/smol_runtime.rs
+//! [`embassy_runtime`]: https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/embassy_runtime.rs
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

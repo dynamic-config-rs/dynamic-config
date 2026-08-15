@@ -1,6 +1,6 @@
 # The CLI
 
-[`dynamic-config-cli`](https://github.com/ctolon/dynamic-config/tree/main/dynamic-config-cli)
+[`dynamic-config-cli`](https://github.com/dynamic-config-rs/dynamic-config/tree/main/dynamic-config-cli)
 is command-line diagnostics for configuration this crate loads: the
 `dynamic-config` binary.
 

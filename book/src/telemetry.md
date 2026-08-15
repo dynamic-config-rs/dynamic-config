@@ -245,7 +245,7 @@ passes — stays the caller's decision, because only the caller knows.
 
 ## In the config server
 
-[The config server](config-server.md) exposes `GET /metrics`: the same
+[The config server](https://dynamic-config-rs.github.io/remote/config-server.html) exposes `GET /metrics`: the same
 six families, labelled `application` and `profile` rather than `config`,
 for the sections the calling principal may read.
 
@@ -254,7 +254,7 @@ open because they answer a boolean and disclose nothing — not how many
 sections there are, not which one is unhappy — and a metrics endpoint
 that could say as little would be no use. One that names sections is an
 enumeration of every service the fleet configures, which is exactly what
-that server's [threat model](config-server/threat-model.md) exists to
+that server's [threat model](https://dynamic-config-rs.github.io/remote/config-server/threat-model.html) exists to
 withhold. So a scraper is a client like any other: give it a token,
 grant it the applications it should see, and point Prometheus's
 `bearer_token_file` at it.

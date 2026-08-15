@@ -57,7 +57,7 @@ A `.age` suffix marks a file as [encrypted](encryption.md):
 
 A builder with no `.file(..)` calls at all says **no files, on purpose** — the
 shape of a container whose configuration comes from a
-[remote store](remote-stores.md) and the environment alone.
+[remote store](https://dynamic-config-rs.github.io/remote/) and the environment alone.
 
 ## `key`
 

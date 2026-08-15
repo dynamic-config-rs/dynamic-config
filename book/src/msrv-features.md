@@ -43,7 +43,7 @@ turn abi3 off by being turned on; what actually selects the ABI is which
 interpreter maturin is pointed at. 3.14t and not 3.13t: PyO3 0.29 dropped
 3.13t when CPython promoted free-threading from experimental to supported in
 3.14.
-[Free-Threaded CPython](https://ctolon.github.io/dynamic-config/python/free-threading.html) is the audit behind the
+[Free-Threaded CPython](https://dynamic-config-rs.github.io/python/free-threading.html) is the audit behind the
 declaration.
 
 MSRV is treated as a breaking change, and both figures are verified in CI

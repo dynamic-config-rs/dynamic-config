@@ -119,7 +119,7 @@ instead, so its users' builds stay small.
 
 ## What is *not* a feature
 
-The remote stores: each is a [companion crate](remote-stores.md), not a
+The remote stores: each is a [companion crate](https://dynamic-config-rs.github.io/remote/), not a
 flag, so reaching for Consul does not put a gRPC stack, the AWS SDK and
 three HTTP clients into a build that asked for none of them. The
 `no_std` engine is likewise [its own crate](no-std-embedded.md) — a

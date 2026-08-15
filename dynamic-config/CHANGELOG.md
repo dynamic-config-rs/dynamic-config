@@ -340,7 +340,7 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   and the environment layer is then the prefix alone: `APP_PORT` rather
   than `APP__PORT`.
 
-  The book's [Document Shape](https://ctolon.github.io/dynamic-config/document-shape.html)
+  The book's [Document Shape](https://dynamic-config-rs.github.io/document-shape.html)
   chapter is the whole story, with the three neighbouring questions it turned out nothing answered in one place: a key
   the file has and the type does not name (ignored by the load, reported by
   `check`, refused by `deny_unknown_fields`), two files holding half a
@@ -705,7 +705,7 @@ Initial release.
 - Diagnostics report paths and types, never values — enforced by its own
   test suite.
 
-[Unreleased]: https://github.com/ctolon/dynamic-config/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0

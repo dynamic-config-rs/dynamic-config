@@ -95,7 +95,7 @@ defaults < files < remote < secrets_dir < .env < APP_DB_* < bind_env < flags < o
 | **Debounce** | one editor save is several filesystem events; `watch(debounce)` collapses them into one reload |
 | **Remote stores** | etcd, Consul, NATS, Redis, Vault, S3 and Firestore — each watching the way its protocol allows |
 | **Hooks** | `on_reload(previous, current)`, and `changes()` for a task that would rather await |
-| **Any runtime, or none** | `changes()` is a `Future` over a generation counter and a list of wakers; [tokio](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/tokio_runtime.rs), [smol](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/smol_runtime.rs) and [Embassy](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/embassy_runtime.rs) all drive it |
+| **Any runtime, or none** | `changes()` is a `Future` over a generation counter and a list of wakers; [tokio](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/tokio_runtime.rs), [smol](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/smol_runtime.rs) and [Embassy](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/embassy_runtime.rs) all drive it |
 | **All-or-nothing** | `ReloadGroup` prepares every member before any of them commits |
 | **Key-level diffs** | `changed_paths(old, new)` reports which keys moved — paths only, never values |
 

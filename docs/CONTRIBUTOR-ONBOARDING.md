@@ -12,33 +12,30 @@ and this document assumes you know what the crate does from the outside.
 
 ## 1. The shape of the workspace
 
-Twelve crates, one version. Ten publish to crates.io in three waves, the
-Python extension publishes a wheel to PyPI in a fourth, and the CLI rides
-the third.
+Four crates, one version, published to crates.io in three waves.
 
 ```text
 dynamic-config-macros      the proc macro. No API of its own.
         ↓
 dynamic-config             everything with behaviour.
         ↓
-dynamic-config-etcd        one remote store each. Independent of one another.
-dynamic-config-consul
-dynamic-config-nats
-dynamic-config-redis
-dynamic-config-vault
-dynamic-config-s3
-dynamic-config-firestore
+dynamic-config-cli         `explain` and `diff`, on the command line.
 
 dynamic-config-embedded    a separate no_std crate. Shares no code with any of them.
 ```
+
+The stores, the server and the two bindings are separate repositories —
+see §4.
 
 **Why the macro is separate.** `#[proc_macro_attribute]` requires
 `[lib] proc-macro = true`, and a crate with that set can export nothing else.
 The same split `serde` and `serde_derive` have, for the same reason.
 
-**Why the stores are separate crates.** Reaching for etcd should not put a
-streaming client, two HTTP clients and an AWS SDK into a build that never asked
-for them. The core keeps *no* network dependency — only the traits.
+**Why the stores are separate crates, in a separate repository.** Reaching
+for etcd should not put a streaming client, two HTTP clients and an AWS SDK
+into a build that never asked for them — so the core keeps *no* network
+dependency, only the traits. And a store's client library moving is not a
+reason to re-cut the engine, which is why they release apart.
 
 **Why `embedded` shares nothing.** figment is `std`. There is no common subset
 to factor out, so trying would produce an abstraction that fits neither. It
@@ -47,7 +44,7 @@ keeps the *shape* and none of the code.
 ### Getting a working checkout
 
 ```sh
-git clone https://github.com/ctolon/dynamic-config && cd dynamic-config
+git clone https://github.com/dynamic-config-rs/dynamic-config && cd dynamic-config
 cargo install just cargo-release cargo-deny
 rustup toolchain install 1.71 1.74 1.83 1.85 1.88   # the MSRV floors
 rustup target add thumbv7em-none-eabihf          # for the no_std check
@@ -315,32 +312,24 @@ method every generated type gets.
 
 ---
 
-## 4. The seven remote stores
+## 4. The stores, the server and the bindings
 
-Alike on purpose. Each: reads one key, watches the way its protocol allows,
-authenticates the way its ecosystem does, can take a client you already have,
-and is tested against a real server in a container.
+They are not in this repository. Each is its own, with its own book and
+its own onboarding:
 
-| Crate | Trait | Watches by | Reads |
-|---|---|---|---|
-| etcd | async | a gRPC watch stream | a whole document |
-| consul | blocking | a blocking query | a whole document |
-| nats | async | a JetStream KV stream | a whole document |
-| redis | blocking | keyspace notifications | a whole document |
-| vault | blocking | polling the KV v2 version | a map of fields |
-| s3 | async | polling the ETag | a whole document |
-| firestore | blocking | polling `updateTime` | a map of fields |
+- [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote)
+  — eight stores, what they share, and the config server. What crosses
+  between them and this crate is one trait: a store answers with text and
+  a format, and everything after that is the engine's.
+- [dynamic-config-python](https://github.com/dynamic-config-rs/dynamic-config-python)
+  and
+  [dynamic-config-node](https://github.com/dynamic-config-rs/dynamic-config-node)
+  — the same engine behind two other languages.
 
-Three rules every one of them follows, and a new one must:
-
-- The current value is **not** delivered at startup.
-- A deleted key is **not** a change.
-- A transport failure **retries**; a failure from the caller's callback **stops**.
-
-Adding one has its own guide:
-[`.claude/skills/add-remote-store/SKILL.md`](../.claude/skills/add-remote-store/SKILL.md).
-
----
+All three name this crate with a caret, so they pick up a patch release on
+their own. What they cannot pick up on their own is a change to the public
+surface: that is a pull request in each of them, and nothing in this
+build will tell you.
 
 ## 5. `dynamic-config-embedded`
 
@@ -393,16 +382,6 @@ cargo test --workspace --features full
 cargo test --workspace --features full -- --test-threads=1
 ```
 
-### Container tests
-
-Real servers, no mocks. A mock of etcd would only confirm what we already
-believed about etcd — and several facts these tests pin are ones a mock would
-have got wrong: etcd's client connects lazily, a NATS KV bucket must already
-exist, Consul's first blocking query answers immediately, Redis publishes
-nothing unless keyspace notifications are on.
-
----
-
 ## 7. Extending the crate
 
 ### A new format
@@ -421,7 +400,9 @@ recognise it; the README's precedence diagram gets a column.
 
 ### A new store
 
-See the skill. Copy the closest existing crate.
+In [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote),
+which has a skill for it. What this repository owns is the trait it
+implements.
 
 ### A new diagnostic
 

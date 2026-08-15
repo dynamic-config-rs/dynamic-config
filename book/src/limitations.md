@@ -3,7 +3,7 @@
 > Several refusals below are stated against Go's Viper, because that is
 > where the behaviour being refused is best known. What this project took
 > *from* it is in
-> [CREDITS.md](https://github.com/ctolon/dynamic-config/blob/main/CREDITS.md).
+> [CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md).
 
 ## Limitations
 
@@ -96,7 +96,7 @@ The two things people actually want from it already exist and are narrower:
 - **Documents to combine before the loader sees them** — a store crate reading
   a prefix, a tool folding a fragment directory into one file — is
   `Value::parse` / `merge` / `overlapping_paths` / `render`, described in
-  [Writing a Store](remote-stores/writing-a-store.md#several-keys-as-one-document).
+  [Writing a Store](https://dynamic-config-rs.github.io/remote/remote-stores/writing-a-store.html#several-keys-as-one-document).
   It hands over the parsing this crate already compiles, so nothing outside has
   to take `serde_json`, `toml` and `serde_yaml` as direct dependencies to
   re-do it.
@@ -139,11 +139,11 @@ Go's `map[string]interface{}` does not.
 
 Signing one means an RS256 stack inside a configuration library, and Google's
 own guidance is that a downloaded key is the option of last resort.
-[Workload identity](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config-firestore/README.md#authenticating) covers GKE, Cloud
+[Workload identity](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config-firestore/README.md#authenticating) covers GKE, Cloud
 Run, GCE and Cloud Functions; anything else can mint a token outside the process
 and pass it in.
 
 ## Roadmap
 
-[ROADMAP.md](https://github.com/ctolon/dynamic-config/blob/main/ROADMAP.md) is what might still be built, and why each item is not
+[ROADMAP.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/ROADMAP.md) is what might still be built, and why each item is not
 obvious. It is short on purpose.

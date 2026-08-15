@@ -36,7 +36,7 @@ old tier said the path out was, and this is it.
 The core crate and the macro are **Beta**. The API is settled enough to build
 on, but pre-1.0 it may still break — and when it does, the break lands in a
 minor version bump (`0.x` → `0.(x+1)`), is called out in the
-[changelog](https://github.com/ctolon/dynamic-config/blob/main/CHANGELOG.md),
+[changelog](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CHANGELOG.md),
 and comes with what to change on your side. A patch release never breaks. MSRV
 is treated as a breaking change here too, so a toolchain bump follows the same
 rule.
@@ -65,7 +65,7 @@ it is finished both look quiet. This one is the second.
 version and take patches automatically; a patch will not break you, and
 the release that could is the 1.0 that is being worked towards. An API
 that would be nicer is a 1.0 candidate — written down in
-[the roadmap](https://github.com/ctolon/dynamic-config/blob/main/ROADMAP.md)
+[the roadmap](https://github.com/dynamic-config-rs/dynamic-config/blob/main/ROADMAP.md)
 with its argument — rather than something to slip into a 0.x.
 
 ## `dynamic-config-store-core` promises nothing

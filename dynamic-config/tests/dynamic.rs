@@ -10,6 +10,11 @@
 use std::fs;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+// The watcher's helpers and the async `changes()` loop are the only users,
+// and each is behind its own feature. The workspace used to carry crates
+// that turned both on for everybody, so this import looked used no matter
+// what was asked for.
+#[cfg(any(feature = "watch", feature = "async"))]
 use std::time::Duration;
 
 use dynamic_config::{Builder, Dynamic, Value};

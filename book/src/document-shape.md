@@ -5,7 +5,7 @@ here once for Rust and Python together. Every answer in this chapter has a
 test behind it — `dynamic-config/tests/document_shape.rs` and
 `dynamic-config-python/tests/test_document_shape.py` — and a runnable
 example: [`document_shape`](examples.md) and
-[`19_document_shape.py`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config-python/examples/19_document_shape.py).
+[`19_document_shape.py`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config-python/examples/19_document_shape.py).
 
 | Question | Answer |
 |---|---|
@@ -89,7 +89,7 @@ has. Nothing else about the load changes:
 | Profile variants layer as usual: `server.production.json` over `server.json`. |
 | `set_default`, `set_flag`, `set_override`, aliases, the secrets directory and `.env` files are unchanged. |
 | The [last-known-good cache](persistence.md) and every diagnostic name the configuration after the key. |
-| A [remote store](remote-stores.md)'s document is read the same way — headerless too. |
+| A [remote store](https://dynamic-config-rs.github.io/remote/)'s document is read the same way — headerless too. |
 
 It applies to **every** document the load reads, deliberately: sources
 that disagreed about their own shape would be a configuration nobody could

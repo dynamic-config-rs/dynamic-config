@@ -24,7 +24,7 @@ functions that can be linted, stepped through and unit tested. Generated code
 can be none of those things, so there is as little of it as possible.
 
 [`dynamic-config`]: https://docs.rs/dynamic-config
-[reference]: https://github.com/ctolon/dynamic-config#attribute-reference
+[reference]: https://github.com/dynamic-config-rs/dynamic-config#attribute-reference
 
 ## License
 

@@ -37,9 +37,11 @@ ignore = [
     # entries here if RustSec ships criteria that match.
 ]
 # `time` is pinned in Cargo.lock to 0.3.47 or newer (RUSTSEC-2026-0009), which
-# declares rust-version 1.88. That is fine — it is reached only through the
-# companion crates and dev-dependencies, never through the core crate, whose
-# floor is 1.71. Regenerating the lockfile with
+# declares rust-version 1.88. That is fine — it is reached only through
+# dev-dependencies, never through the core crate, whose floor is 1.71.
+# Splitting this workspace regenerated the lockfile and dropped it straight
+# back to 0.3.41, exactly as the sentence below says it would. Regenerating
+# the lockfile with
 # `resolver.incompatible-rust-versions = "fallback"` will silently drop it back
 # to 0.3.41 and reintroduce the advisory, so re-apply
 # `cargo update -p time --precise <patched>` afterwards.

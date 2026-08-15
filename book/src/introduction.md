@@ -5,7 +5,7 @@ declares the type, one builder states its sources. Built on [figment].
 
 - **crates.io:** <https://crates.io/crates/dynamic-config>
 - **API documentation:** <https://docs.rs/dynamic-config>
-- **Source:** <https://github.com/ctolon/dynamic-config>
+- **Source:** <https://github.com/dynamic-config-rs/dynamic-config>
 
 ## Why
 
@@ -31,7 +31,7 @@ environment values are problems it already solves well. What this crate adds is
 everything around it: the attribute and its builder, the lock-free snapshot,
 the watcher, and a reload that cannot take the process down.
 [Comparisons](comparisons.md) is the row-by-row version of the table above, and
-[CREDITS.md](https://github.com/ctolon/dynamic-config/blob/main/CREDITS.md) is
+[CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md) is
 what this engine owes to each of them.
 
 ## The shape of the crate
@@ -46,10 +46,10 @@ what this engine owes to each of them.
 
 ## Contributing and security
 
-[docs/CONTRIBUTOR-ONBOARDING.md](https://github.com/ctolon/dynamic-config/blob/main/docs/CONTRIBUTOR-ONBOARDING.md) is a tour of
+[docs/CONTRIBUTOR-ONBOARDING.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/docs/CONTRIBUTOR-ONBOARDING.md) is a tour of
 every crate and module — what each does and where you would change it.
-[CONTRIBUTING.md](https://github.com/ctolon/dynamic-config/blob/main/CONTRIBUTING.md) has what a change should carry and what is
-load-bearing enough to argue about. [SECURITY.md](https://github.com/ctolon/dynamic-config/blob/main/SECURITY.md) states the
+[CONTRIBUTING.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CONTRIBUTING.md) has what a change should carry and what is
+load-bearing enough to argue about. [SECURITY.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/SECURITY.md) states the
 properties this crate tries to keep — and the ones it explicitly does not —
 along with how to report a vulnerability privately.
 

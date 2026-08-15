@@ -54,10 +54,10 @@ and the first patched version (in the alert).
 After the push, GitHub re-checks the lockfile and closes the fixed alerts
 by itself; do not close them by hand.
 
-**Verify a runtime bump like a change, because it is one.** A big SDK jump
-(aws-sdk-s3 1.91 → 1.112) gets `cargo check --workspace --all-features`,
-`cargo deny check`, and the affected store's container suite run for real.
-A dev-only bump gets the workspace check.
+**Verify a runtime bump like a change, because it is one.** A dependency
+that reaches the engine gets `cargo check --workspace --all-features`,
+`cargo deny check` and the suite. A dev-only bump gets the workspace
+check.
 
 **Changelog:** lockfile pins go under the root `CHANGELOG.md`'s
 `### Security` with the honest scope — library consumers resolve their own
@@ -123,6 +123,9 @@ The rules on that tab are OSSF Scorecard checks, uploaded as SARIF by
 - **`cargo generate-lockfile` silently reverts every `--precise` security
   pin** — the MSRV-fallback resolver re-picks the floor-compatible (and
   vulnerable) versions. Four patched pins regressed at once this way. The
-  `just msrv` and `just minimal-versions` recipes now restore the
-  committed lock afterwards; after any *manual* regeneration, run
+  `just msrv` and `just minimal-versions` recipes restore the committed
+  lock afterwards; after any *manual* regeneration, run
   `./scripts/security-status.sh` and re-pin before committing the lock.
+  Splitting this workspace regenerated four lockfiles and dropped `time`
+  straight back to the vulnerable release — the note in `deny.toml` had
+  predicted exactly that.

@@ -6,9 +6,9 @@ language = "en"
 src = "src"
 
 [output.html]
-git-repository-url = "https://github.com/ctolon/dynamic-config"
-edit-url-template = "https://github.com/ctolon/dynamic-config/edit/dev/book/src/{path}"
-site-url = "/dynamic-config/"
+git-repository-url = "https://github.com/dynamic-config-rs/dynamic-config"
+edit-url-template = "https://github.com/dynamic-config-rs/dynamic-config/edit/dev/book/src/{path}"
+site-url = "/"
 
 [output.html.fold]
 enable = true

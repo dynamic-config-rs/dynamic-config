@@ -403,7 +403,7 @@ never touches the network: `refresh_remote()` (or `refresh_remote_async`)
 is the explicit round trip, and a store's watch pushes documents into
 the sink from `remote_sink()`, which reloads through the remembered
 builder — validation, hooks, cache and all. Eight store crates ship — seven
-over a network, and git; [Remote Stores](remote-stores.md) has the contract.
+over a network, and git; [Remote Stores](https://dynamic-config-rs.github.io/remote/) has the contract.
 
 ## Diagnostics
 

@@ -53,6 +53,11 @@ fn a_malformed_document_is_a_parse_error() {
 fn a_syntax_error_echoes_no_value_back() {
     const PLANTED: &str = "hunter2-parse-seam";
 
+    // One format enabled is one element, and clippy is right that a loop
+    // over one element is a strange way to write a statement — but the
+    // array is what the *feature set* makes it, and spelling three
+    // single-format tests would be three copies of the assertion below.
+    #[allow(clippy::single_element_loop)]
     for (text, format) in [
         #[cfg(feature = "json")]
         (format!(r#"{{"password": "{PLANTED}""#), Format::Json),

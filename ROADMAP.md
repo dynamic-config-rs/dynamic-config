@@ -1,5 +1,10 @@
 # Roadmap
 
+**This file is the engine's roadmap.** The stores, the server and the two
+bindings plan in their own repositories — see
+[the family](book/src/family.md). Everything below that mentions them is
+history: it happened while they lived here.
+
 What is not in the crate yet and might be. Everything that shipped is described
 in [README.md](README.md); what will *not* be built, and why, is under
 [Not planned](book/src/limitations.md#not-planned) there.
@@ -24,9 +29,10 @@ Python bindings, and **0.6 is the clearing release** — everything that had
 been waiting for a reason other than "nobody has asked", done in one wave so
 the surface stops accumulating.
 
-**0.6 shipped** — fourteen crates on crates.io, two wheels on PyPI, the
-book published, the instruction-count gate armed with a committed
-baseline. What landed is not here: the changelogs carry it,
+**0.6 shipped** — the whole family on crates.io, two wheels on PyPI, two
+packages on npm, the book published, the instruction-count gate armed
+with a committed baseline. It shipped from one repository; 0.6.1 is the
+last release that did. What landed is not here: the changelogs carry it,
 [README.md](README.md) describes the crate as it is, and this file keeps
 only what is still open. Three of its items were answered by
 *measurement* rather than by code, and each answer is written where it

@@ -17,7 +17,7 @@
 //! reading by path instead of by field. Nothing else in the engine changes:
 //! the layering, the watcher, the cache and the reload hooks never knew
 //! what `T` was. See [the book's schemaless
-//! chapter](https://ctolon.github.io/dynamic-config/schemaless.html) for
+//! chapter](https://dynamic-config-rs.github.io/schemaless.html) for
 //! what a struct still buys that this does not.
 
 use std::collections::BTreeMap;

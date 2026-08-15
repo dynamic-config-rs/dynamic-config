@@ -2,7 +2,7 @@
 
 The Python binding has **a book of its own**:
 
-### → [dynamic-config for Python](https://ctolon.github.io/dynamic-config/python/)
+### → [dynamic-config for Python](https://dynamic-config-rs.github.io/python/)
 
 ```sh
 pip install dynamic-config-py                     # the import is `dynamic_config`
@@ -53,13 +53,13 @@ engine's behaviour rather than a language's surface.
 
 | Chapter | What it answers |
 |---|---|
-| [API Reference](https://ctolon.github.io/dynamic-config/python/reference.html) | Every method, every argument, every default |
-| [Callbacks](https://ctolon.github.io/dynamic-config/python/callbacks.html) | `on_reload`, `on_change`, scoped guards, the thread a hook runs on |
-| [Async & asyncio](https://ctolon.github.io/dynamic-config/python/async.html) | `init_async`, `async for config.changes()`, which pool pays |
-| [Data Types](https://ctolon.github.io/dynamic-config/python/types.html) | What a schema may be, and what each kind validates |
-| [Web Frameworks](https://ctolon.github.io/dynamic-config/python/frameworks.html) | FastAPI, Flask, Django |
-| [Telemetry](https://ctolon.github.io/dynamic-config/python/telemetry.html) | `status()`, and the Prometheus exposition |
-| [Remote Stores](https://ctolon.github.io/dynamic-config/python/remote-stores.html) | A store written in Python, and the second wheel that carries the Rust ones |
-| [Implementation Details](https://ctolon.github.io/dynamic-config/python/internals.html) | What crosses the boundary, and how often |
-| [Free-Threaded CPython](https://ctolon.github.io/dynamic-config/python/free-threading.html) | The `cp314t` wheel, and what was measured |
-| [Limitations](https://ctolon.github.io/dynamic-config/python/limitations.html) | What it will not do, and why |
+| [API Reference](https://dynamic-config-rs.github.io/python/reference.html) | Every method, every argument, every default |
+| [Callbacks](https://dynamic-config-rs.github.io/python/callbacks.html) | `on_reload`, `on_change`, scoped guards, the thread a hook runs on |
+| [Async & asyncio](https://dynamic-config-rs.github.io/python/async.html) | `init_async`, `async for config.changes()`, which pool pays |
+| [Data Types](https://dynamic-config-rs.github.io/python/types.html) | What a schema may be, and what each kind validates |
+| [Web Frameworks](https://dynamic-config-rs.github.io/python/frameworks.html) | FastAPI, Flask, Django |
+| [Telemetry](https://dynamic-config-rs.github.io/python/telemetry.html) | `status()`, and the Prometheus exposition |
+| [Remote Stores](https://dynamic-config-rs.github.io/python/remote-stores.html) | A store written in Python, and the second wheel that carries the Rust ones |
+| [Implementation Details](https://dynamic-config-rs.github.io/python/internals.html) | What crosses the boundary, and how often |
+| [Free-Threaded CPython](https://dynamic-config-rs.github.io/python/free-threading.html) | The `cp314t` wheel, and what was measured |
+| [Limitations](https://dynamic-config-rs.github.io/python/limitations.html) | What it will not do, and why |

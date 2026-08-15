@@ -2,7 +2,7 @@
 
 Two pieces of the crate are shaped for tests; both are described in full in
 their own chapters, and the
-[`testing`](https://github.com/ctolon/dynamic-config/blob/main/dynamic-config/examples/testing.rs)
+[`testing`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/testing.rs)
 example shows them together.
 
 ## Pin configuration with the override layer

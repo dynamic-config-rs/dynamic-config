@@ -319,20 +319,21 @@ fn the_readmes_agree_on_one_version() {
 /// Every number this repository's prose commits to, counted from the
 /// workspace instead of remembered.
 ///
-/// "Sixteen crates", "fourteen publish", "eight store crates" — each one is a
-/// claim with no compiler behind it, and each one is wrong the day a crate is
-/// added. This is that compiler. It found two: the ROADMAP said sixteen
-/// crates were on crates.io when fourteen publish, and two pages still said
-/// seven store crates when git made it eight.
+/// "Four crates", "four publish" — each is a claim with no compiler behind
+/// it, and each is wrong the day a crate is added. This is that compiler,
+/// and it has caught three: the ROADMAP said sixteen crates were on
+/// crates.io when fourteen published, two pages said seven store crates
+/// when git made it eight, and after the split every one of those numbers
+/// described a workspace this repository no longer is.
 ///
-/// Phrases rather than bare nouns, because "crates" alone means two different
-/// numbers a sentence apart — *sixteen crates in one workspace*, *fourteen
-/// crates on crates.io* — and a test that could not tell them apart would
-/// have to be taught to ignore one of them.
+/// Phrases rather than bare nouns, because "crates" alone means two
+/// different numbers a sentence apart — *four crates in one workspace*,
+/// *four crates on crates.io* — and a test that could not tell them apart
+/// would have to be taught to ignore one of them.
 ///
-/// Only derivable counts are checked. How many chapters a book has, or how
-/// many examples run, needs a judgement call, and a test that has to be
-/// taught the judgement is a second place for it to be wrong.
+/// The stores, the server and the bindings are counted by their own
+/// repositories now. A claim here about *their* number is a claim this
+/// workspace cannot check, so the prose does not make one.
 #[test]
 fn the_prose_counts_match_the_workspace() {
     let repo = repo();
@@ -344,7 +345,6 @@ fn the_prose_counts_match_the_workspace() {
 
     let mut members = 0_usize;
     let mut published = 0_usize;
-    let mut stores = 0_usize;
 
     for entry in entries.filter_map(Result::ok) {
         let manifest = entry.path().join("Cargo.toml");
@@ -360,27 +360,6 @@ fn the_prose_counts_match_the_workspace() {
 
         if !text.contains("publish = false") {
             published += 1;
-        }
-
-        // A store crate is one that *reads a document from somewhere else*,
-        // and depending on the shared store crate is the honest marker —
-        // the family is defined by what it uses rather than by a list here,
-        // which would need updating for exactly the reason this test exists.
-        //
-        // Three crates use it without being one, and all three are named
-        // rather than pattern-matched away: the server *serves* what a
-        // store fetched, and the two binding packages *package* the
-        // family.
-        let consumer = matches!(
-            name.as_str(),
-            "dynamic-config-store-core"
-                | "dynamic-config-server"
-                | "dynamic-config-python-remote"
-                | "dynamic-config-node-remote"
-        );
-
-        if text.contains("dynamic-config-store-core") && !consumer {
-            stores += 1;
         }
     }
 
@@ -419,17 +398,15 @@ fn the_prose_counts_match_the_workspace() {
     // Each phrase, and the number it is a claim about. A phrase that appears
     // nowhere is not an error — prose is allowed to not say a thing — but a
     // phrase that appears with the wrong number is.
-    let claims: [(&str, usize); 8] = [
+    let claims: [(&str, usize); 6] = [
         ("crates in one workspace", members),
         ("crates share", members),
-        // The first half of "Eighteen crates. Fourteen publish to
-        // crates.io": two numbers in one sentence, matched by one row each.
+        // The first half of "Four crates. Four publish to crates.io": two
+        // numbers in one sentence, matched by one row each.
         ("crates.", members),
         ("crates on crates.io", published),
         ("to crates.io", published),
         ("publish to crates.io", published),
-        ("store crates", stores),
-        ("stores ship", stores),
     ];
 
     // The workspace's own numbers, spelled, before a single page is read.
@@ -594,119 +571,5 @@ fn every_example_is_in_the_books_table() {
         table.to_lowercase().contains(&format!("{counted} of them")),
         "the book says something other than \"{counted} of them\", and there \
          are {examples}"
-    );
-}
-
-/// Every store's documented call is the call it takes.
-///
-/// `#[napi(constructor)]` generates a **positional** constructor, so a store
-/// whose summary line has drifted is not a cosmetic problem: a caller
-/// following it passes a timeout where the TLS options go. Three had drifted
-/// by 0.6.1 — Vault's `format`, Redis's `tls`, Firestore's `accessTokenFn`
-/// and `tls` — each an argument that could only be found by reading the Rust,
-/// which is not where a JavaScript caller looks.
-///
-/// `a | b | c` in a summary stands for the three slots exactly one of which
-/// is filled: a key, a list of keys, or a prefix.
-#[test]
-fn every_store_documents_the_arguments_it_takes() {
-    let Some(source) = read(&repo().join("dynamic-config-node-remote/src/lib.rs")) else {
-        eprintln!("skipped: not a repository checkout");
-        return;
-    };
-
-    /// `timeout_ms: Option<u32>` → `timeoutMs?`.
-    fn parameter(line: &str) -> Option<String> {
-        let (name, rest) = line.trim().trim_end_matches(',').split_once(':')?;
-        let mut camel = String::new();
-        let mut upper = false;
-
-        for character in name.trim().chars() {
-            match character {
-                '_' => upper = true,
-                other if upper => {
-                    camel.extend(other.to_uppercase());
-                    upper = false;
-                }
-                other => camel.push(other),
-            }
-        }
-
-        if rest.contains("Option<") {
-            camel.push('?');
-        }
-
-        Some(camel)
-    }
-
-    let lines: Vec<&str> = source.lines().collect();
-    let mut wrong: Vec<String> = Vec::new();
-    let mut checked = 0;
-
-    for (number, line) in lines.iter().enumerate() {
-        let trimmed = line.trim();
-        let Some(documented) = trimmed
-            .strip_prefix("/// `(")
-            .and_then(|rest| rest.strip_suffix(")`"))
-        else {
-            continue;
-        };
-
-        // The constructor this line is about, and the parameters it takes.
-        let Some(opens) = lines[number..]
-            .iter()
-            .position(|line| line.trim() == "pub fn new(")
-        else {
-            continue;
-        };
-        let start = number + opens + 1;
-        let taken: Vec<String> = lines[start..]
-            .iter()
-            .take_while(|line| !line.trim().starts_with(") ->"))
-            .filter(|line| !line.trim().starts_with("//"))
-            .filter_map(|line| parameter(line))
-            .collect();
-
-        // `key | keys | prefix` is three optional slots written as the one
-        // choice a caller actually makes — so each alternative is optional
-        // whether or not the summary bothered to say so.
-        let claimed: Vec<String> = documented
-            .split(',')
-            .flat_map(|entry| {
-                let alternatives = entry.contains('|');
-
-                entry.split('|').map(move |name| {
-                    let name = name.trim();
-
-                    if alternatives && !name.ends_with('?') {
-                        format!("{name}?")
-                    } else {
-                        name.to_owned()
-                    }
-                })
-            })
-            .collect();
-
-        checked += 1;
-
-        if claimed != taken {
-            wrong.push(format!(
-                "dynamic-config-node-remote/src/lib.rs:{}: says ({}), and it takes ({})",
-                number + 1,
-                claimed.join(", "),
-                taken.join(", ")
-            ));
-        }
-    }
-
-    assert!(
-        checked >= 8,
-        "found {checked} documented constructors; there are eight stores, so \
-         this test has stopped finding them and is passing on nothing"
-    );
-    assert!(
-        wrong.is_empty(),
-        "a store's summary line is not its signature:\n  {}",
-        wrong.join("\n  ")
     );
 }

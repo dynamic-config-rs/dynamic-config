@@ -39,7 +39,7 @@
 //!
 //! This page is the API reference. The guide — profiles, discovery, hot
 //! reload, remote stores, encryption, testing — is
-//! [**the book**](https://ctolon.github.io/dynamic-config/).
+//! [**the book**](https://dynamic-config-rs.github.io/).
 //!
 //! # What the attribute generates
 //!
@@ -72,7 +72,7 @@
 //! `prepare` and the remote reload on the type answer for the running
 //! configuration. The rest — remote stores, aliases, bindings, flags,
 //! `bind_clap` — is in [the book's
-//! reference](https://ctolon.github.io/dynamic-config/attribute-reference.html).
+//! reference](https://dynamic-config-rs.github.io/attribute-reference.html).
 //!
 //! # Precedence
 //!
@@ -394,7 +394,7 @@ pub use write::{save, save_new};
 /// configuration comes from is stated on the [`Builder`] the generated
 /// `builder(key)` returns — see the front page for the shape, and [the
 /// book's
-/// reference](https://ctolon.github.io/dynamic-config/attribute-reference.html)
+/// reference](https://dynamic-config-rs.github.io/attribute-reference.html)
 /// for every method. An argument between the parentheses is a compile
 /// error whose message maps each old argument to its builder method.
 ///

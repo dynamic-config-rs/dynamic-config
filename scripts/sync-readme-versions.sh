@@ -35,18 +35,17 @@ pattern = re.compile(
     r'^(\s*(?:dynamic-config[a-z0-9-]*\s*=.*?|version\s*=\s*)")(\d+\.\d+\.\d+)(")',
 )
 
-# Every README that carries a snippet, by name — silent string replacement
-# is the mistake AGENTS.md lists, and a hardcoded roster is what makes a
-# README dropping out of the sync a loud failure instead of a shrug. The
-# CLI's README is exempt by design: a binary is installed, not depended on.
-# A new companion crate joins this list, or the release fails saying so.
-# 0.6 added two: `dynamic-config-git`, and `dynamic-config-server`, whose
-# README carries a dependency snippet because its router is mountable in a
-# service that already runs axum.
-expected = 12
+# How many READMEs carry a snippet — a hardcoded number is what makes a
+# README dropping out of the sync a loud failure instead of a shrug. A new
+# crate joins the count, or the release fails saying so. Binaries are
+# exempt by design: a binary is installed, not depended on.
+expected = 4
 
 matched = 0
-readmes = [pathlib.Path("README.md"), *pathlib.Path(".").glob("dynamic-config-*/README.md")]
+# `dynamic-config*` rather than `dynamic-config-*`: the engine crate's
+# own directory has no dash after the name, and the gate that checks
+# these snippets agree does include it.
+readmes = [pathlib.Path("README.md"), *sorted(pathlib.Path(".").glob("dynamic-config*/README.md"))]
 
 for readme in readmes:
     lines = readme.read_text().splitlines(keepends=True)

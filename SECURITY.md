@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report privately, through
-[GitHub's advisory form](https://github.com/ctolon/dynamic-config/security/advisories/new),
+[GitHub's advisory form](https://github.com/dynamic-config-rs/dynamic-config/security/advisories/new),
 rather than in a public issue.
 
 Include what you would want if you were on the other side: what an attacker can

@@ -1,23 +1,16 @@
+# The engine, and the three crates that cannot be anywhere else: the macro
+# it re-exports, the `no_std` cell that shares its vocabulary, and the CLI
+# that reads what it resolves.
+#
+# The stores, the server and the two bindings live in their own
+# repositories, each naming this crate with a caret — see
+# https://github.com/dynamic-config-rs.
 [workspace]
 members = [
     "dynamic-config",
     "dynamic-config-macros",
     "dynamic-config-cli",
-    "dynamic-config-store-core",
-    "dynamic-config-vault",
-    "dynamic-config-consul",
-    "dynamic-config-etcd",
-    "dynamic-config-nats",
     "dynamic-config-embedded",
-    "dynamic-config-redis",
-    "dynamic-config-s3",
-    "dynamic-config-firestore",
-    "dynamic-config-git",
-    "dynamic-config-server",
-    "dynamic-config-python",
-    "dynamic-config-python-remote",
-    "dynamic-config-node",
-    "dynamic-config-node-remote",
 ]
 resolver = "2"
 
@@ -26,8 +19,8 @@ version = "0.6.1"
 edition = "2021"
 rust-version = "1.71"
 license = "MIT"
-repository = "https://github.com/ctolon/dynamic-config"
-homepage = "https://github.com/ctolon/dynamic-config"
+repository = "https://github.com/dynamic-config-rs/dynamic-config"
+homepage = "https://github.com/dynamic-config-rs/dynamic-config"
 documentation = "https://docs.rs/dynamic-config"
 authors = ["Cevat Batuhan Tolon <cevatbatuhan.tolon@gmail.com>"]
 categories = ["config", "development-tools"]
@@ -43,10 +36,6 @@ exclude = [
 [workspace.dependencies]
 dynamic-config-macros = { version = "=0.6.1", path = "dynamic-config-macros" }
 dynamic-config = { version = "=0.6.1", path = "dynamic-config", default-features = false }
-# The store crates' shared internals. Published because cargo will not let a
-# published crate depend on one that is not — not because anything outside
-# this workspace should name it.
-dynamic-config-store-core = { version = "=0.6.1", path = "dynamic-config-store-core" }
 
 # One profile for the benchmark to be worth reading.
 [profile.bench]
