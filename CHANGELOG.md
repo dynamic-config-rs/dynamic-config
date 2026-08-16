@@ -25,6 +25,38 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-08-16
+
+### Changed
+
+- **This crate moved to its own repository**,
+  [dynamic-config-rs/dynamic-config](https://github.com/dynamic-config-rs/dynamic-config).
+  Nothing about the crate changed — same name, same API, same version
+  series — but the links a reader follows did: `repository` and `homepage`
+  in the manifest, the badges and the book URL in the README, and the
+  book itself, which is now published at
+  [dynamic-config-rs.github.io](https://dynamic-config-rs.github.io/)
+  alongside the three that used to be chapters of it.
+
+  What is *not* here any more: the eight store crates, the config server
+  and the two bindings. They are
+  [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote),
+  [dynamic-config-python](https://github.com/dynamic-config-rs/dynamic-config-python)
+  and
+  [dynamic-config-node](https://github.com/dynamic-config-rs/dynamic-config-node),
+  each naming this crate with a **caret** — so a patch release here reaches
+  them without a release of their own. That is the whole point of the
+  split, and it starts working with this release.
+
+### Fixed
+
+- **Two lints that only a smaller workspace could see.** `tests/dynamic.rs`
+  imported `Duration` unconditionally although only the `watch` and `async`
+  suites use it, and `tests/documents.rs` looped over an array that is one
+  element long when a single format feature is on. Both compiled here only
+  because a sibling crate in the old workspace happened to enable the
+  features that hid them.
+
 ## [0.6.1] — 2026-08-14
 
 ### Added
@@ -1049,7 +1081,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ctolon/dynamic-config/compare/v0.4.0...v0.5.0
