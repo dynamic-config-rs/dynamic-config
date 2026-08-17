@@ -25,6 +25,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-08-17
+
 ## [0.6.2] — 2026-08-16
 
 ## [0.6.1] — 2026-08-14
@@ -115,7 +117,8 @@ Initial release.
 - The `Validate` trait, and `Error`/`ErrorKind` small enough for a status
   register.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0
