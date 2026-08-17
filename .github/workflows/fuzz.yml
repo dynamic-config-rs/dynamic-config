@@ -53,6 +53,11 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: fuzz
+      # From source, and it has to be: `taiki-e/install-action` carries no
+      # manifest for `cargo-fuzz` — `cargo-hack` and `cargo-semver-checks`
+      # are there, this one is not — so asking it for the tool fails the
+      # step. The minutes this costs are the price of the only install that
+      # works.
       - run: cargo install cargo-fuzz --locked
       # No seed corpus. The library's `tests/fixtures/` holds JSON and TOML
       # documents, and none of these targets reads a document: `units` takes a

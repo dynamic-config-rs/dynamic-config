@@ -43,6 +43,12 @@ Twenty-eight of them, each showing one idea. All run from the workspace root.
 | [`axum_hello`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/axum_hello.rs) | `watch`, `json` | A handler that reads `current()` per request, a `/config/check` probe, and why the listen port is start-up configuration. |
 | [`actix_hello`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/actix_hello.rs) | `watch`, `json` | The same across Actix's worker threads, and why configuration does not belong in `web::Data`. |
 
+Both read one section per handler, which needs no crate beyond this one.
+For a handler reading **two** sections that must agree,
+[`dynamic-config-axum`](https://docs.rs/dynamic-config-axum) and
+[`dynamic-config-actix`](https://docs.rs/dynamic-config-actix) carry a
+`two_sections` example each. [Serving HTTP](serving-http.md) is the chapter.
+
 ## On a runtime
 
 | Example | Features | Shows |

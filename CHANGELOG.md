@@ -25,6 +25,52 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-08-17
+
+### Added
+
+- **A chapter on serving HTTP.** [Serving
+  HTTP](https://dynamic-config-rs.github.io/serving-http.html) covers what a
+  web service needs from configuration: read at the use site, what stays
+  start-up configuration, and the case where two sections in one handler
+  have to be the same generation. Two crates in a repository of their own —
+  `dynamic-config-axum` and `dynamic-config-actix` — take the reading once
+  per request; the engine's own `axum_hello` and `actix_hello` examples are
+  unchanged and remain the right answer for one section.
+
+### Changed
+
+- **The book has parts.** *Guide*, *Use Cases*, *Advanced*, *Reference* and
+  *The Family*, where there was one flat list of twenty-six chapters under
+  *Guide*. The last-known-good cache moves out of *Persistence & Writing*
+  into a chapter of its own; nothing else moved file, so external links
+  still resolve.
+
+### Fixed
+
+- **The poll watcher could miss an edit permanently.** `WatchMode::Poll`
+  compared file timestamps, and a filesystem timestamp is compared there in
+  whole **seconds**: an edit that landed in the same second as the previous
+  scan looked identical to no edit at all, and stayed invisible afterwards
+  because the next scan compared against the value it had just recorded.
+  Two writes inside one second had the same problem — the second was the
+  only evidence the first happened, and neither was reported.
+
+  The case that hit people: a deployment writes a file moments after the
+  watcher starts. Nothing further touches it, so the change is never
+  noticed at all — on precisely the network and overlay filesystems
+  polling exists for, where there is no notification to fall back on.
+
+  Poll ticks now compare contents as well, which closes it. The cost is a
+  read where there was a `stat`, once per interval per file in the watched
+  directories; configuration files are small and few, and a watcher that
+  misses edits is the failure polling was chosen to escape. `WatchMode::Native`
+  is unchanged and was never affected.
+
+  `tests/watch_modes.rs` has both cases as regressions — one write with no
+  rewriting, and two writes ten milliseconds apart — and both fail without
+  the change.
+
 ## [0.6.2] — 2026-08-16
 
 ### Changed
@@ -1081,7 +1127,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ctolon/dynamic-config/compare/v0.5.0...v0.6.0

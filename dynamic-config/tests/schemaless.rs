@@ -464,18 +464,19 @@ mod watching {
             )
             .unwrap();
 
-        // Rewritten until seen: a poll watcher takes its baseline on its
-        // first tick, so one write can land inside it and never look like a
-        // change.
+        // One write, and then waiting: the poll backend compares contents
+        // as well as timestamps, so an edit sharing a second with the scan
+        // before it is still a change.
+        write(
+            "tests/scratch/schemaless-watched.json",
+            r#"{"watched": {"level": 2}}"#,
+        );
+
         let deadline = Instant::now() + Duration::from_secs(15);
         let mut seen = false;
 
         while Instant::now() < deadline && !seen {
-            write(
-                "tests/scratch/schemaless-watched.json",
-                r#"{"watched": {"level": 2}}"#,
-            );
-            std::thread::sleep(Duration::from_millis(200));
+            std::thread::sleep(Duration::from_millis(25));
 
             seen = config
                 .current()

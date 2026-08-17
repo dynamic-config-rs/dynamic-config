@@ -91,7 +91,7 @@ has. Nothing else about the load changes:
 | The [last-known-good cache](persistence.md) and every diagnostic name the configuration after the key. |
 | A [remote store](https://dynamic-config-rs.github.io/remote/)'s document is read the same way — headerless too. |
 
-It applies to **every** document the load reads, deliberately: sources
+It applies to **every** document the load reads: sources
 that disagreed about their own shape would be a configuration nobody could
 reason about.
 

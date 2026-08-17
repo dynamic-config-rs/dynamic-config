@@ -49,7 +49,7 @@ Paths resolve against the working directory. For a deployment, prefer
 [discovery](profiles-and-discovery.md#name--paths).
 
 `.file(..)` and `.discover(..)` together is fine: the explicitly listed files
-win, because a listed file is a deliberate statement and a search result is a
+win, because a listed file is a statement of intent and a search result is a
 guess about the machine.
 
 A `.age` suffix marks a file as [encrypted](encryption.md):
@@ -188,7 +188,7 @@ repository. A file that is not there is skipped, like any other.
 struct: a side effect nobody asked for, visible to every library in the process,
 and not thread-safe. This reads the file and merges it.
 
-Variable interpolation (`${OTHER}`) and multi-line values are deliberately not
+Variable interpolation (`${OTHER}`) and multi-line values are not
 supported. Both are shell features that every `.env` library implements slightly
 differently, and a configuration file whose meaning depends on which library
 read it is worse than one that refuses.
@@ -269,7 +269,7 @@ DbConfig::bind_env("url", "DATABASE_URL")?;
 A binding sits just above the prefixed environment layer, because it is the more
 specific statement: somebody named that variable on purpose, and the prefixed
 one is a convention. It is read at **every** load, so a reload sees a change to
-it, and a variable that is not set contributes nothing — which is the point,
+it, and a variable that is not set contributes nothing,
 since the platform may or may not have set it.
 
 Nested paths work: `bind_env("pool.max_size", "DB_POOL_MAX")`. Binding the same

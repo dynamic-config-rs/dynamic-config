@@ -168,24 +168,22 @@ mod watching {
     use dynamic_config::watch::WatchMode;
     use std::time::Instant;
 
-    /// Rewrites the file until `read` answers `expected`, or gives up well
-    /// after it should have.
+    /// Writes once, then waits for `read` to answer `expected`.
     ///
-    /// A poll watcher takes its baseline on its first tick, not when
-    /// `watch()` returns, so a single write can land inside the baseline
-    /// and never look like a change — the same honest shape
-    /// `watch_modes.rs` pins for the type surface: polling detects changes
-    /// *eventually*, not by a deadline.
+    /// One write is enough: the poll backend compares contents as well as
+    /// timestamps, so an edit sharing a second with the scan before it is
+    /// still a change. This used to rewrite in a loop, because it was not.
     fn edited_until_seen(write: impl Fn(), read: impl Fn() -> u16, expected: u16) -> bool {
+        write();
+
         let deadline = Instant::now() + Duration::from_secs(15);
 
         while Instant::now() < deadline {
-            write();
-            std::thread::sleep(Duration::from_millis(200));
-
             if read() == expected {
                 return true;
             }
+
+            std::thread::sleep(Duration::from_millis(25));
         }
 
         false

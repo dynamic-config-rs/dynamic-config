@@ -32,7 +32,7 @@ capability intact — files, discovery, the environment, profiles,
 a successful load *installs*: into a cell the instance owns instead of the
 type's static.
 
-## What changes, and what deliberately does not
+## What changes, and what does not
 
 **`current()` returns an `Option`.** The type-level `current()` panics
 before `init()` with the type's name in the message; an instance has no

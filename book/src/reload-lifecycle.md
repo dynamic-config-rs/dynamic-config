@@ -2,9 +2,9 @@
 
 Reloading the configuration does not reload anything *built from* the
 configuration. A changed `pool_size` swaps a number in a snapshot; the pool
-sized by the old number is still there, still that size. This chapter is
-about the boundary — what the crate does on a reload, what it deliberately
-leaves to you, and the surface for doing your half.
+sized by the old number is still there, still that size. This chapter
+covers the boundary — what the crate does on a reload, what it leaves to
+you, and the surface for doing your half.
 
 ```text
 file edited
@@ -140,7 +140,7 @@ variant will not break the match. `reason.as_str()` is the category without
 the path — the shape a metric dimension wants, since a file path is
 unbounded cardinality and `"file-changed"` is not.
 
-Two differences from the pair form are worth stating plainly:
+Two differences from the pair form:
 
 - **The first install fires an event.** `previous` is `None`, because there
   was no configuration before it. `on_reload` cannot say that — its
@@ -185,7 +185,7 @@ router.route("/internal/config", get(|| async {
 }));
 ```
 
-Three things it deliberately is not.
+Three things it is not.
 
 **It is not a value leak.** A status carries key paths, counts, timestamps,
 generations and error kinds — never a configured value. `last_failure` keeps

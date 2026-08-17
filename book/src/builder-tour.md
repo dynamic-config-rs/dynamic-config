@@ -2,7 +2,7 @@
 
 One declared type, every capability in turn — a minimal example and the
 reason it exists, from the first file to the last callback. Deep dives live
-in each feature's own chapter; this page is the map with all the roads on
+in each feature's own chapter; this is the map with all the roads on
 it.
 
 Everything below starts from the same declaration:
@@ -87,7 +87,7 @@ AppConfig::builder("app")
 
 `discover(name, paths)` looks for `config.{ext}` in each directory.
 Discovered files sit *below* explicitly listed ones: `file(..)` is a
-deliberate statement, a search result is a guess about the machine. See
+statement of intent, a search result is a guess about the machine. See
 [Profiles & Discovery](profiles-and-discovery.md).
 
 ## The environment

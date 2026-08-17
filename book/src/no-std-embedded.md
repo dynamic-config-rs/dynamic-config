@@ -56,7 +56,7 @@ configuration, not thousands. A fifth waiter replaces the occupant of a
 slot rather than being dropped: a task never woken is a hang; one woken
 early merely polls again.
 
-## The waiter budget, and why there is no queue
+## The waiter budget
 
 Past the budget the eviction is not free. The displaced task wakes,
 polls, sees no change and re-registers — displacing somebody else. Five

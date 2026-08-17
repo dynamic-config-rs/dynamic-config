@@ -27,7 +27,7 @@ Prints what every layer supplies for the path and which one wins — the
 same table `AppConfig::explain(..)` renders in code — except that
 **values print as `***` by default**: a published diagnostic tool cannot
 ask its user to already know which paths are sensitive, so seeing values
-is the deliberate act, `--show-values`. `--env-file` adds `.env` layers,
+is the explicit act, `--show-values`. `--env-file` adds `.env` layers,
 repeatable like `--file`.
 
 ## `diff` — which paths moved between two documents

@@ -74,8 +74,15 @@ pub enum WatchMode {
     /// The platform's notification backend. Efficient, and the default.
     #[default]
     Native,
-    /// Re-stat the files on an interval. Works anywhere, at the cost of the
+    /// Re-read the files on an interval. Works anywhere, at the cost of the
     /// interval's worth of latency and a periodic wake-up.
+    ///
+    /// Each tick compares **contents**, not only timestamps. A filesystem
+    /// timestamp is compared here in whole seconds, so an edit landing in the
+    /// same second as the previous scan would otherwise be invisible — and
+    /// stay invisible, because the next scan compares against the value it
+    /// just recorded. Configuration files are small and few, and a watcher
+    /// that misses edits is the failure polling was chosen to escape.
     Poll {
         /// How often to look.
         interval: Duration,
