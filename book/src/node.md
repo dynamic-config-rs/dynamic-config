@@ -26,13 +26,8 @@ One prebuilt binary per platform through Node-API, so the same binary
 serves every Node version the package claims and nothing compiles at
 install time.
 
-## Why it is a separate book
-
-The same reason the Python one is: the reader is a different person. A
-Node programmer arriving from npm should not land in a sidebar whose first
-twenty entries are Rust, and a Rust programmer carries no chapters about
-an event loop. The store crates stay in this book — a Consul chapter is
-read by whoever read the [builder tour](builder-tour.md).
+The Node documentation is [its own book](https://dynamic-config-rs.github.io/node/),
+on the same site, and links back here for the engine's own behaviour.
 
 ## What is in it
 

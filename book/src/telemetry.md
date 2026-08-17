@@ -3,8 +3,8 @@
 Two questions an operator asks about configuration, and neither is
 answerable from a log line that says "reloaded": *is this process serving
 the configuration I deployed*, and *how long has it been serving something
-else*. This chapter is how the crate answers them — a record per reload
-under `tracing`, and a set of numbers any exporter can publish.
+else*. The crate answers them with a record per reload under `tracing`,
+and a set of numbers any exporter can publish.
 
 ## The crate picks no metrics ecosystem
 
@@ -157,7 +157,7 @@ that returns a document identical to the one already held is a success
 that installs nothing, and a store that has stopped answering leaves a
 perfectly healthy `ConfigStatus` behind it.
 
-So a `Remote` records a `RemoteStatus` — the same shape, deliberately.
+So a `Remote` records a `RemoteStatus` — the same shape.
 The same `FailureStatus`, the same `consecutive_failures` where zero is
 healthy, the same recorded-where-it-happens rule, and the same
 `Exposition` renders it:
@@ -207,7 +207,7 @@ beside a push's timestamp would describe the wrong fetch.
     summary: "{{ $labels.job }} cannot reach the store behind {{ $labels.config }}"
 ```
 
-## Cardinality, and why no label names a key
+## Cardinality
 
 A per-key or per-path label is an unbounded label set, and one
 badly-labelled counter is how a Prometheus acquires a million series. So
@@ -259,7 +259,7 @@ withhold. So a scraper is a client like any other: give it a token,
 grant it the applications it should see, and point Prometheus's
 `bearer_token_file` at it.
 
-## What is deliberately absent
+## What is absent
 
 **A reload counter broken down by reason and outcome.** It would need
 state this crate does not keep — `status()` records the *last* reason and

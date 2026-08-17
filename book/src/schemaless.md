@@ -84,12 +84,12 @@ one.
 
 `#[config(secret)]` is a *declaration*. A configuration with no struct has
 nowhere to make one, so a schemaless configuration begins with no secret
-list at all. The consequences are drawn deliberately:
+list at all. The consequences follow:
 
 **The tree never prints.** `Value`'s `Debug` shows shape and keys and
 never values, exactly as `Snapshot`'s does — so `{:?}` in a log line, the
 way resolved secrets usually escape, is closed whether or not anything was
-declared. There is also deliberately **no `Display`**: a type that
+declared. There is also **no `Display`**: a type that
 rendered itself into `{}` would put a password wherever a program formats
 a value it did not inspect. The ways out are all explicit — the
 accessors, `get_as`, `render(Format)` for a document, and `Serialize` for
@@ -185,7 +185,7 @@ The **ratios** travel between machines; the nanoseconds belong to the
 block above them. Under a loaded machine every row roughly doubles and the
 ratios stay put, which is why the argument is made with ratios.
 
-## Why not a `DashMap`
+## Not a `DashMap`
 
 It is the obvious reach for "configuration as a map", and it is the wrong
 one *for reading*. Reads here are lock-free because the snapshot is
@@ -196,16 +196,14 @@ The dependency would be added to make the read path slower.
 Where a sharded map would genuinely pay is a different product — a runtime
 registry with per-key writes, `set("feature.x", true)` mutating one key
 without rebuilding the tree. That has a consistency story this design
-deliberately refuses: a reader seeing key A's new value and key B's old one
-is exactly what a whole-snapshot swap prevents. If that is the thing
+refuses: a reader seeing key A's new value and key B's old one is exactly
+what a whole-snapshot swap prevents. If that is the thing
 wanted, it wants its own name.
 
-## Why not behind a Cargo feature
+## Not behind a Cargo feature
 
-The user request that opened this item suggested one, and the surface is
-small enough to gate. It is not gated, for a reason worth stating: the
-whole feature is a trait implementation on a type this crate already
-exports. A `Deserialize` impl behind a `#[cfg]` means `Dynamic<Value>`
+The surface is small enough to gate, and is not gated: the whole feature
+is a trait implementation on a type this crate already exports. A `Deserialize` impl behind a `#[cfg]` means `Dynamic<Value>`
 compiles in one build of `dynamic-config` and not another, and a library
 depending on this one cannot rely on it at all — the same class of
 invisible failure as a `cfg` in macro-generated code. There is no

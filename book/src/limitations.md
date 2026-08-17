@@ -73,8 +73,7 @@ after.
 
 ### A swappable loader backend
 
-"Make figment a plug-in" reads like extracting a `Loader` trait. It is not,
-and the reason is worth writing down once rather than re-deriving.
+"Make figment a plug-in" reads like extracting a `Loader` trait. It is not.
 
 figment reaches nineteen modules here, and not as a parser. `Snapshot` holds
 figment's tree. Sections *are* figment profiles. Provenance *is* figment

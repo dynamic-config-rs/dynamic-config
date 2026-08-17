@@ -70,7 +70,7 @@ that coupling knowingly. See
 [Stability Tiers](stability-tiers.md).
 
 **`dotenv`** — `.env_file(..)`: a `.env` file read as the environment
-layer, below the real environment. Deliberately does not call `setenv` —
+layer, below the real environment. Does not call `setenv` —
 mutating the process environment to configure one struct is a side
 effect nobody asked for, and it is not thread-safe.
 

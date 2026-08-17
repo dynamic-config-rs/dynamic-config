@@ -210,7 +210,28 @@ pub fn spawn_with(
         WatchMode::Poll { interval } => Backend::Poll(
             notify::PollWatcher::new(
                 sender,
-                notify::Config::default().with_poll_interval(interval),
+                notify::Config::default()
+                    .with_poll_interval(interval)
+                    // Contents, not just timestamps — and this is a
+                    // correctness fix rather than a thoroughness one.
+                    //
+                    // `notify`'s poll backend stores each file's mtime in
+                    // whole **seconds** and reports a change when the new
+                    // one is greater. Two writes inside one second are
+                    // therefore indistinguishable from one, and an edit
+                    // that lands in the same second as the scan before it
+                    // is invisible — permanently, because the next scan
+                    // compares against the value it just recorded. A
+                    // deployment that writes a file a few milliseconds
+                    // after the watcher starts is exactly that case.
+                    //
+                    // Hashing each watched file per interval is what
+                    // closes it. The cost is a read where there was a
+                    // `stat`, which is the trade polling already is: it
+                    // was chosen because notifications never arrive here,
+                    // and a watcher that misses edits is the failure it
+                    // was chosen to escape.
+                    .with_compare_contents(true),
             )
             .map_err(to_io)?,
         ),

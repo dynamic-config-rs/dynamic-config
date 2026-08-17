@@ -52,7 +52,7 @@ The JSON row is why `$schema` is the one top-level key this crate does not read
 as a section: otherwise wiring the schema into the file it describes would stop
 the file from loading.
 
-## Nothing is marked required, and that is the point
+## Nothing is marked required
 
 `schemars` marks every field that is neither `Option` nor `#[serde(default)]` as
 required. That is right for a struct and wrong for a config file: the

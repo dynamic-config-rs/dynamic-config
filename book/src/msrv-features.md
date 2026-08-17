@@ -1,7 +1,7 @@
 # MSRV & Features
 
 What each feature unlocks, and why it is a choice, is the
-[Cargo Features](features.md) chapter's subject; this page is the cost
+[Cargo Features](features.md) chapter's subject. What follows is the cost
 side — which flags move the compiler floor, and how the floors are kept
 honest.
 
@@ -49,7 +49,7 @@ declaration.
 MSRV is treated as a breaking change, and both figures are verified in CI
 against the real toolchains.
 
-Contributors: this repository sets
+Building from source: the workspace sets
 `resolver.incompatible-rust-versions = "fallback"` in `.cargo/config.toml`.
 Without it, cargo resolves to the newest release of every transitive dependency
 and the floor silently becomes 1.85 — `hashbrown 0.17`, reached through `toml`,

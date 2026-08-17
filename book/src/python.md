@@ -34,20 +34,11 @@ last-known-good recovery and the provenance; a `dataclasses.dataclass`, a
 Pydantic model, a `msgspec.Struct` or `Values` does the validating, once per
 successful resolve rather than once per read.
 
-## Why it is a separate book
-
-Because the reader is a different person. Eleven chapters of Python
-description are not for a Rust programmer, and a Python programmer arriving
-from PyPI should not land in a sidebar whose first twenty entries are Rust.
-The store crates are deliberately not this case — a Consul chapter is read
-by whoever read the [builder tour](builder-tour.md), and half its value is
-linking inward.
-
-Same site, one link away: the Python book links back here for
-[precedence](sources-and-precedence.md), [document
-shape](document-shape.md), [schemaless
-configuration](schemaless.md) and [telemetry](telemetry.md), which are the
-engine's behaviour rather than a language's surface.
+The Python documentation is [its own book](https://dynamic-config-rs.github.io/python/),
+on the same site. It links back here for
+[precedence](sources-and-precedence.md), [document shape](document-shape.md),
+[schemaless configuration](schemaless.md) and [telemetry](telemetry.md) —
+engine behaviour, identical in every language.
 
 ## What is in it
 

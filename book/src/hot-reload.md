@@ -70,7 +70,20 @@ Polling is needed because inotify and its equivalents do not fire on many
 network and overlay filesystems — NFS, some Docker bind mounts, some CI
 runners. The failure is **silent**: the watch registers and simply never
 delivers, so there is nothing to detect and fall back from. It has to be
-chosen deliberately.
+chosen explicitly.
+
+Each tick compares **contents**, not only timestamps, and that is a
+correctness decision rather than a thorough one: a filesystem timestamp is
+compared here in whole seconds, so an edit landing in the same second as
+the previous scan would otherwise be invisible — and stay invisible, since
+the next scan compares against the value it just recorded. A deployment
+that writes a file moments after the watcher starts is exactly that case.
+
+What it costs is a read where there would have been a `stat`, once per
+interval per file in the directories being watched. Configuration files are
+small and few, and a watcher that misses edits is the failure polling was
+chosen to escape. Choose the interval accordingly: two seconds over a
+network mount is a different bill from fifty milliseconds.
 
 ## Reacting to a reload
 

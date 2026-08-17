@@ -53,7 +53,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: fuzz
-      - run: cargo install cargo-fuzz --locked
+      # `install-action` rather than `cargo install`: it fetches a prebuilt
+      # binary, where `cargo install cargo-fuzz --locked` compiles it from
+      # source on every run. Same tool, same pin discipline, minutes saved
+      # on a job whose own work is a `cargo fuzz build`.
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-fuzz
       # No seed corpus. The library's `tests/fixtures/` holds JSON and TOML
       # documents, and none of these targets reads a document: `units` takes a
       # value string, and the rest take an `arbitrary`-encoded struct, for

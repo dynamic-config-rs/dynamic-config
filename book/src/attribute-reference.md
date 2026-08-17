@@ -87,7 +87,7 @@ argument to opt in with; an unused method costs nothing.
 | `changes()` | `async` | A handle woken by every later reload; a `Future`, so any executor drives it. |
 | `set_remote_async(source)` / `refresh_remote_async()` | `async` | The same remote surface, for a store whose client is async. |
 
-Three names from before the split are **not** on this list, deliberately:
+Three names from before the split are **not** on this list:
 `load` and `init` live on the builder, because a load needs to know its
 sources; `start_watch` is now the builder's `watch(debounce)`, because
 watching re-runs a load.
@@ -161,7 +161,7 @@ sources — useful before anything is installed, or on a bare
 The generated `builder()` carries what the macro knows and a bare
 `Builder::new` cannot: where to install, the field names for unknown-key
 detection, and which fields are `#[config(secret)]`. The consequences are
-deliberate rather than incidental:
+part of the contract rather than incidental:
 
 - `init`, `reload`, `prepare` and `watch` on a bare builder refuse — there
   is nowhere to install. `load()` is the bare builder's whole job.

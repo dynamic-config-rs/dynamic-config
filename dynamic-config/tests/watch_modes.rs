@@ -27,6 +27,12 @@ struct Polled {
     value: u32,
 }
 
+#[dynamic_config]
+#[derive(Debug, Deserialize)]
+struct Twice {
+    value: u32,
+}
+
 // The ConfigMap machinery below is unix-only, like the symlinks it imitates,
 // so everything only *it* uses is gated with it — Windows builds with
 // `-D warnings`, and dead code there is an error, not a footnote.
@@ -71,23 +77,65 @@ fn the_poll_backend_notices_an_edit() {
         )
         .expect("the poll watcher should start");
 
-    // A poll watcher takes its baseline on its first tick, not when `watch()`
-    // returns, so a single write can land inside the baseline and never look
-    // like a change. Rewriting until it is noticed is what a caller would have
-    // to do too, and is the honest shape of the guarantee: polling detects
-    // changes *eventually*, not by a deadline.
+    // **One** write, immediately after the watcher started — the case that
+    // used to be lost. The poll backend compares mtimes in whole seconds, so
+    // this edit and the scan before it share a timestamp and look identical;
+    // it is noticed because the contents are hashed as well.
+    //
+    // Before that, a caller had to keep rewriting the file until an edit
+    // happened to cross a second boundary — which is not a guarantee anybody
+    // could build on, and this test used to be written that way.
+    fs::write(path, r#"{"app": {"value": 2}}"#).unwrap();
+
     let deadline = Instant::now() + Duration::from_secs(15);
 
     while Instant::now() < deadline {
-        fs::write(path, r#"{"app": {"value": 2}}"#).unwrap();
-        thread::sleep(Duration::from_millis(200));
-
         if Polled::current().value == 2 {
             return;
         }
+
+        thread::sleep(Duration::from_millis(25));
     }
 
-    panic!("polling should pick the edit up within its interval");
+    panic!("polling should pick a single edit up without being written to again");
+}
+
+#[test]
+fn the_poll_backend_notices_two_edits_inside_one_second() {
+    let path = "tests/scratch/polled-twice.json";
+    fs::create_dir_all("tests/scratch").unwrap();
+    fs::write(path, r#"{"app": {"value": 1}}"#).unwrap();
+
+    let builder = Twice::builder("app").file(path);
+    builder.init().expect("the initial load should succeed");
+
+    let _watch = builder
+        .watch_with(
+            Duration::from_millis(20),
+            WatchMode::Poll {
+                interval: Duration::from_millis(50),
+            },
+        )
+        .expect("the poll watcher should start");
+
+    // Two writes, milliseconds apart. With second-granularity timestamps the
+    // pair is indistinguishable from no write at all; the hash is what makes
+    // the *last* of them the one that serves.
+    fs::write(path, r#"{"app": {"value": 2}}"#).unwrap();
+    thread::sleep(Duration::from_millis(10));
+    fs::write(path, r#"{"app": {"value": 3}}"#).unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+
+    while Instant::now() < deadline {
+        if Twice::current().value == 3 {
+            return;
+        }
+
+        thread::sleep(Duration::from_millis(25));
+    }
+
+    panic!("polling should settle on the last of two edits in one second");
 }
 
 /// Rebuilds the `..data` symlink the way the kubelet does.
@@ -191,11 +239,10 @@ fn a_storm_of_unrelated_events_does_not_starve_the_reload() {
         })
     };
 
-    // Edit the config repeatedly rather than once: under a loaded test host
-    // the poll backend's first baseline scan can land *after* a single early
-    // edit, absorbing it. Repeated edits also make the property stronger —
-    // the old code starved even a stream of real edits, because the
-    // unfiltered storm kept the quiet-period from ever elapsing.
+    // Edit the config repeatedly rather than once, and here that is the
+    // point rather than a workaround: the old code starved even a stream of
+    // real edits, because the unfiltered storm kept the quiet period from
+    // ever elapsing.
     //
     // Old behaviour: timeout. New behaviour: irrelevant events do not extend
     // the window at all, and even relevant churn is bounded by max_wait

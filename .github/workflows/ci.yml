@@ -29,7 +29,45 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # What changed, so the expensive jobs below can sit out a run that cannot
+  # affect them. Deliberately a *job* rather than `on.pull_request.paths`:
+  # a workflow filtered out at the trigger never reports at all, and a
+  # required check that never reports leaves the pull request waiting for
+  # ever. A skipped job passes the gate instead — `ci-ok` matches `failure`
+  # and `cancelled` only, which the `supply-chain` job in security.yml has
+  # relied on since it was written.
+  # Filtering applies to pull requests only. A push to `main` and a manual
+  # dispatch run everything: `main` is what releases from, and a manual
+  # dispatch has no base commit for a path filter to compare against.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: filter
+        with:
+          filters: |
+            rust:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - '**/Cargo.lock'
+              - 'rustfmt.toml'
+              - 'deny.toml'
+              - '.cargo/**'
+              - '.github/workflows/**'
+            docs:
+              - '**/*.md'
+              - 'book/**'
+              - '.github/workflows/**'
+
   fmt:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 10
@@ -42,6 +80,8 @@ jobs:
       - run: cargo fmt --all -- --check
 
   clippy:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
@@ -56,6 +96,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --no-default-features
 
   test:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +148,8 @@ jobs:
       - run: cargo test -p dynamic-config --no-default-features --features async,json
 
   embedded:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: it really is no_std
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -131,6 +175,8 @@ jobs:
       - run: cargo test -p dynamic-config-embedded --features std,async
 
   features:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
@@ -157,6 +203,8 @@ jobs:
       - run: cargo check -p dynamic-config --no-default-features --features decrypt
 
   loader:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 20
@@ -172,6 +220,8 @@ jobs:
       - run: cargo test -p dynamic-config --test loader --features json,toml,yaml
 
   loom:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: loom model checking
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
@@ -189,6 +239,8 @@ jobs:
       - run: RUSTFLAGS="--cfg loom" cargo test -p dynamic-config --no-default-features --features json,async --test loom --release
 
   shuttle:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: shuttle model checking
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
@@ -211,6 +263,8 @@ jobs:
       - run: RUSTFLAGS="--cfg shuttle" cargo test -p dynamic-config --no-default-features --features json,async --test shuttle --release
 
   fuzz-build:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: the fuzz targets still compile
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -226,7 +280,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: fuzz
-      - run: cargo install cargo-fuzz --locked
+      # `install-action` rather than `cargo install`: it fetches a prebuilt
+      # binary, where `cargo install cargo-fuzz --locked` compiles it from
+      # source on every run. Same tool, same pin discipline, minutes saved
+      # on a job whose own work is a `cargo fuzz build`.
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-fuzz
       # Building, not running. A fuzz *run* belongs on a schedule
       # (`fuzz.yml`): it is unbounded by nature, and a crash it finds is
       # rarely the fault of the pull request it would block. What does
@@ -236,6 +296,8 @@ jobs:
         working-directory: fuzz
 
   bench:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A hung job should fail, not sit on a runner for six hours.
     timeout-minutes: 30
@@ -261,6 +323,8 @@ jobs:
           --bench instructions --no-run
 
   msrv:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:
@@ -323,6 +387,8 @@ jobs:
         run: cargo check -p ${{ matrix.package }} --locked ${{ matrix.flags }}
 
   docs:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -341,6 +407,8 @@ jobs:
       - run: cargo doc --workspace --all-features --no-deps
 
   docs-links:
+    needs: [changes]
+    if: needs.changes.outputs.docs == 'true' || github.event_name != 'pull_request'
     name: documentation links resolve
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -365,6 +433,8 @@ jobs:
           fail: true
 
   minimal-versions:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: the declared minimums resolve
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -393,6 +463,8 @@ jobs:
       - run: cargo +stable check -p dynamic-config --locked --all-features
 
   coverage:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     name: coverage report
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -448,6 +520,7 @@ jobs:
   ci-ok:
     name: CI is green
     needs:
+      - changes
       - fmt
       - clippy
       - test

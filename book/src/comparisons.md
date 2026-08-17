@@ -2,10 +2,10 @@
 
 > What this engine is built on and whose ideas it took is
 > [CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md).
-> This page is about the differences.
+> What follows is the differences.
 
-This page is for the decision *before* the one this book otherwise answers:
-whether to use this crate at all. Three alternatives come up every time —
+This chapter covers the decision *before* the one the rest of the book
+answers: whether to use this crate at all. Three alternatives come up every time —
 `serde` and a format crate on their own, [config-rs](https://docs.rs/config),
 and [figment](https://docs.rs/figment) — and for a large share of programs one
 of them is the better answer.
@@ -64,7 +64,7 @@ deserializes into a struct or is read a key at a time with `get::<T>("db.port")`
   `Source` trait is public and names only config-rs types. The equivalent here
   is [`Source::provider`](sources-and-precedence.md#bringing-your-own-figment-provider),
   which takes a *figment* provider — a coupling that is
-  [deliberate and opt-in](stability-tiers.md#the-figment-feature-is-a-coupling-on-purpose),
+  [opt-in](stability-tiers.md#the-figment-feature-is-a-coupling-on-purpose),
   but a coupling. If a parser plug-in is the requirement rather than a
   convenience, config-rs asks less of you.
 - **Mileage.** It is older, more depended upon, and has been through more

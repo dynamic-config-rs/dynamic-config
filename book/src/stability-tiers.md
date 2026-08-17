@@ -1,6 +1,6 @@
 # Stability Tiers
 
-Every crate in this workspace is **Beta**, and one is deliberately not a
+Every crate in this workspace is **Beta**, and one is not a
 tier at all.
 
 | Crate | Tier |
@@ -20,7 +20,28 @@ tier at all.
 | `dynamic-config-cli` | **Beta** |
 | `dynamic-config-py`, `dynamic-config-py-remote` | **Beta** |
 | `dynamic-config-node`, `dynamic-config-node-remote` | **Beta** |
+| `dynamic-config-py-web` | **Beta**, two adapters Experimental — see below |
+| `dynamic-config-web-core`, `dynamic-config-axum`, `dynamic-config-actix` | **Beta** |
 | `dynamic-config-store-core` | no API — see below |
+
+**The axum and Actix crates carry one promise and a small surface.** A
+`Sections` list, a `Snapshot`, a layer and an extractor — no lifecycle, no
+routes, nothing that loads or watches. Their floors differ (1.71, 1.80 and
+1.88) because each pays for what it pulls in, and each is checked against a
+real toolchain; raising one is a breaking change.
+
+**`dynamic-config-py-web` is one distribution with two tiers inside it.**
+Its seven adapters for FastAPI, Litestar, Flask, Quart and Django — the
+Django REST Framework and django-ninja layers included — are Beta: each
+uses a first-class, documented seam of a framework with a long release
+history, and all of them pass the same twelve-case behavioural suite.
+
+The **Robyn** and **django-bolt** adapters are **Experimental**: both frameworks are young,
+django-bolt classifies itself Alpha and requires Python 3.12, and what is
+most likely to move under them is exactly the part an adapter needs — the
+process model and the request lifecycle. Concretely, those two may change
+surface in a *minor* release of that package, and its `[all]` extra does
+not install them.
 
 **The store crates were Experimental until 0.6.1, and what moved them is
 evidence rather than time.** Each is tested against a real server in a
@@ -43,7 +64,7 @@ rule.
 
 What the promise covers is what rustdoc renders. A `#[doc(hidden)]` item is
 `pub` because something has to reach it across a crate boundary — the code the
-attribute generates, or this repository's own fuzz targets — and it may be
+attribute generates, or the workspace's own fuzz targets — and it may be
 renamed or removed in a patch release. `__private` and `__fuzz` are the two,
 and neither appears in this book for the same reason it does not appear in the
 API documentation.
@@ -56,10 +77,10 @@ types. What still lands is a defect that produces a wrong answer, a
 security advisory, and documentation — and each of those goes out as a
 patch.
 
-That is a change of intent, not of policy, and it is worth saying plainly
-because the two read the same from outside: a project that publishes
-weekly because it is growing and a project that publishes rarely because
-it is finished both look quiet. This one is the second.
+That is a change of intent rather than of policy. From outside the two
+look alike — a project that publishes weekly because it is growing and one
+that publishes rarely because it is finished are both quiet — so it is
+stated here rather than left to be inferred.
 
 **What it means for a program that depends on this.** Pin the minor
 version and take patches automatically; a patch will not break you, and
