@@ -45,9 +45,10 @@ Twenty-eight of them, each showing one idea. All run from the workspace root.
 
 Both read one section per handler, which needs no crate beyond this one.
 For a handler reading **two** sections that must agree,
-[`dynamic-config-axum`](https://docs.rs/dynamic-config-axum) and
-[`dynamic-config-actix`](https://docs.rs/dynamic-config-actix) carry a
-`two_sections` example each. [Serving HTTP](serving-http.md) is the chapter.
+[`dynamic-config-axum`](https://docs.rs/dynamic-config-axum),
+[`dynamic-config-actix`](https://docs.rs/dynamic-config-actix) and
+[`dynamic-config-loco`](https://docs.rs/dynamic-config-loco) carry a
+`<framework>_two_sections` example each. [Serving HTTP](serving-http.md) is the chapter.
 
 ## On a runtime
 

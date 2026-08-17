@@ -156,4 +156,4 @@ children, which is a saving: one parse, N workers.
 |---|---|
 | [`axum_hello`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/axum_hello.rs) | one section, read per handler, with no extra crate |
 | [`actix_hello`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/actix_hello.rs) | the same across Actix's worker threads |
-| [`two_sections`](https://github.com/dynamic-config-rs/dynamic-config-web) | two sections that must agree, in axum and in Actix |
+| [`<framework>_two_sections`](https://github.com/dynamic-config-rs/dynamic-config-web) | two sections that must agree — one per framework, and the Loco one drives the initializer through `after_routes` |
