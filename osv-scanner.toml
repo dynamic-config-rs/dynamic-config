@@ -41,3 +41,29 @@ use-after-free needs a user-supplied `Drop`/`Hash` that panics inside an
 `LruCache` operation; the SDK stores plain credential structs, so no panic
 can be raised from inside one.
 """
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0258"
+reason = """
+h2 0.3.27, through actix-web — a dev-dependency of one example, in no build
+a user of this crate produces. The fix exists only on the 0.4 line
+(0.4.16), which actix-http 3 cannot take: the narrow upstream-pinned case.
+Expires when actix-http moves lines.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-q83h-524g-xf6h"
+reason = "The GitHub alias of RUSTSEC-2026-0258, same package and same reasoning."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0009"
+reason = """
+time 0.3.41, through the same actix-web dev-dependency. The fix (0.3.47)
+requires Rust 1.88; this workspace's floor is 1.71 and the resolver's
+incompatible-rust-versions fallback holds the dev tree below it — the fix
+is out of reach until the floor rises or actix's tree drops `time`.
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-r6v5-fh4h-64xc"
+reason = "The GitHub alias of RUSTSEC-2026-0009, same package and same reasoning."

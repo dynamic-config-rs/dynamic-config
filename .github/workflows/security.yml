@@ -127,7 +127,12 @@ jobs:
           # This action reads no configuration file of its own, so the
           # decision is repeated here rather than left to disagree with the
           # scanner's.
-          allow-ghsas: GHSA-rhfx-m35p-ff5j
+          # GHSA-q83h-524g-xf6h and GHSA-r6v5-fh4h-64xc are h2 0.3 (no
+          # patched release on that line) and `time` (fix needs Rust 1.88,
+          # above the 1.71 floor) — both dev-only through the actix-web
+          # example, both answered at length in deny.toml and
+          # osv-scanner.toml.
+          allow-ghsas: GHSA-rhfx-m35p-ff5j, GHSA-q83h-524g-xf6h, GHSA-r6v5-fh4h-64xc
 
   # The one status branch protection requires from this workflow — same
   # reasoning as CI's gate. `supply-chain` IS in the needs even though it only
