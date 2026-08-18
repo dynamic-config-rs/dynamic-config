@@ -8,6 +8,7 @@
 - [The Builder, Feature by Feature](builder-tour.md)
 - [Attribute Reference](attribute-reference.md)
 - [Sources & Precedence](sources-and-precedence.md)
+- [Formats](formats.md)
 - [Document Shape](document-shape.md)
 - [Profiles & Discovery](profiles-and-discovery.md)
 - [Hot Reload & Watching](hot-reload.md)
@@ -38,6 +39,7 @@
 
 # Reference
 
+- [Migrating from 0.6](migrations/from-0.6.md)
 - [Cargo Features](features.md)
 - [MSRV & Features](msrv-features.md)
 - [Stability Tiers](stability-tiers.md)
@@ -46,6 +48,8 @@
 - [Examples](examples.md)
 
 # The Family
+
+- [Parity Across Languages](parity.md)
 
 - [The Rest of the Family](family.md)
 - [Python Bindings](python.md)

@@ -126,6 +126,19 @@ pub(crate) fn render(document: &Dict, format: Format) -> Result<String, Error> {
         #[cfg(feature = "yaml")]
         Format::Yaml => serde_yaml::to_string(document).map_err(serialization),
 
+        // Refused with the feature ON, deliberately — not a gap. This
+        // module's contract is that what comes out can be read straight
+        // back in, and neither format can keep it: both widen strings on
+        // the way in (`port = 8080` reads as an integer), so a round trip
+        // cannot promise the document it started with. A tool that wants
+        // to *emit* these formats flattens with its own rules and says so.
+        Format::Ini | Format::Properties => Err(Error::new(
+            ErrorKind::Backend,
+            format!(
+                "{format:?} cannot be written: it has no types, so what was                  written could not be read back as the same document. Save as                  json, toml or yaml instead"
+            ),
+        )),
+
         #[allow(unreachable_patterns)]
         format => Err(Error::new(
             ErrorKind::Backend,

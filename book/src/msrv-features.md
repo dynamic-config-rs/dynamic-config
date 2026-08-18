@@ -54,3 +54,7 @@ Building from source: the workspace sets
 Without it, cargo resolves to the newest release of every transitive dependency
 and the floor silently becomes 1.85 — `hashbrown 0.17`, reached through `toml`,
 requires edition 2024. Generating the lockfile needs cargo 1.84 or newer.
+
+`ini` and `properties` (0.7) carry no dependency and hold the 1.71
+floor — the CI msrv matrix compiles them at exactly that toolchain to
+keep the sentence true.

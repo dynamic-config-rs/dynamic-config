@@ -1,4 +1,9 @@
-//! A format this crate does not read, plugged in as a source.
+//! The provider seam: any format, plugged in as a source.
+//!
+//! Since 0.7 the crate reads INI itself (the `ini` feature) — this
+//! example keeps its hand-rolled INI anyway, because the *seam* is what
+//! it demonstrates: what you would write for a format the crate does not
+//! read, and the two things a plug-in author must get right.
 //!
 //! ```text
 //! cargo run -p dynamic-config --example ini_provider --features json,figment

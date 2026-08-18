@@ -25,8 +25,13 @@ runtime data now: the message says exactly what to put in
 | `json` | ✅ | `.json` sources, via `serde_json` |
 | `toml` | | `.toml` sources |
 | `yaml` | | `.yaml` / `.yml` sources |
+| `ini` | | `.ini` sources — a parser in this crate, no dependency |
+| `properties` | | `.properties` sources — likewise |
 
-One per format because each is its own parser dependency. `json` is the
+One per format because each is its own parser dependency — except the
+two flat formats, whose parsers live in this crate and cost nothing but
+code; their dialects are the [Formats](formats.md) chapter's subject,
+and neither can be a `save` target (the chapter says why). `json` is the
 default as the least controversial single choice; turn it off with
 `default-features = false` if the build reads only TOML. The extension
 picks the parser at load time, which is why these are load-time rather
@@ -94,6 +99,12 @@ measured against a real toolchain, not `age`'s own claim; see
 [MSRV & Features](msrv-features.md) for why the two differ.
 
 ## Observability
+
+**`log`** — the same diagnostics through the `log` crate's global
+logger, for programs that standardised on `log`. An installed
+`set_log_sink` outranks it; `tracing` outranks both. Without any of the
+three, stderr — unchanged since 0.1, and now governable at runtime by
+`set_log_level`.
 
 **`tracing`** — the watcher's diagnostics become `tracing` events
 instead of stderr lines, every install becomes a `dynamic_config.reload`

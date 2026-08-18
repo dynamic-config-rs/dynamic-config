@@ -345,7 +345,7 @@ jobs:
           # — `telemetry` is one of them: an exposition format is a wire
           # encoding, not a crate.
           - rust: "1.71"
-            features: "json,dotenv,figment,telemetry"
+            features: "json,dotenv,figment,telemetry,ini,properties"
           # `watch` does more: notify 8 declares 1.85 through notify-types.
           - rust: "1.85"
             features: "full"

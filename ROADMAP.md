@@ -19,6 +19,14 @@ Tags: **[figment]** is something the underlying loader,
 
 ---
 
+## Where the organisation-wide plan lives
+
+The milestones that cross repositories — the 0.7 train, the Kubernetes
+integration, the 1.0 evidence items — are in the organisation's
+`.github` repository (`docs/ROADMAP.md`), which also holds the registry
+every operator script reads. This file stays what its header says: the
+engine's own decisions.
+
 ## The next release
 
 Decided, not aspirational — each item keeps its full description in its own

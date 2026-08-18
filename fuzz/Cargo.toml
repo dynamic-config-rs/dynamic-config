@@ -35,7 +35,7 @@ arbitrary = { version = "1", features = ["derive"] }
 [dependencies.dynamic-config]
 path = "../dynamic-config"
 default-features = false
-features = ["dotenv"]
+features = ["dotenv", "ini", "properties"]
 
 # Fuzzing wants the optimised build with debug assertions still on: an
 # overflow that `--release` wraps silently is exactly the class of bug this is
@@ -76,6 +76,13 @@ bench = false
 [[bin]]
 name = "sections"
 path = "fuzz_targets/sections.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "flat_formats"
+path = "fuzz_targets/flat_formats.rs"
 test = false
 doc = false
 bench = false

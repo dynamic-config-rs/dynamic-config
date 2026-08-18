@@ -14,6 +14,7 @@ mod relevance;
 #[cfg(test)]
 mod tests;
 
+pub use debounce::set_atomic_save_grace;
 pub use handle::{spawn, spawn_with, WatchHandle, WatchKey};
 
 use std::path::PathBuf;

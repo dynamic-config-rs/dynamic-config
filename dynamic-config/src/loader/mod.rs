@@ -18,7 +18,14 @@
 
 mod aliases_pass;
 mod environment;
+// `properties` borrows `ini`'s nested-insert and scalar-widening helpers,
+// so the module compiles for either feature; the `Ini` provider itself is
+// gated inside.
+#[cfg(any(feature = "ini", feature = "properties"))]
+mod ini;
 mod origin;
+#[cfg(feature = "properties")]
+mod properties;
 mod recover;
 mod secrets;
 pub(crate) mod sections;
@@ -435,4 +442,15 @@ fn merge_overrides(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Err
         }
         None => Ok(figment),
     }
+}
+
+/// Fuzzing doors — see `crate::__fuzz`.
+#[cfg(feature = "ini")]
+pub(crate) fn __fuzz_ini(text: &str) -> ini::Ini {
+    ini::Ini::string(text)
+}
+
+#[cfg(feature = "properties")]
+pub(crate) fn __fuzz_properties(text: &str) -> properties::Properties {
+    properties::Properties::string(text)
 }
