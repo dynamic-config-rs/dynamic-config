@@ -10,9 +10,14 @@ pub const DEFAULT_NEST: &str = "__";
 /// A configuration file format.
 ///
 /// Every variant exists regardless of which features are enabled; parsing one
-/// whose feature is off is a runtime [`ErrorKind::Backend`](crate::ErrorKind).
-/// Code written through `#[dynamic_config]` cannot reach that error — the macro
-/// turns it into a compile error naming the missing feature.
+/// whose feature is off is a runtime [`ErrorKind::Backend`](crate::ErrorKind)
+/// naming the feature to enable. The check is at load time by design: since
+/// 0.2 the macro takes no source arguments, so the extension is first seen
+/// when the file is.
+/// `#[non_exhaustive]` as of 0.7: a format list grows, and a match over
+/// one needs a `_` arm — the one break that makes every later format
+/// additive.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Format {
     /// JSON, via the `json` feature.
@@ -21,6 +26,12 @@ pub enum Format {
     Toml,
     /// YAML, via the `yaml` feature.
     Yaml,
+    /// INI, via the `ini` feature. `[a.b]` nests; the dialect is spelled
+    /// out in the book's Formats chapter.
+    Ini,
+    /// Java-style `.properties`, via the `properties` feature. UTF-8,
+    /// dotted keys nest, collisions are errors.
+    Properties,
 }
 
 impl Format {
@@ -50,6 +61,8 @@ impl Format {
             Self::Json => "json",
             Self::Toml => "toml",
             Self::Yaml => "yaml",
+            Self::Ini => "ini",
+            Self::Properties => "properties",
         }
     }
 
@@ -63,6 +76,8 @@ impl Format {
             "json" => Some(Self::Json),
             "toml" => Some(Self::Toml),
             "yaml" | "yml" => Some(Self::Yaml),
+            "ini" => Some(Self::Ini),
+            "properties" => Some(Self::Properties),
             _ => None,
         }
     }
@@ -639,7 +654,12 @@ mod tests {
         assert_eq!(Format::from_extension("JSON"), Some(Format::Json));
         assert_eq!(Format::from_extension("yml"), Some(Format::Yaml));
         assert_eq!(Format::from_extension("yaml"), Some(Format::Yaml));
-        assert_eq!(Format::from_extension("ini"), None);
+        assert_eq!(Format::from_extension("ini"), Some(Format::Ini));
+        assert_eq!(
+            Format::from_extension("properties"),
+            Some(Format::Properties)
+        );
+        assert_eq!(Format::from_extension("conf"), None);
     }
 
     #[test]

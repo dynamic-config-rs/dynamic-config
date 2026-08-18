@@ -9,6 +9,11 @@ use figment::providers::Json;
 use figment::providers::Toml;
 #[cfg(feature = "yaml")]
 use figment::providers::Yaml;
+
+#[cfg(feature = "ini")]
+use super::ini::Ini;
+#[cfg(feature = "properties")]
+use super::properties::Properties;
 use figment::value::Dict;
 use figment::{Figment, Metadata};
 use std::path::{Path, PathBuf};
@@ -27,7 +32,13 @@ use crate::source::{Format, LoadSpec, Source};
 ///
 /// Only reachable when a format is enabled — with no format at all there is
 /// nothing to wrap.
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 struct Named<P> {
     inner: P,
     name: String,
@@ -36,7 +47,13 @@ struct Named<P> {
     file: Option<std::path::PathBuf>,
 }
 
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 impl<P: figment::Provider> figment::Provider for Named<P> {
     fn metadata(&self) -> Metadata {
         let metadata = Metadata::named(self.name.clone());
@@ -325,7 +342,13 @@ pub(super) fn merge_file(
     layout: Layout<'_>,
 ) -> Result<Figment, Error> {
     // With no format feature on, every arm below is compiled out.
-    #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
+    #[cfg(not(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    )))]
     let _ = (&figment, path, layout);
 
     match format {
@@ -335,6 +358,10 @@ pub(super) fn merge_file(
         Format::Toml => Ok(figment.merge(Sections::new(Toml::file(path), layout))),
         #[cfg(feature = "yaml")]
         Format::Yaml => Ok(figment.merge(Sections::new(Yaml::file(path), layout))),
+        #[cfg(feature = "ini")]
+        Format::Ini => Ok(figment.merge(Sections::new(Ini::file(path), layout))),
+        #[cfg(feature = "properties")]
+        Format::Properties => Ok(figment.merge(Sections::new(Properties::file(path), layout))),
 
         #[allow(unreachable_patterns)]
         format => Err(disabled(format)),
@@ -347,7 +374,13 @@ pub(super) fn merge_file(
 /// This one is the exception because it is how JSON says "here is my schema",
 /// and refusing it would mean the schema this crate can emit could not be wired
 /// up in the file it describes.
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 const SCHEMA_KEY: &str = "$schema";
 
 /// Where one document's values live: under section headers, or at its root.
@@ -392,20 +425,38 @@ impl<'a> Layout<'a> {
 /// work out that the crate treats top-level keys as sections — and a
 /// [`Layout`] with no headers has to file the whole document under one
 /// profile instead of looking for them.
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 struct Sections<'a, P> {
     inner: P,
     layout: Layout<'a>,
 }
 
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 impl<'a, P: figment::Provider> Sections<'a, P> {
     const fn new(inner: P, layout: Layout<'a>) -> Self {
         Self { inner, layout }
     }
 }
 
-#[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+#[cfg(any(
+    feature = "json",
+    feature = "toml",
+    feature = "yaml",
+    feature = "ini",
+    feature = "properties"
+))]
 impl<P: figment::Provider> figment::Provider for Sections<'_, P> {
     fn metadata(&self) -> Metadata {
         self.inner.metadata()
@@ -459,7 +510,13 @@ fn merge_text(
     format: Format,
     layout: Layout<'_>,
 ) -> Result<Figment, Error> {
-    #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
+    #[cfg(not(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    )))]
     let _ = (&figment, text, layout);
 
     match format {
@@ -469,6 +526,10 @@ fn merge_text(
         Format::Toml => Ok(figment.merge(Sections::new(Toml::string(text), layout))),
         #[cfg(feature = "yaml")]
         Format::Yaml => Ok(figment.merge(Sections::new(Yaml::string(text), layout))),
+        #[cfg(feature = "ini")]
+        Format::Ini => Ok(figment.merge(Sections::new(Ini::string(text), layout))),
+        #[cfg(feature = "properties")]
+        Format::Properties => Ok(figment.merge(Sections::new(Properties::string(text), layout))),
 
         #[allow(unreachable_patterns)]
         format => Err(disabled(format)),
@@ -485,12 +546,24 @@ pub(super) fn merge_named_text(
     file: Option<&Path>,
     layout: Layout<'_>,
 ) -> Result<Figment, Error> {
-    #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
+    #[cfg(not(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    )))]
     let _ = (&figment, text, name, file, layout);
 
     // A generic fn rather than a closure: a closure infers one provider type
     // from its first call and the other two formats then fail to compile.
-    #[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+    #[cfg(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    ))]
     fn named<P>(inner: P, name: &str, file: Option<&Path>) -> Named<P> {
         Named {
             inner,
@@ -512,6 +585,16 @@ pub(super) fn merge_named_text(
         Format::Yaml => {
             Ok(figment.merge(named(Sections::new(Yaml::string(text), layout), name, file)))
         }
+        #[cfg(feature = "ini")]
+        Format::Ini => {
+            Ok(figment.merge(named(Sections::new(Ini::string(text), layout), name, file)))
+        }
+        #[cfg(feature = "properties")]
+        Format::Properties => Ok(figment.merge(named(
+            Sections::new(Properties::string(text), layout),
+            name,
+            file,
+        ))),
 
         #[allow(unreachable_patterns)]
         format => Err(disabled(format)),
@@ -531,7 +614,13 @@ pub(super) fn merge_named_text(
 /// every other figment failure here, so the offending value is stripped on this
 /// road too.
 pub(crate) fn parse_document(text: &str, format: Format) -> Result<Dict, Error> {
-    #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
+    #[cfg(not(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    )))]
     let _ = text;
 
     // `Provider::data`, not `Figment::extract`: a figment would re-merge and
@@ -539,7 +628,13 @@ pub(crate) fn parse_document(text: &str, format: Format) -> Result<Dict, Error> 
     // as soon as it becomes a `crate::Value`. A string provider that was never
     // `nested()` files the whole document under the default profile, so there
     // is exactly one entry to take.
-    #[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+    #[cfg(any(
+        feature = "json",
+        feature = "toml",
+        feature = "yaml",
+        feature = "ini",
+        feature = "properties"
+    ))]
     fn document<P: figment::Provider>(provider: P) -> Result<Dict, Error> {
         Ok(provider
             .data()
@@ -555,6 +650,10 @@ pub(crate) fn parse_document(text: &str, format: Format) -> Result<Dict, Error> 
         Format::Toml => document(Toml::string(text)),
         #[cfg(feature = "yaml")]
         Format::Yaml => document(Yaml::string(text)),
+        #[cfg(feature = "ini")]
+        Format::Ini => document(Ini::string(text)),
+        #[cfg(feature = "properties")]
+        Format::Properties => document(Properties::string(text)),
 
         #[allow(unreachable_patterns)]
         format => Err(disabled(format)),

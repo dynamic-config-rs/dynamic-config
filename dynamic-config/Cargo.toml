@@ -19,8 +19,16 @@ default = ["json"]
 json = ["figment/json", "dep:serde_json"]
 toml = ["figment/toml", "dep:toml"]
 yaml = ["figment/yaml", "dep:serde_yaml"]
+# Hand-written parsers over figment's provider seam — no new dependency.
+# INI's dialect and properties' deliberate JDK deviations are in the book.
+ini = []
+properties = []
 watch = ["dep:notify"]
 tracing = ["dep:tracing"]
+# The engine's own diagnostics through the `log` crate's global logger —
+# for programs that standardised on `log` rather than `tracing`. A sink
+# installed with `set_log_sink` outranks it; `tracing` outranks both.
+log = ["dep:log"]
 # Runtime-agnostic: no dependency at all. `Changes` is a `Future`, and blocking
 # work goes to a thread unless an executor is installed.
 async = []
@@ -51,6 +59,8 @@ full = [
     "json",
     "toml",
     "yaml",
+    "ini",
+    "properties",
     "watch",
     "async",
     "tokio",
@@ -69,6 +79,7 @@ dynamic-config-macros = { workspace = true }
 # store in this crate's graph. Nothing here needs 1.9 for itself — the floor
 # is the union's, which is what `-Z direct-minimal-versions` measures.
 arc-swap = "1.9"
+log = { version = "0.4.22", optional = true }
 serde = "1.0.221"
 # The loader. Not optional: it is the only backend.
 figment = { version = "0.10.19", default-features = false, features = ["env"] }
@@ -303,6 +314,14 @@ required-features = ["json"]
 [[example]]
 name = "ini_provider"
 required-features = ["figment", "json"]
+
+[[example]]
+name = "flat_formats"
+required-features = ["ini", "properties"]
+
+[[example]]
+name = "graceful_shutdown"
+required-features = ["json", "watch"]
 
 # `--cfg loom` and `--cfg shuttle` build swap std::sync for loom's or
 # shuttle's mirror (src/sync.rs); the cfgs are declared here so stable builds

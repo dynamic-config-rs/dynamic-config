@@ -12,19 +12,22 @@ path=$(printf '%s' "$input" | python3 -c 'import json,sys; print(json.load(sys.s
 case "$path" in
   */dynamic-config/src/lib.rs)
     cat <<'NOTE'
-The core's front door moved. If a public item changed, three repositories
+The core's front door moved. If a public item changed, the places below
 may need to follow and nothing in this build says so:
   · dynamic-config-remote   the stores implement RemoteSource
   · dynamic-config-python   its facade wraps this crate
   · dynamic-config-node     the same, through Node-API
   · book/src/               the chapter that describes the item
   · CHANGELOG.md            under Unreleased
+The precedence chain also lives here and in
+book/src/sources-and-precedence.md, and `doc_surface` compares the two
+character for character.
 NOTE
     ;;
-  */dynamic-config/src/lib.rs|*/book/src/sources-and-precedence.md)
+  */book/src/sources-and-precedence.md)
     cat <<'NOTE'
-The precedence chain is written in both of these files, and `doc_surface`
-compares them character for character.
+The precedence chain is written in both this page and lib.rs, and
+`doc_surface` compares them character for character.
 NOTE
     ;;
 esac

@@ -26,6 +26,8 @@ dynamic-config = { workspace = true, features = [
     "json",
     "toml",
     "yaml",
+    "ini",
+    "properties",
     "dotenv",
 ] }
 # clap at the same *requirement* floor the core declares (`^4.4`), not a

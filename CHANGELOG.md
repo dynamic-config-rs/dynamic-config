@@ -15,6 +15,41 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 ## [_Unreleased_]
 
 ### Added
+
+- **Two flat formats: `.ini` and `.properties`**, behind `ini` and
+  `properties` features that add no dependency and hold the 1.71 floor.
+  INI's dialect: `[a.b]` nests (the git-config convention), keys before
+  any header sit at the root, `;`/`#` open whole-line comments, values
+  widen by the environment layer's rule and double quotes refuse the
+  widening. Properties: UTF-8 (a documented deviation from
+  `java.util.Properties`), dotted keys nest, `=` and `:` separate,
+  backslash continuations and `\uXXXX` escapes are honoured, and a key
+  that is both a value and a table is a load error naming both keys.
+  Neither can be **written**: `save` refuses with the reason — a format
+  that widens strings on the way in cannot round-trip a typed document.
+  Both are discovered (`config.ini` beside `config.toml`), both look
+  through `.age`, and a new fuzz target drives both parsers.
+
+### Changed
+
+- **`Format` is `#[non_exhaustive]`.** ⚠️ Breaking, once, so that every
+  later format is additive: a `match` over `Format` outside this crate
+  now needs a `_` arm. `Ini` and `Properties` arrive in the same release
+  — see the migration guide.
+
+- **The diagnostics have a runtime seam: `set_log_sink`, `set_log_level`,
+  `LogLevel`.** The watcher and recovery lines were `tracing` events with
+  the feature and raw stderr without it — and nothing in between, which
+  left every wheel and addon user with unconfigurable plain text on file
+  descriptor 2. A sink installed at runtime now receives every line that
+  passes the level; `tracing` still outranks it when compiled in, and the
+  unconfigured default is byte-identical to what 0.6 printed, proven by a
+  subprocess test. The sink is called on engine threads and must not
+  block or re-enter the engine — the contract is on the function.
+
+- **A `log` cargo feature.** The same lines through the `log` crate's
+  global logger, for programs that standardised on `log` rather than
+  `tracing`. A sink outranks it; `tracing` outranks both.
 ### Changed
 ### Deprecated
 ### Removed
@@ -24,6 +59,22 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 -->
 
 ## [Unreleased]
+
+### Added
+
+- **`watch::set_atomic_save_grace(Duration)`.** The pause between a watch
+  event settling and the files being read back — there for atomic saves,
+  whose rename can be observed a hair before the new inode is visible —
+  had been a hardcoded 25ms. It is now process-wide tunable, like
+  `set_blocking_executor`: a network mount with slower rename visibility
+  can raise it, a benchmark can lower it, and the default stays 25ms.
+
+### Fixed
+
+- **`Format`'s documentation claimed a compile-time check that no longer
+  exists.** Since 0.2 the attribute takes no source arguments, so a
+  missing format feature surfaces at load time, as an error naming the
+  feature — which is what the documentation says now.
 
 ## [0.6.3] — 2026-08-17
 

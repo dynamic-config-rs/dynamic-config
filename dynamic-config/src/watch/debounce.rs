@@ -21,7 +21,34 @@ use super::Watched;
 /// An atomic save writes a temporary file and renames it into place. The rename
 /// can be observed a hair before the new inode is visible, so a short grace
 /// period avoids reading a file that is about to be replaced.
-const ATOMIC_SAVE_GRACE: Duration = Duration::from_millis(25);
+///
+/// Millis in an atomic rather than a `Duration` in a lock: the watcher
+/// thread reads it once per reload, and a torn read is impossible.
+static ATOMIC_SAVE_GRACE_MS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(25);
+
+/// How long every watcher waits between the debounce window closing and
+/// the files being read back.
+///
+/// The default of 25ms covers the common atomic-save pattern (write a
+/// temporary file, rename it into place), where the rename can be observed
+/// a hair before the new inode is visible. A deployment on a filesystem
+/// with slower rename visibility (some network mounts) can raise it; a
+/// benchmark that reloads thousands of times can lower it.
+///
+/// Process-wide, like [`set_blocking_executor`](crate::set_blocking_executor):
+/// the pause compensates for the *filesystem*, which every watcher in the
+/// process shares. Takes effect from the next reload; watchers already
+/// sleeping finish their current pause first.
+pub fn set_atomic_save_grace(grace: Duration) {
+    ATOMIC_SAVE_GRACE_MS.store(
+        grace.as_millis().min(u64::MAX as u128) as u64,
+        core::sync::atomic::Ordering::Relaxed,
+    );
+}
+
+fn atomic_save_grace() -> Duration {
+    Duration::from_millis(ATOMIC_SAVE_GRACE_MS.load(core::sync::atomic::Ordering::Relaxed))
+}
 
 pub(super) fn run(
     name: &'static str,
@@ -39,7 +66,7 @@ pub(super) fn run(
             }
         };
 
-        thread::sleep(ATOMIC_SAVE_GRACE);
+        thread::sleep(atomic_save_grace());
 
         // Under `tracing`, the reload is a span with its outcome and
         // duration as fields — enough to alert on "has not reloaded
@@ -163,5 +190,21 @@ fn collect_relevant(
             Err(mpsc::RecvTimeoutError::Timeout) => return Collected::Dirty(trigger),
             Err(mpsc::RecvTimeoutError::Disconnected) => return Collected::Disconnected,
         }
+    }
+}
+
+#[cfg(test)]
+mod grace_tests {
+    use super::*;
+
+    #[test]
+    fn the_grace_is_tunable_and_survives_a_round_trip() {
+        // Not run in parallel with a watcher test: the knob is process
+        // wide, which is the documented deal.
+        set_atomic_save_grace(Duration::from_millis(3));
+        assert_eq!(atomic_save_grace(), Duration::from_millis(3));
+
+        set_atomic_save_grace(Duration::from_millis(25));
+        assert_eq!(atomic_save_grace(), Duration::from_millis(25));
     }
 }

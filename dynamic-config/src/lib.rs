@@ -318,6 +318,7 @@ pub use asynchronous::{set_blocking_executor, BlockingExecutor, Changes};
 #[cfg(feature = "figment")]
 #[cfg_attr(docsrs, doc(cfg(feature = "figment")))]
 pub use figment;
+pub use log::{clear_log_sink, set_log_level, set_log_sink, LogLevel, LogSink};
 
 pub use aliases::Aliases;
 pub use bindings::EnvBindings;
@@ -591,6 +592,32 @@ where
 /// it stands.
 #[doc(hidden)]
 pub mod __fuzz {
+    /// INI text through the real provider: the parsed table, or the error.
+    ///
+    /// Reads no file — the fuzzer supplies the bytes. What must hold: no
+    /// panic, and an `Err` never echoes document content (the redaction
+    /// harness asserts that separately).
+    #[cfg(feature = "ini")]
+    pub fn ini_document(text: &str) -> Result<usize, String> {
+        use figment::Provider as _;
+
+        crate::loader::__fuzz_ini(text)
+            .data()
+            .map(|map| map.len())
+            .map_err(|error| error.to_string())
+    }
+
+    /// Properties text through the real provider, same contract.
+    #[cfg(feature = "properties")]
+    pub fn properties_document(text: &str) -> Result<usize, String> {
+        use figment::Provider as _;
+
+        crate::loader::__fuzz_properties(text)
+            .data()
+            .map(|map| map.len())
+            .map_err(|error| error.to_string())
+    }
+
     /// `.env` text into `KEY` → `value`, or the one-based line that stopped it.
     ///
     /// Reads no file: the fuzzer supplies the bytes a file would have held.

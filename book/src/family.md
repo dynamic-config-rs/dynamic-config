@@ -16,10 +16,13 @@ rather than when it is forced.
 | [Python](https://dynamic-config-rs.github.io/python/) | the same engine behind a Python API: dataclasses, Pydantic, msgspec, asyncio | `dynamic-config-py` on PyPI |
 | [Node.js](https://dynamic-config-rs.github.io/node/) | the same engine behind Node-API: Zod, Ajv, a plain function, a watcher that never blocks the loop | `dynamic-config-node` on npm |
 | [Python web frameworks](https://dynamic-config-rs.github.io/web/) | the wiring, the request scope, the health surface and the test doors for nine Python web frameworks | `dynamic-config-py-web` on PyPI |
+| [Rust web frameworks](https://dynamic-config-rs.github.io/rust-web/) | one reading of configuration per request for axum, Actix Web, Loco and plain tower | five crates, `dynamic-config-web-core` at the bottom |
 
 Two Rust crates sit alongside rather than in a book of their own —
-[`dynamic-config-axum`](https://docs.rs/dynamic-config-axum) and
-[`dynamic-config-actix`](https://docs.rs/dynamic-config-actix), which give a
+[`dynamic-config-axum`](https://docs.rs/dynamic-config-axum),
+[`dynamic-config-actix`](https://docs.rs/dynamic-config-actix),
+[`dynamic-config-loco`](https://docs.rs/dynamic-config-loco) and
+[`dynamic-config-tower`](https://docs.rs/dynamic-config-tower), which give a
 handler one reading of its configuration however many sections it touches.
 [Serving HTTP](serving-http.md) is their chapter.
 

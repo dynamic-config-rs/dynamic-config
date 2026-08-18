@@ -41,6 +41,10 @@ const EXTENSIONS: &[(&str, Format)] = &[
     ("yaml", Format::Yaml),
     #[cfg(feature = "yaml")]
     ("yml", Format::Yaml),
+    #[cfg(feature = "ini")]
+    ("ini", Format::Ini),
+    #[cfg(feature = "properties")]
+    ("properties", Format::Properties),
 ];
 
 /// Where to look for configuration, and under what name.
@@ -242,7 +246,10 @@ mod tests {
         assert!(is_candidate(Path::new("/etc/app/config.json"), "config"));
         assert!(is_candidate(Path::new("config.yml"), "config"));
         assert!(!is_candidate(Path::new("/etc/app/other.json"), "config"));
+        #[cfg(not(feature = "ini"))]
         assert!(!is_candidate(Path::new("/etc/app/config.ini"), "config"));
+        #[cfg(feature = "ini")]
+        assert!(is_candidate(Path::new("/etc/app/config.ini"), "config"));
         assert!(!is_candidate(Path::new("/etc/app/config"), "config"));
     }
 }

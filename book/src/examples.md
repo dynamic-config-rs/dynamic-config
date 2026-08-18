@@ -1,6 +1,6 @@
 # Examples
 
-Twenty-eight of them, each showing one idea. All run from the workspace root.
+Thirty of them, each showing one idea. All run from the workspace root.
 
 ## Getting started
 
@@ -24,6 +24,7 @@ Twenty-eight of them, each showing one idea. All run from the workspace root.
 
 | Example | Features | Shows |
 |---|---|---|
+| [`graceful_shutdown`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/graceful_shutdown.rs) | `json`, `watch` | Shutdown as its own subject: drain, drop the watcher handle, exit — and why there is nothing to flush. |
 | [`hot_reload`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/hot_reload.rs) | `watch`, `toml` | Edit a file and watch the snapshot follow. |
 | [`async_reload`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/async_reload.rs) | `async`, `watch`, `json` | A task awaiting reloads instead of polling for them. |
 | [`group`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/group.rs) | `json` | Two config types reloading as one step, or not at all. |
@@ -70,6 +71,7 @@ For a handler reading **two** sections that must agree,
 | [`encrypted`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/encrypted.rs) | `age`, `json` | A `secrets.json.age` next to a plain `config.json`: generated key, real ciphertext, and what the wrong key looks like. |
 | [`schema`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/schema.rs) | `schema`, `json` | A JSON Schema for the file two config types share, with secrets marked and `required` dropped. |
 | [`no_macro`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/no_macro.rs) | `json` | `load`, `LoadSpec`, `Layer` and `ConfigCell` without the attribute. |
+| [`flat_formats`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/flat_formats.rs) | `ini`, `properties` | The two flat formats as first-class sources: an INI base with a properties override, one resolution — and the layering works across formats. |
 | [`ini_provider`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/ini_provider.rs) | `json`, `figment` | A format this crate does not read, plugged in as a source: `Source::provider` is the whole extension point, and the layer stack above it is unchanged. |
 
 ```sh

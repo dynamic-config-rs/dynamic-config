@@ -62,12 +62,25 @@ fn what_is_saved_is_shaped_the_way_the_loader_expects() {
 
 #[test]
 fn an_extension_that_names_no_format_is_refused() {
-    let path = scratch("bad-extension").join("config.ini");
+    // `.conf` rather than `.ini`: since 0.7 INI *is* a format (and its
+    // refusal below is about writing, not recognition).
+    let path = scratch("bad-extension").join("config.conf");
 
     let error = save_db(&db_builder().load().unwrap(), &path).unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::Backend);
     assert!(error.to_string().contains("`.json`"), "{error}");
+}
+
+#[test]
+#[cfg(feature = "ini")]
+fn a_flat_format_is_recognised_and_still_refused_for_writing() {
+    let path = scratch("flat-write").join("config.ini");
+
+    let error = save_db(&db_builder().load().unwrap(), &path).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::Backend);
+    assert!(error.to_string().contains("cannot be written"), "{error}");
 }
 
 // ─────────────────────────────────────────────
