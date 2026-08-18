@@ -1227,7 +1227,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "dynamic-config"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "actix-web",
  "age",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-cli"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1271,7 +1271,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-embedded"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "critical-section",
  "serde",
@@ -1280,7 +1280,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-macros"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

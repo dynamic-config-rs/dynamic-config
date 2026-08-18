@@ -6,7 +6,7 @@ is versioned in lockstep with the crate that re-exports it.
 
 ```toml
 [dependencies]
-dynamic-config = "0.6.3"    # this crate comes with it
+dynamic-config = "0.7.0"    # this crate comes with it
 ```
 
 Everything this crate emits is documented where a user meets it: the

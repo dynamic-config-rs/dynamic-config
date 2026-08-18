@@ -60,6 +60,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-18
+
 ### Added
 
 - **`watch::set_atomic_save_grace(Duration)`.** The pause between a watch
@@ -1178,7 +1180,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/ctolon/dynamic-config/compare/v0.6.0...v0.6.1
