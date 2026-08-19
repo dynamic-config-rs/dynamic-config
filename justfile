@@ -106,14 +106,14 @@ msrv:
     cp Cargo.lock Cargo.lock.pinned
     trap 'mv Cargo.lock.pinned Cargo.lock' EXIT
     cargo +stable generate-lockfile
-    cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,toml,yaml
-    cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,async,tracing,clap
-    cargo +1.71 check -p dynamic-config --locked --no-default-features --features json,dotenv,figment,telemetry
-    cargo +1.74 check -p dynamic-config --locked --no-default-features --features json,schema
-    cargo +1.85 check -p dynamic-config --locked --no-default-features --features json,age
-    cargo +1.85 check -p dynamic-config --locked --no-default-features --features full
-    cargo +1.85 check -p dynamic-config-cli --locked
-    cargo +1.83 check -p dynamic-config-embedded --locked --no-default-features --features json,async
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features json,toml,yaml
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features json,async,tracing,clap
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features json,dotenv,figment,telemetry
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features json,schema
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features json,age
+    cargo +1.88 check -p dynamic-config --locked --no-default-features --features full
+    cargo +1.88 check -p dynamic-config-cli --locked
+    cargo +1.88 check -p dynamic-config-embedded --locked --no-default-features --features json,async
 
 # Every pairwise feature combination compiles — CI's `features` job.
 # Needs cargo-hack (`cargo install cargo-hack`).
@@ -157,3 +157,15 @@ book:
 bless:
     TRYBUILD=overwrite cargo test -p dynamic-config --features full --test ui
     TRYBUILD=overwrite cargo test -p dynamic-config --no-default-features --features json --test ui
+
+# The 24-hour local soak whose one completed run is the committed
+# artifact behind the "day-long" claim; the nightly runs the 5-hour CI
+# variant. Prints the invariant summary at exit — commit it beside the
+# claim when it finishes clean.
+soak-24h:
+    cargo run --release -p dynamic-config-soak -- soak --seconds 86400 --readers 32
+
+# The leak budget, runnable at a laptop scale.
+leak-check:
+    cargo run --release -p dynamic-config-soak -- leak --reloads 1000000
+

@@ -2,59 +2,77 @@
 
 What each feature unlocks, and why it is a choice, is the
 [Cargo Features](features.md) chapter's subject. What follows is the cost
-side — which flags move the compiler floor, and how the floors are kept
-honest.
+side — the compiler floor, and how it is kept honest.
 
 ## Minimum supported Rust version
 
+**Rust 1.88, one number, org-wide.** The engine, the macros, the CLI,
+the `no_std` crate, every store crate, both binding crates and the web
+adapters all declare 1.88; the single exception is the Loco adapter,
+which follows Loco itself at 1.94. The
+[Compatibility Contract](compatibility.md) makes the standing
+promise: the floor moves only in a release whose changelog announces
+it.
+
 | Configuration | MSRV |
 |---|---|
-| any format, `tokio`, `tracing`, `telemetry`, `dotenv`, `figment` | 1.71 |
-| `watch` enabled | 1.85 (`notify 8` requires it) |
-| `schema` enabled | 1.74 (`schemars` requires it) |
-| `dynamic-config-cli` | 1.85 |
-| `dynamic-config-python` | 1.85 (PyO3), and CPython 3.9+ through abi3 — plus 3.14t, which is not abi3 (see below) |
-| `age` enabled | 1.85 — measured, not declared (see below) |
-| the companion crates (etcd, Consul, Vault, Firestore) | 1.85 |
-| `dynamic-config-nats`, `-redis`, `-s3` | 1.88 (their clients require it) |
-| `dynamic-config-git` | 1.85 (`gix` requires it) |
-| `dynamic-config-server` | 1.80 (axum 0.8 requires it) |
-| `dynamic-config-store-core` | 1.71 — it holds nothing but `std`, so it can never be what raises a store's floor |
-| `dynamic-config-python-remote` | 1.88 — it carries all eight store clients, so it inherits the highest floor among them |
-| `dynamic-config-embedded` | 1.83 (`core::error::Error` in `no_std` needs 1.81) |
+| the engine, any feature set — formats, `watch`, `schema`, `age`, `tokio`, `tracing`, `telemetry`, `ini`, `properties` | 1.88 |
+| `dynamic-config-cli`, `dynamic-config-embedded` | 1.88 |
+| every store crate incl. `dynamic-config-store-core` and the config server | 1.88 |
+| `dynamic-config-python` / `-python-remote` (build from source) | 1.88, and CPython 3.9+ through abi3 — plus 3.14t, which is not abi3 (see below) |
+| `dynamic-config-node` / `-node-remote` (build from source) | 1.88, Node 18+ |
+| `dynamic-config-web-core`, `-tower`, `-axum`, `-actix` | 1.88 |
+| `dynamic-config-loco` | 1.94 (Loco's own floor) |
 
-Only `watch`, `schema` and `age` raise the floor for the core crate; `tokio`
-does not.
+## Why one number
 
-`age` declares 1.74 for itself, and the figure above is 1.85 because that is
-what actually builds: `age` pulls `rust-embed` for its translations, which pulls
-`sha2 0.11`, which is edition 2024. The number here is the one the CI job
-verifies against a real toolchain, not the one a manifest claims. A companion
-pays for what it pulls in — a gRPC stack, a streaming client, an HTTP client —
-and the core stays where it is.
+Until 0.7.0 the floor was a ladder — 1.71 core, 1.74 `schema`, 1.85
+`watch`/`age`, 1.80–1.88 across the companions — and the ladder had a
+real cost: three security advisories (`time`, `serde_with`, the AWS
+SDK) had reachable fixes that the lowest rungs could not take, so the
+fixes lived in ignore ledgers instead of lockfiles. The 1.88 raise
+turned every one of those ledger entries into an ordinary dependency
+update. That trade — a higher floor for real fixes instead of recorded
+exceptions — is the security-first policy the
+[Compatibility Contract](compatibility.md) commits to.
 
-The Python floor has a second dimension the others do not: the *interpreter*.
-One abi3 wheel per platform covers CPython 3.9 upwards, which is why the wheel
-carries no per-version matrix — but a free-threaded interpreter has no stable
-ABI, so `dynamic-config-py` also ships a `cp314t` manylinux wheel, built
-against that interpreter specifically. `abi3` is a default Cargo feature that
-build switches **off**, because cargo features are additive and nothing can
-turn abi3 off by being turned on; what actually selects the ABI is which
-interpreter maturin is pointed at. 3.14t and not 3.13t: PyO3 0.29 dropped
-3.13t when CPython promoted free-threading from experimental to supported in
-3.14.
-[Free-Threaded CPython](https://dynamic-config-rs.github.io/python/free-threading.html) is the audit behind the
-declaration.
+Older toolchains are not stranded: the workspace sets
+`resolver.incompatible-rust-versions = "fallback"` in
+`.cargo/config.toml`, so a pre-1.88 cargo resolves the last release
+published under the old floor. Those versions are **end-of-life** —
+they build, they are not supported. Generating a fresh lockfile needs
+cargo 1.84+ either way.
 
-MSRV is treated as a breaking change, and both figures are verified in CI
-against the real toolchains.
+## The Python floor's second dimension
 
-Building from source: the workspace sets
-`resolver.incompatible-rust-versions = "fallback"` in `.cargo/config.toml`.
-Without it, cargo resolves to the newest release of every transitive dependency
-and the floor silently becomes 1.85 — `hashbrown 0.17`, reached through `toml`,
-requires edition 2024. Generating the lockfile needs cargo 1.84 or newer.
+The *interpreter*. One abi3 wheel per platform covers CPython 3.9
+upwards, which is why the wheel carries no per-version matrix — but a
+free-threaded interpreter has no stable ABI, so `dynamic-config-py`
+also ships a `cp314t` manylinux wheel, built against that interpreter
+specifically. `abi3` is a default Cargo feature the build switches
+**off**; what selects the ABI is which interpreter maturin is pointed
+at. 3.14t and not 3.13t: PyO3 0.29 dropped 3.13t when CPython promoted
+free-threading to supported in 3.14.
+[Free-Threaded CPython](https://dynamic-config-rs.github.io/python/free-threading.html)
+is the audit behind the declaration.
 
-`ini` and `properties` (0.7) carry no dependency and hold the 1.71
-floor — the CI msrv matrix compiles them at exactly that toolchain to
-keep the sentence true.
+## How the floor is kept honest
+
+The CI msrv matrix compiles every feature set — and the CLI and
+embedded crates — at exactly 1.88 with `--locked`; a dependency that
+quietly demands more fails the row that names it. MSRV movement is a
+breaking change in spirit whatever semver says about it, and the
+changelog treats it as one.
+
+## What each feature weighs
+
+Generated by `scripts/dependency-weight.sh`; regenerate after any
+dependency change and commit the diff — a column that drifts silently
+is a cost nobody agreed to.
+
+| feature set | crates in tree | clean check (s) |
+|---|---|---|
+| `--no-default-features --features json` | 35 | 0 |
+| `json,toml,yaml` | 52 | 0 |
+| `full` | 237 | 3 |
+

@@ -15,7 +15,7 @@ naming the feature to enable.
 The first three are figment's providers. The last two are parsers in this
 crate, added for the configuration that already exists in the world —
 Java services carry `.properties`, and a generation of tools wrote
-`.ini` — with **no new dependency and no effect on the 1.71 floor**.
+`.ini` — with **no new dependency and no effect on the MSRV**.
 
 A `.age` suffix is looked through for all five: `config.ini.age` is INI
 that happens to be encrypted.

@@ -1,14 +1,11 @@
 name: CI
 
-# No push trigger for `dev`: everything on dev travels through a pull
-# request anyway, and a push run would twin the PR run on the same commit —
-# under *required* checks, a deduplicating cancellation poisons the gate
-# (a cancelled twin's "CI is green" reads as failure and blocks the merge).
-# `main` keeps its push trigger because a rebase-merge mints a new SHA that
-# no PR run ever checked.
+# No push trigger at all: everything travels through a pull request, and
+# main only ever receives a SQUASH of a green PR — the squashed tree is
+# byte-identical to the PR head the checks already ran on, so a main
+# re-run would test the same content twice. Merging runs release.yml
+# alone; workflow_dispatch stays as the manual escape hatch.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -328,34 +325,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The core floor.
-          - rust: "1.71"
+          # One floor, org-wide, since the 1.88 raise: every feature set
+          # must compile there, and no feature may quietly demand more.
+          # The old per-feature ladder (1.71 core / 1.74 schema / 1.85
+          # watch+age) collapsed into this single number on purpose --
+          # the msrv-features book page tells the story.
+          - rust: "1.88"
             features: "json,toml,yaml"
-          # `tokio` must not raise it.
-          - rust: "1.71"
+          - rust: "1.88"
             features: "json,async,tracing,clap"
-          # `schema` raises it to schemars' own floor.
-          - rust: "1.74"
-            features: "json,schema"
-          # `age` raises it further, and not to the floor it declares: its
-          # translation machinery reaches `sha2 0.11`, which is edition 2024.
-          - rust: "1.85"
-            features: "json,age"
-          # The features that add no dependency must not move the floor at all
-          # — `telemetry` is one of them: an exposition format is a wire
-          # encoding, not a crate.
-          - rust: "1.71"
+          - rust: "1.88"
+            features: "json,schema,age"
+          - rust: "1.88"
             features: "json,dotenv,figment,telemetry,ini,properties"
-          # `watch` does more: notify 8 declares 1.85 through notify-types.
-          - rust: "1.85"
+          - rust: "1.88"
             features: "full"
-          # The CLI and the `no_std` crate declare their own floors; one
-          # representative `check` per crate keeps each declaration honest.
-          # `package` names a crate instead of a feature set, so these rows
-          # reuse the same job.
-          - rust: "1.85"
+          # The two crates with their own manifests, checked at the same
+          # floor they now inherit from the workspace.
+          - rust: "1.88"
             package: dynamic-config-cli
-          - rust: "1.83"
+          - rust: "1.88"
             package: dynamic-config-embedded
             flags: "--no-default-features --features json,async"
     runs-on: ubuntu-latest

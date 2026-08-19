@@ -141,3 +141,90 @@ fn a_bump_racing_the_check_register_check_is_never_lost() {
         bumper.join().unwrap();
     });
 }
+
+/// The failure wake: a refusal's counter-increment-then-bump, racing a
+/// waiter's check-register-check, is never lost — the model of the events
+/// stream's refusal path. `Release` on the counter pairs with the waiter's
+/// `Acquire` load, so a woken waiter always sees the refusal it was woken
+/// for.
+#[test]
+fn a_refusal_bump_racing_registration_is_never_lost() {
+    use std::future::poll_fn;
+
+    loom::model(|| {
+        let notify = loom::sync::Arc::new(dynamic_config::LoomNotify::new());
+        let refusals = loom::sync::Arc::new(loom::sync::atomic::AtomicU64::new(0));
+
+        let refuser = {
+            let notify = loom::sync::Arc::clone(&notify);
+            let refusals = loom::sync::Arc::clone(&refusals);
+            loom::thread::spawn(move || {
+                // The order record_failure uses: count first, wake second.
+                refusals.fetch_add(1, loom::sync::atomic::Ordering::Release);
+                notify.bump();
+            })
+        };
+
+        let mut seen_notify = 0u64;
+        let mut seen_refusals = 0u64;
+        loom::future::block_on(poll_fn(|context| {
+            notify.poll_with(&mut seen_notify, context.waker(), || {
+                let current = refusals.load(loom::sync::atomic::Ordering::Acquire);
+
+                (current != seen_refusals).then(|| {
+                    seen_refusals = current;
+                })
+            })
+        }));
+
+        assert_eq!(seen_refusals, 1, "the refusal was observed, not lost");
+        refuser.join().unwrap();
+    });
+}
+
+/// A refusal followed by an install, against one waiter filtering on the
+/// install counter alone — the model of `changed()`'s published-generation
+/// filter. Whatever the interleaving, the waiter resolves exactly with the
+/// install, never with the refusal's stale snapshot, and never parks past
+/// the install.
+#[test]
+fn a_success_after_a_refusal_is_never_missed_by_the_filtered_waiter() {
+    use std::future::poll_fn;
+
+    loom::model(|| {
+        let notify = loom::sync::Arc::new(dynamic_config::LoomNotify::new());
+        let installs = loom::sync::Arc::new(loom::sync::atomic::AtomicU64::new(0));
+
+        let writer = {
+            let notify = loom::sync::Arc::clone(&notify);
+            let installs = loom::sync::Arc::clone(&installs);
+            loom::thread::spawn(move || {
+                // A refusal: wake with no install...
+                notify.bump();
+                // ...then an install: count first, wake second.
+                installs.fetch_add(1, loom::sync::atomic::Ordering::Release);
+                notify.bump();
+            })
+        };
+
+        let mut seen_notify = 0u64;
+        let mut seen_installs = 0u64;
+        loom::future::block_on(poll_fn(|context| {
+            notify.poll_with(&mut seen_notify, context.waker(), || {
+                let current = installs.load(loom::sync::atomic::Ordering::Acquire);
+
+                if current == seen_installs {
+                    // The refusal's wake: at most a re-registration.
+                    return None;
+                }
+
+                seen_installs = current;
+
+                Some(())
+            })
+        }));
+
+        assert_eq!(seen_installs, 1, "the install resolved the waiter");
+        writer.join().unwrap();
+    });
+}

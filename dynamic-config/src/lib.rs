@@ -309,7 +309,7 @@ pub mod watch;
 pub use asynchronous::Notify as LoomNotify;
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
-pub use asynchronous::{set_blocking_executor, BlockingExecutor, Changes};
+pub use asynchronous::{set_blocking_executor, BlockingExecutor, Changes, Event, Events};
 /// figment itself, re-exported.
 ///
 /// So that writing a [`Source::provider`] needs no direct dependency, and no

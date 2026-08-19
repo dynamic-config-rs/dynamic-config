@@ -24,6 +24,7 @@ libfuzzer-sys = "0.4"
 # Structure-aware generation. Bytes into a path walker is a waste — the
 # interesting inputs are tree shapes and path shapes, not byte strings.
 arbitrary = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # `default-features = false`: every target below works on the value, unit and
 # name surfaces, none of which needs a document format. A smaller graph is a
@@ -35,7 +36,7 @@ arbitrary = { version = "1", features = ["derive"] }
 [dependencies.dynamic-config]
 path = "../dynamic-config"
 default-features = false
-features = ["dotenv", "ini", "properties"]
+features = ["dotenv", "ini", "properties", "json"]
 
 # Fuzzing wants the optimised build with debug assertions still on: an
 # overflow that `--release` wraps silently is exactly the class of bug this is
@@ -86,3 +87,25 @@ path = "fuzz_targets/flat_formats.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "merge_laws"
+path = "fuzz_targets/merge_laws.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "provenance_winner"
+path = "fuzz_targets/provenance_winner.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lkg_serves_previous"
+path = "fuzz_targets/lkg_serves_previous.rs"
+test = false
+doc = false
+bench = false
+

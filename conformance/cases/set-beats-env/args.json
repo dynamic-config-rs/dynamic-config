@@ -1,0 +1,7 @@
+{
+  "key": "app",
+  "env_prefix": "C03_",
+  "set": {
+    "host": "from-flag"
+  }
+}

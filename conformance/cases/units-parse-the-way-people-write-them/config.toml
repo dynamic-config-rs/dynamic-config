@@ -1,0 +1,3 @@
+[app]
+timeout = "30s"
+limit = "4MB"

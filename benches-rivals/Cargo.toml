@@ -1,0 +1,22 @@
+# Detached on purpose (its own [workspace]): the rivals never enter the
+# engine's dependency graph, and `cargo deny` never audits crates that
+# exist only to be raced against.
+[package]
+name = "dynamic-config-rivals"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+dynamic-config = { path = "../dynamic-config", features = ["json", "toml"] }
+config = "0.15"
+figment = { version = "0.10", features = ["toml", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+criterion = "0.5"
+
+[[bench]]
+name = "rivals"
+harness = false

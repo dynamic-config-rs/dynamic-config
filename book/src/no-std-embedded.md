@@ -128,6 +128,6 @@ returns. The section itself is a scan of `WAITERS` slots and at most one
 | `async` | | `changes()` |
 | `std` | | the `critical-section` implementation for tests and host simulators |
 
-MSRV 1.83. The
+MSRV 1.88, the organisation's one floor. The
 [README](https://github.com/dynamic-config-rs/dynamic-config/tree/main/dynamic-config-embedded)
 carries the full story.

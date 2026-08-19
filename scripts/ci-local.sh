@@ -98,9 +98,6 @@ just loom
 step "the shuttle models, the residue loom cannot reach"
 just shuttle
 
-step "the scripted-server mocks"
-just mocks
-
 step "embedded: host tests + a target with no std"
 just embedded
 

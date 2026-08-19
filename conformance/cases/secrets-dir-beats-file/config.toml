@@ -1,0 +1,3 @@
+[app]
+password = "from-file"
+host = "h"

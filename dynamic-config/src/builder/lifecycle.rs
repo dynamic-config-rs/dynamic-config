@@ -117,9 +117,8 @@ impl<T: DeserializeOwned> Builder<T> {
 
                     Ok(installed)
                 })
-                .map_err(|error| {
-                    install.record_failure(&error);
-                    error
+                .inspect_err(|error| {
+                    install.record_failure(error);
                 }),
         };
 
@@ -151,9 +150,8 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        let value = self.load().map_err(|error| {
-            install.record_failure(&error);
-            error
+        let value = self.load().inspect_err(|error| {
+            install.record_failure(error);
         })?;
 
         let install = install.clone();
@@ -335,9 +333,8 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        let value = self.load().map_err(|error| {
-            install.record_failure(&error);
-            error
+        let value = self.load().inspect_err(|error| {
+            install.record_failure(error);
         })?;
 
         install.install(value, reason);

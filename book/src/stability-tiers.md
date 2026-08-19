@@ -26,9 +26,9 @@ tier at all.
 
 **The axum and Actix crates carry one promise and a small surface.** A
 `Sections` list, a `Snapshot`, a layer and an extractor — no lifecycle, no
-routes, nothing that loads or watches. Their floors differ (1.71, 1.80 and
-1.88) because each pays for what it pulls in, and each is checked against a
-real toolchain; raising one is a breaking change.
+routes, nothing that loads or watches. Their floor is the organisation's
+one 1.88 (loco alone sits at 1.94, loco's own), checked against the real
+toolchain; raising it is a breaking change.
 
 **`dynamic-config-py-web` is one distribution with two tiers inside it.**
 Its seven adapters for FastAPI, Litestar, Flask, Quart and Django — the

@@ -92,9 +92,8 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
             // the previous snapshot exactly like a parse failure — and the
             // cell is told, so `status()` can count the failures a watcher
             // absorbs. Nobody else is listening on this thread.
-            let value = reloader.load().map_err(|error| {
-                install.record_failure(&error);
-                error
+            let value = reloader.load().inspect_err(|error| {
+                install.record_failure(error);
             })?;
 
             install.install(

@@ -285,7 +285,7 @@ impl Drop for Registered {
 }
 
 fn to_io(error: notify::Error) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, error)
+    std::io::Error::other(error)
 }
 
 /// Watches the *directories* holding the files, not the files themselves.

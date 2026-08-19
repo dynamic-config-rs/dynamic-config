@@ -1,0 +1,7 @@
+{
+  "key": "app",
+  "env_prefix": "C10_",
+  "env_files": [
+    ".env"
+  ]
+}

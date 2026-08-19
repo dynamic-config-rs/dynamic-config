@@ -1,0 +1,3 @@
+[app]
+host = "base"
+pool = 2

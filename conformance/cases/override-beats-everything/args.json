@@ -1,0 +1,10 @@
+{
+  "key": "app",
+  "env_prefix": "C04_",
+  "set": {
+    "host": "from-flag"
+  },
+  "overrides": {
+    "host": "from-override"
+  }
+}

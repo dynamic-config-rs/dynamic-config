@@ -1,0 +1,13 @@
+[package]
+name = "dynamic-config-soak"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+license.workspace = true
+description = "The soak-and-leak rig: long-running evidence, not a test"
+
+[dependencies]
+dynamic-config = { path = "../dynamic-config", version = "0.7", features = ["json", "toml", "watch"] }
+serde = { version = "1.0.221", features = ["derive"] }
+serde_json = "1"

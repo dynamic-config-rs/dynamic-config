@@ -20,6 +20,8 @@ use serde::Deserialize;
 #[dynamic_config]
 #[derive(Deserialize)]
 struct SinkProbe {
+    // Deserialized to drive reloads; the test observes log lines, not values.
+    #[allow(dead_code)]
     n: u32,
 }
 

@@ -1,0 +1,4 @@
+[app]
+port = 1
+ratio = 0.5
+verbose = false

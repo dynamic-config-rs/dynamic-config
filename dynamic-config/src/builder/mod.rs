@@ -133,6 +133,7 @@ pub struct Builder<T> {
     whole_document: bool,
     env_files: Vec<String>,
     secrets_dir: Option<String>,
+    allow_external_symlinks: bool,
     profile_env: Option<String>,
     search: Option<(String, Vec<String>)>,
     cache: Option<(String, CacheMode)>,
@@ -171,6 +172,7 @@ impl<T> Clone for Builder<T> {
             whole_document: self.whole_document,
             env_files: self.env_files.clone(),
             secrets_dir: self.secrets_dir.clone(),
+            allow_external_symlinks: self.allow_external_symlinks,
             profile_env: self.profile_env.clone(),
             search: self.search.clone(),
             cache: self.cache.clone(),
@@ -209,6 +211,7 @@ impl<T: DeserializeOwned> Builder<T> {
             whole_document: false,
             env_files: Vec::new(),
             secrets_dir: None,
+            allow_external_symlinks: false,
             profile_env: None,
             search: None,
             cache: None,
@@ -475,6 +478,21 @@ impl<T: DeserializeOwned> Builder<T> {
         self
     }
 
+    /// Lets a symlink in the secrets directory resolve outside it.
+    ///
+    /// Off by default since 0.7.1: an escaping link is refused with an
+    /// error naming the entry, because a directory of mounted credentials
+    /// that silently reads an arbitrary path through a planted link is a
+    /// vulnerability, not a layout. Kubernetes' own `..data` indirection
+    /// stays inside the mount and keeps working untouched. Turn this on
+    /// only for a deliberate cross-mount arrangement — and say why in a
+    /// comment, because the next reader will ask.
+    #[must_use]
+    pub fn allow_external_symlinks(mut self, allow: bool) -> Self {
+        self.allow_external_symlinks = allow;
+        self
+    }
+
     /// The environment variable naming the active profile.
     #[must_use]
     pub fn profile_env(mut self, variable: impl Into<String>) -> Self {
@@ -592,6 +610,7 @@ impl<T: DeserializeOwned> Builder<T> {
         }
         if let Some(directory) = &self.secrets_dir {
             spec = spec.with_secrets_dir(directory);
+            spec = spec.with_allow_external_symlinks(self.allow_external_symlinks);
         }
 
         let search_paths: Vec<&str>;

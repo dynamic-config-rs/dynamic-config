@@ -42,8 +42,8 @@ than compile-time failures when missing.
 **`watch`** — `builder.watch()` / `watch_with()`, the generated
 `start_watch()`, and `Dynamic::watch`: the debounced, directory-level
 file watcher. Pulls [`notify`](https://docs.rs/notify), the platform
-notification backend — and raises the core MSRV to 1.85, which is
-`notify 8`'s floor. The one feature with a real MSRV cost on the core.
+notification backend. Since the 1.88 floor no feature moves the MSRV —
+the ladder this sentence used to describe collapsed in 0.7.1.
 
 ## Async
 
@@ -84,7 +84,7 @@ effect nobody asked for, and it is not thread-safe.
 **`schema`** — `builder.schema()` and `schema::merge`: a JSON Schema for
 the config *files*, secrets marked `writeOnly`, which is what gives
 editors validation and completion. Pulls `schemars` (the type needs
-`derive(JsonSchema)`) and raises the MSRV to 1.74, schemars' own floor.
+`derive(JsonSchema)`).
 
 ## Encryption
 
@@ -94,8 +94,7 @@ editors validation and completion. Pulls `schemars` (the type needs
 drop whatever the scheme is.
 
 **`age`** — `decrypt`, plus the stock implementation: transparent
-decryption (and `save_encrypted`) for `age`-encrypted files. MSRV 1.85 —
-measured against a real toolchain, not `age`'s own claim; see
+decryption (and `save_encrypted`) for `age`-encrypted files. See
 [MSRV & Features](msrv-features.md) for why the two differ.
 
 ## Observability

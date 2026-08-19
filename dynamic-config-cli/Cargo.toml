@@ -3,7 +3,7 @@ name = "dynamic-config-cli"
 version.workspace = true
 edition.workspace = true
 # Its own floor, not the workspace's 1.71: clap needs more than the core does.
-rust-version = "1.85"
+rust-version.workspace = true
 license.workspace = true
 description = "Command-line diagnostics for dynamic-config: explain a value, diff two documents"
 repository.workspace = true

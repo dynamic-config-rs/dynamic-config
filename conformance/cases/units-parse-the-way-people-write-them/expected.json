@@ -1,0 +1,4 @@
+{
+  "limit": "4MB",
+  "timeout": "30s"
+}

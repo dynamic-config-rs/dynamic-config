@@ -448,3 +448,134 @@ fn a_value_is_always_a_string_so_a_numeric_password_stays_one() {
          failed the field; a mounted credential is text and stays text"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Containment: a symlink may not leave the mount (0.7.1)
+// ---------------------------------------------------------------------------
+//
+// The vulnerability shape Pydantic Settings shipped a CVE for in June 2026:
+// a planted link inside the secrets directory that resolves to a file
+// outside it. Since 0.7.1 the escape is refused with the entry's name —
+// and the error must never carry what the target held.
+
+#[cfg(unix)]
+#[dynamic_config]
+#[derive(Debug, Deserialize)]
+struct Contained {
+    host: String,
+    #[allow(dead_code)]
+    password: String,
+}
+
+/// Somewhere outside every mount, holding bytes that must never load.
+#[cfg(unix)]
+fn outside_file(test: &str) -> PathBuf {
+    let path = std::env::temp_dir()
+        .join("dynamic-config-secrets-outside")
+        .join(test);
+
+    std::fs::create_dir_all(path.parent().expect("a parent")).expect("writable scratch");
+    std::fs::write(&path, "stolen-bytes\n").expect("writable scratch");
+
+    path
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_escaping_the_mount_is_refused_by_name() {
+    use std::os::unix::fs::symlink;
+
+    let directory = mount("escape-absolute");
+    let target = outside_file("escape-absolute");
+
+    put(&directory, "host", "fine\n");
+    symlink(&target, directory.join("password")).expect("symlinks are ours to make");
+
+    let error = Contained::builder("db")
+        .secrets_dir(directory.to_str().expect("a UTF-8 scratch path"))
+        .load()
+        .expect_err("the escape is refused");
+
+    let rendered = format!("{error}");
+    assert!(
+        rendered.contains("resolves outside"),
+        "the refusal names the shape: {rendered}"
+    );
+    assert!(
+        rendered.contains("password"),
+        "the refusal names the entry: {rendered}"
+    );
+    assert!(
+        !rendered.contains("stolen-bytes"),
+        "and never what the target held: {rendered}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dot_dot_relative_escape_is_refused_too() {
+    use std::os::unix::fs::symlink;
+
+    let directory = mount("escape-relative");
+    let target = outside_file("escape-relative");
+
+    // `../../dynamic-config-secrets-outside/escape-relative`, spelled
+    // relative so canonicalization has `..` segments to resolve.
+    let relative = Path::new("..").join("..").join(
+        target
+            .strip_prefix(std::env::temp_dir())
+            .expect("under the temp dir"),
+    );
+
+    put(&directory, "host", "fine\n");
+    symlink(&relative, directory.join("password")).expect("symlinks are ours to make");
+
+    let error = Contained::builder("db")
+        .secrets_dir(directory.to_str().expect("a UTF-8 scratch path"))
+        .load()
+        .expect_err("the relative escape is refused");
+
+    assert!(format!("{error}").contains("resolves outside"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_chain_whose_final_target_escapes_is_refused() {
+    use std::os::unix::fs::symlink;
+
+    let directory = mount("escape-chain");
+    let target = outside_file("escape-chain");
+
+    // key -> inside-link -> outside: the first hop is inside the mount,
+    // and only full resolution sees the escape.
+    symlink(&target, directory.join("inner")).expect("symlinks are ours to make");
+    symlink(Path::new("inner"), directory.join("password")).expect("symlinks are ours to make");
+    put(&directory, "host", "fine\n");
+
+    let error = Contained::builder("db")
+        .secrets_dir(directory.to_str().expect("a UTF-8 scratch path"))
+        .load()
+        .expect_err("the chained escape is refused");
+
+    assert!(format!("{error}").contains("resolves outside"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn the_opt_out_restores_the_old_behaviour_deliberately() {
+    use std::os::unix::fs::symlink;
+
+    let directory = mount("escape-opted-out");
+    let target = outside_file("escape-opted-out");
+
+    put(&directory, "host", "fine\n");
+    symlink(&target, directory.join("password")).expect("symlinks are ours to make");
+
+    let config = Contained::builder("db")
+        .secrets_dir(directory.to_str().expect("a UTF-8 scratch path"))
+        .allow_external_symlinks(true)
+        .load()
+        .expect("the opt-out follows the link");
+
+    assert_eq!(config.host, "fine");
+}

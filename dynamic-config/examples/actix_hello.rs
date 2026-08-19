@@ -90,9 +90,7 @@ async fn main() -> std::io::Result<()> {
         .env("APP_")
         .validate(|config| dynamic_config::Error::ok_or_invalid(config.validate()));
 
-    sources
-        .init()
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+    sources.init().map_err(std::io::Error::other)?;
 
     // Read once, before the watcher starts: a listener cannot move to a new
     // port without dropping every connection on the old one, so `port` is

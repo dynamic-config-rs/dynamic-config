@@ -203,6 +203,24 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
         ConfigCell::on_reload_scoped_shared(&self.cell, hook)
     }
 
+    /// Registers a callback for every reload that installs nothing — the
+    /// failure twin of [`on_reload`](Self::on_reload), for the process
+    /// lifetime, under the same contract: short callbacks, panics caught,
+    /// the watcher survives. The callback receives the
+    /// [`FailureStatus`](crate::FailureStatus) the refusal published.
+    pub fn on_reload_failed(&self, hook: impl Fn(&crate::FailureStatus) + Send + Sync + 'static) {
+        self.cell.on_reload_failed(hook);
+    }
+
+    /// [`on_reload_failed`](Self::on_reload_failed), until the returned
+    /// guard drops.
+    pub fn on_reload_failed_scoped(
+        &self,
+        hook: impl Fn(&crate::FailureStatus) + Send + Sync + 'static,
+    ) -> crate::HookGuard<T> {
+        crate::ConfigCell::on_reload_failed_scoped_shared(&self.cell, hook)
+    }
+
     /// [`on_reload`](Self::on_reload), told *why*.
     ///
     /// The callback receives a [`ReloadEvent`](crate::ReloadEvent): both
@@ -314,6 +332,15 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     #[must_use]
     pub fn changes(&self) -> crate::Changes<T> {
         crate::Changes::new_shared(Arc::clone(&self.cell))
+    }
+
+    /// [`changes`](Self::changes) widened to refusals: a stream of
+    /// [`Event`](crate::Event)s — installs *and* reloads that kept the
+    /// previous snapshot. The push half of [`status`](Self::status).
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub fn events(&self) -> crate::Events<T> {
+        crate::Events::new_shared(Arc::clone(&self.cell))
     }
 
     /// [`load`](Self::load), off the async executor.
