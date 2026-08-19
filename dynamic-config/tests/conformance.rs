@@ -112,14 +112,15 @@ fn run_case(case: &Path) -> Result<(), String> {
 
     for (key, value) in &env {
         // Process-global on purpose: the layer under test reads the real
-        // environment, and each case's prefix is its own.
-        unsafe { std::env::set_var(key, value) };
+        // environment, each case's prefix is its own, and the cases run
+        // one after another inside a single #[test].
+        std::env::set_var(key, value);
     }
 
     let outcome = resolve(case, &args);
 
     for key in env.keys() {
-        unsafe { std::env::remove_var(key) };
+        std::env::remove_var(key);
     }
 
     let resolved = outcome?;
