@@ -5,7 +5,7 @@ no runtime.
 
 ```toml
 [dependencies]
-dynamic-config-embedded = { version = "0.7.0", default-features = false, features = ["json"] }
+dynamic-config-embedded = { version = "0.7.1", default-features = false, features = ["json"] }
 ```
 
 ```rust
