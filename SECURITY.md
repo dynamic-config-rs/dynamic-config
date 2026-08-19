@@ -21,7 +21,7 @@ the ones it explicitly does not.
 ### It tries to keep
 
 - **a symlink inside the secrets directory from resolving outside it** —
-  refused by default since 0.7.1 with an error naming the entry
+  refused by default since 0.8.0 with an error naming the entry
   (`allow_external_symlinks(true)` is the deliberate opt-out); the
   kubelet's `..data` indirection stays inside the mount and keeps
   working. Pinned by the adversarial half of `tests/secrets_dir.rs`.
@@ -74,8 +74,8 @@ with your privileges.
 
 | Version | Supported |
 |---|---|
-| 0.7.x | ✅ the latest patch |
-| ≤ 0.6 | — end of life |
+| 0.8.x | ✅ the latest patch |
+| ≤ 0.7 | — end of life |
 
 Security fixes land on the **latest patch of the line above** and
 nothing is backported before 1.0: when a release ships, every prior
