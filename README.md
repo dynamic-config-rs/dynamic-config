@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.7.1", features = ["toml", "watch"] }
+dynamic-config = { version = "0.8.0", features = ["toml", "watch"] }
 ```
 
 ```rust
@@ -118,7 +118,7 @@ patches automatically. Details in
 
 **1.88, one number for the whole organisation** — core, every feature,
 the CLI and the embedded cell alike. The per-feature ladder collapsed in
-0.7.1 as security work: three advisory fixes the old floors could not
+0.8.0 as security work: three advisory fixes the old floors could not
 take are ordinary lockfile entries at 1.88, and older toolchains resolve
 the last pre-raise releases through the MSRV-aware resolver (EOL, per
 the [Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html)).
