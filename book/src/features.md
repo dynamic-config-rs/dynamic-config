@@ -43,7 +43,7 @@ than compile-time failures when missing.
 `start_watch()`, and `Dynamic::watch`: the debounced, directory-level
 file watcher. Pulls [`notify`](https://docs.rs/notify), the platform
 notification backend. Since the 1.88 floor no feature moves the MSRV —
-the ladder this sentence used to describe collapsed in 0.7.1.
+the ladder this sentence used to describe collapsed in 0.8.0.
 
 ## Async
 

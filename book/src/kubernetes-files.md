@@ -38,7 +38,7 @@ see the old tree, then the new tree.
 
 A mounted Secret has the same symlink shape, one file per key — which
 is exactly what `secrets_dir` reads: the filename is the key, `..data`
-is skipped as a directory, the per-key links are followed. Since 0.7.1
+is skipped as a directory, the per-key links are followed. Since 0.8.0
 a link may not resolve *outside* the mount ([the containment
 contract](secret-lifecycle.md)); the kubelet's links resolve inside by
 construction and are untouched by that rule.

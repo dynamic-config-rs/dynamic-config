@@ -15,6 +15,72 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 ## [_Unreleased_]
 
 ### Added
+### Changed
+### Deprecated
+### Removed
+### Fixed
+### Security
+
+-->
+
+## [Unreleased]
+
+## [0.8.0] — 2026-08-19
+
+### Added
+
+- **Refusals reach subscribers.** `events()` — on generated types,
+  `Dynamic` and `ConfigCell` — streams installs *and* refused reloads
+  as the new `Event` enum; `on_reload_failed` is the hook twin, fired
+  from the same funnel every failure already passes through, under the
+  same panic isolation as `on_reload`. `refusals()` exposes the new
+  monotonic counter (`consecutive_failures` still resets on success).
+  `changes()` is untouched: a refusal costs a success waiter at most an
+  internal re-registration, never a spurious yield — two new loom
+  models pin exactly that. Both language bindings' status-polling
+  workarounds retire against this release.
+
+### Changed
+
+- **A symlink in the secrets directory may no longer resolve outside
+  it** (security). ⚠️ Breaking twice over, both stated: behaviour, for
+  layouts that relied on escaping links — and API, because the escape
+  hatch is a new `LoadSpec.allow_external_symlinks` field, which breaks
+  exhaustive `LoadSpec { … }` literals (add the field, or build with
+  `..Default::default()`). The escape is refused with an error naming the
+  entry — the shape of Pydantic Settings' June 2026 CVE — while the
+  kubelet's `..data` indirection keeps working by construction, and
+  reads go through the verified target so the check cannot be split
+  from the read by a link swap. `allow_external_symlinks(true)` (builder
+  and `LoadSpec`) restores the old behaviour for deliberate cross-mount
+  layouts. Pinned by four adversarial tests beside the kubelet fixture.
+- **MSRV is 1.88, one number for the whole organisation** (security) —
+  breaking by this crate's own policy, and the other reason this
+  release is 0.8.0 rather than a patch.
+  The per-feature ladder (1.71 core / 1.74 `schema` / 1.85
+  `watch`+`age`) collapsed; three advisory fixes the old floors could
+  not take (`time`, and in sibling repos `serde_with`, the AWS SDK) are
+  now ordinary lockfile entries instead of ignore-ledger records. Older
+  toolchains resolve the last pre-raise releases through the MSRV-aware
+  resolver and are end-of-life. Announced per the new
+  [Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html),
+  which this release introduces.
+
+### Fixed
+
+- **A refused reload's error no longer carries the refused value**
+  (security). serde's type errors quote the offending value — numbers
+  in backticks, strings in double quotes, so a password pasted where a
+  number belongs arrived verbatim in the `Display` of the load error,
+  and from there in logs. Both quote styles are now redacted in
+  type/value mismatch messages; the structured figment paths were
+  already scrubbed. Found by the new `lkg_serves_previous` fuzz target
+  on its first corpus run, pinned by a regression in `tests/security.rs`.
+
+
+## [0.7.0] — 2026-08-18
+
+### Added
 
 - **Two flat formats: `.ini` and `.properties`**, behind `ini` and
   `properties` features that add no dependency and hold the 1.71 floor.
@@ -50,66 +116,6 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 - **A `log` cargo feature.** The same lines through the `log` crate's
   global logger, for programs that standardised on `log` rather than
   `tracing`. A sink outranks it; `tracing` outranks both.
-### Changed
-### Deprecated
-### Removed
-### Fixed
-### Security
-
--->
-
-## [Unreleased]
-
-## [0.7.1] — 2026-08-19
-
-### Added
-
-- **Refusals reach subscribers.** `events()` — on generated types,
-  `Dynamic` and `ConfigCell` — streams installs *and* refused reloads
-  as the new `Event` enum; `on_reload_failed` is the hook twin, fired
-  from the same funnel every failure already passes through, under the
-  same panic isolation as `on_reload`. `refusals()` exposes the new
-  monotonic counter (`consecutive_failures` still resets on success).
-  `changes()` is untouched: a refusal costs a success waiter at most an
-  internal re-registration, never a spurious yield — two new loom
-  models pin exactly that. Both language bindings' status-polling
-  workarounds retire against this release.
-
-### Changed
-
-- **A symlink in the secrets directory may no longer resolve outside
-  it** (security). The escape is refused with an error naming the
-  entry — the shape of Pydantic Settings' June 2026 CVE — while the
-  kubelet's `..data` indirection keeps working by construction, and
-  reads go through the verified target so the check cannot be split
-  from the read by a link swap. `allow_external_symlinks(true)` (builder
-  and `LoadSpec`) restores the old behaviour for deliberate cross-mount
-  layouts. Pinned by four adversarial tests beside the kubelet fixture.
-- **MSRV is 1.88, one number for the whole organisation** (security).
-  The per-feature ladder (1.71 core / 1.74 `schema` / 1.85
-  `watch`+`age`) collapsed; three advisory fixes the old floors could
-  not take (`time`, and in sibling repos `serde_with`, the AWS SDK) are
-  now ordinary lockfile entries instead of ignore-ledger records. Older
-  toolchains resolve the last pre-raise releases through the MSRV-aware
-  resolver and are end-of-life. Announced per the new
-  [Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html),
-  which this release introduces.
-
-### Fixed
-
-- **A refused reload's error no longer carries the refused value**
-  (security). serde's type errors quote the offending value — numbers
-  in backticks, strings in double quotes, so a password pasted where a
-  number belongs arrived verbatim in the `Display` of the load error,
-  and from there in logs. Both quote styles are now redacted in
-  type/value mismatch messages; the structured figment paths were
-  already scrubbed. Found by the new `lkg_serves_previous` fuzz target
-  on its first corpus run, pinned by a regression in `tests/security.rs`.
-
-
-## [0.7.0] — 2026-08-18
-
-### Added
 
 - **`watch::set_atomic_save_grace(Duration)`.** The pause between a watch
   event settling and the files being read back — there for atomic saves,
@@ -1227,8 +1233,8 @@ The first release: ten crates, versioned together.
   plain `Future`. No allocator, no runtime, no code shared with the rest —
   deliberately.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...HEAD
-[0.7.1]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.7.1
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.1...v0.6.2

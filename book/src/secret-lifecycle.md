@@ -44,12 +44,12 @@ not deliver.
 
 - No configuration value — secret-marked or not — in any `Debug`,
   `Display`, error, diff, report, log line or metric label. Pinned by
-  `tests/security.rs`, the `redaction` fuzz target, and (since 0.7.1)
+  `tests/security.rs`, the `redaction` fuzz target, and (since 0.8.0)
   the serde-message scrub the `lkg_serves_previous` fuzz target forced.
 - Cache files are `0600`, created with `create_new`, redacted by
   default.
 - The secrets directory cannot be walked out of by a planted symlink
-  (0.7.1; the [containment note](compatibility.md) and its adversarial
+  (0.8.0; the [containment note](compatibility.md) and its adversarial
   suite).
 - Remote stores authenticate over TLS whose verification cannot be
   turned off by any flag this family ships.
