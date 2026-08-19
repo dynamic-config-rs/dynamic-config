@@ -158,6 +158,11 @@ impl Notify {
 pub struct Changes<T: Send + Sync + 'static> {
     cell: CellRef<T>,
     seen: u64,
+    /// The published install counter last yielded. The wake counter above
+    /// also moves for refusals (so the events stream can deliver them);
+    /// this one is what keeps a refusal from resolving `changed()` with an
+    /// unchanged snapshot.
+    seen_generation: u64,
 }
 
 /// The cell a `Changes` watches: a type's `static`, or an instance's own.
@@ -183,6 +188,7 @@ impl<T: Send + Sync + 'static> Changes<T> {
     pub(crate) fn new(cell: &'static crate::ConfigCell<T>) -> Self {
         Self {
             seen: cell.notify().generation(),
+            seen_generation: cell.generation(),
             cell: CellRef::Static(cell),
         }
     }
@@ -192,6 +198,7 @@ impl<T: Send + Sync + 'static> Changes<T> {
     pub(crate) fn new_shared(cell: std::sync::Arc<crate::ConfigCell<T>>) -> Self {
         Self {
             seen: cell.notify().generation(),
+            seen_generation: cell.generation(),
             cell: CellRef::Shared(cell),
         }
     }
@@ -232,12 +239,245 @@ impl<T: Send + Sync + 'static> Future for Changed<'_, T> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Arc<T>> {
         let changes = &mut self.get_mut().changes;
-        let cell = changes.cell.get();
+        let Changes {
+            cell,
+            seen,
+            seen_generation,
+        } = changes;
+        let cell = cell.get();
         let notify = cell.notify();
 
         // The check-register-check protocol lives in `poll_with`; the load
-        // closure supplies the value a moved generation implies.
-        notify.poll_with(&mut changes.seen, context.waker(), || cell.load())
+        // closure supplies the value a moved generation implies — filtered
+        // on the PUBLISHED install counter, because the wake counter also
+        // moves for refusals and a refusal must cost a success waiter at
+        // most a re-registration, never a spurious yield.
+        notify.poll_with(seen, context.waker(), || {
+            let generation = cell.generation();
+
+            if generation == *seen_generation {
+                return None;
+            }
+
+            *seen_generation = generation;
+
+            cell.load()
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Events: installs and refusals, one stream
+// ---------------------------------------------------------------------------
+
+/// One thing that happened to a configuration: an install, or a refusal.
+///
+/// What [`Events`] yields. `Refused` carries the [`FailureStatus`] — the
+/// category and the key path, never a message and never a value, the same
+/// discipline as every diagnostic surface here.
+///
+/// [`FailureStatus`]: crate::FailureStatus
+#[non_exhaustive]
+pub enum Event<T> {
+    /// A reload installed a snapshot.
+    #[non_exhaustive]
+    Reloaded {
+        /// The snapshot now serving.
+        current: Arc<T>,
+        /// The generation it became, and when it landed.
+        meta: crate::SnapshotMeta,
+        /// What caused the install, when the cell recorded one.
+        reason: Option<crate::ReloadReason>,
+    },
+    /// A reload installed nothing; the previous snapshot keeps serving.
+    Refused(crate::FailureStatus),
+}
+
+// Hand-written for the same reason `ReloadEvent`'s is: a derive would
+// demand `T: Clone`.
+impl<T> Clone for Event<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Reloaded {
+                current,
+                meta,
+                reason,
+            } => Self::Reloaded {
+                current: Arc::clone(current),
+                meta: *meta,
+                reason: reason.clone(),
+            },
+            Self::Refused(status) => Self::Refused(status.clone()),
+        }
+    }
+}
+
+impl<T> std::fmt::Debug for Event<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Presence and metadata, never the snapshot: an event is a
+        // diagnostic, and a configuration holds passwords.
+        match self {
+            Self::Reloaded { meta, reason, .. } => f
+                .debug_struct("Reloaded")
+                .field("generation", &meta.generation)
+                .field("reason", reason)
+                .finish_non_exhaustive(),
+            Self::Refused(status) => f.debug_tuple("Refused").field(status).finish(),
+        }
+    }
+}
+
+/// A handle that resolves for installs **and refusals**, where [`Changes`]
+/// resolves for installs alone.
+///
+/// Created by `events()` on a generated type, a [`Dynamic`](crate::Dynamic)
+/// or a [`ConfigCell`](crate::ConfigCell). The push half of the status
+/// surface: a supervisor that wants to react to refused reloads no longer
+/// polls `status()` on a timer.
+///
+/// Latest-wins within each kind, and a refusal is never collapsed into a
+/// success — a refusal raced by an install yields both, refusal first,
+/// mirroring the Python binding's `events()` ordering.
+pub struct Events<T: Send + Sync + 'static> {
+    cell: CellRef<T>,
+    seen_notify: u64,
+    seen_generation: u64,
+    seen_refusals: u64,
+}
+
+impl<T: Send + Sync + 'static> Events<T> {
+    pub(crate) fn new(cell: &'static crate::ConfigCell<T>) -> Self {
+        Self {
+            seen_notify: cell.notify().generation(),
+            seen_generation: cell.generation(),
+            seen_refusals: cell.refusals(),
+            cell: CellRef::Static(cell),
+        }
+    }
+
+    /// An `Events` over an instance's shared cell; what
+    /// [`Dynamic::events`](crate::Dynamic::events) hands out.
+    pub(crate) fn new_shared(cell: std::sync::Arc<crate::ConfigCell<T>>) -> Self {
+        Self {
+            seen_notify: cell.notify().generation(),
+            seen_generation: cell.generation(),
+            seen_refusals: cell.refusals(),
+            cell: CellRef::Shared(cell),
+        }
+    }
+
+    /// Resolves with the next event.
+    pub fn next_event(&mut self) -> impl Future<Output = Event<T>> + '_ {
+        NextEvent { events: self }
+    }
+
+    /// What has not been delivered yet, refusals first.
+    ///
+    /// Reading this ADVANCES the corresponding seen-counter, so one bump
+    /// that carried both a refusal and an install yields two events across
+    /// two polls — the drain-then-park structure in `NextEvent::poll` is
+    /// what keeps the second one from waiting for another wake.
+    fn pending(&mut self) -> Option<Event<T>> {
+        let cell = self.cell.get();
+
+        let refusals = cell.refusals();
+
+        if refusals != self.seen_refusals {
+            self.seen_refusals = refusals;
+
+            if let Some(status) = cell.status().last_failure {
+                return Some(Event::Refused(status));
+            }
+        }
+
+        let generation = cell.generation();
+
+        if generation != self.seen_generation {
+            self.seen_generation = generation;
+
+            // `meta` is stored before the wake that got us here, so a
+            // loaded snapshot always has one; a `None` pair means the
+            // install is still mid-flight and the next poll will see it.
+            if let (Some(current), Some(meta)) = (cell.load(), cell.meta()) {
+                let status = cell.status();
+
+                return Some(Event::Reloaded {
+                    current,
+                    meta,
+                    reason: status.last_reason,
+                });
+            }
+        }
+
+        None
+    }
+}
+
+impl<T: Send + Sync + 'static> std::fmt::Debug for Events<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Events")
+            .field("seen_generation", &self.seen_generation)
+            .field("seen_refusals", &self.seen_refusals)
+            .finish_non_exhaustive()
+    }
+}
+
+struct NextEvent<'a, T: Send + Sync + 'static> {
+    events: &'a mut Events<T>,
+}
+
+impl<T: Send + Sync + 'static> Future for NextEvent<'_, T> {
+    type Output = Event<T>;
+
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Event<T>> {
+        let events = &mut self.get_mut().events;
+
+        // Drain before parking: one notify bump may cover a refusal AND an
+        // install (poll_with reads the counter once), and whichever was not
+        // yielded on the first poll must not wait for another wake.
+        if let Some(event) = events.pending() {
+            return Poll::Ready(event);
+        }
+
+        let Events {
+            cell,
+            seen_notify,
+            seen_generation,
+            seen_refusals,
+        } = events;
+        let cell = cell.get();
+
+        cell.notify().poll_with(seen_notify, context.waker(), || {
+            // Inlined `pending()`: the closure cannot borrow `events`
+            // whole while `seen_notify` is borrowed by `poll_with`.
+            let refusals = cell.refusals();
+
+            if refusals != *seen_refusals {
+                *seen_refusals = refusals;
+
+                if let Some(status) = cell.status().last_failure {
+                    return Some(Event::Refused(status));
+                }
+            }
+
+            let generation = cell.generation();
+
+            if generation != *seen_generation {
+                *seen_generation = generation;
+
+                if let (Some(current), Some(meta)) = (cell.load(), cell.meta()) {
+                    let status = cell.status();
+
+                    return Some(Event::Reloaded {
+                        current,
+                        meta,
+                        reason: status.last_reason,
+                    });
+                }
+            }
+
+            None
+        })
     }
 }
 

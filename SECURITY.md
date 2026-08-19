@@ -20,6 +20,12 @@ the ones it explicitly does not.
 
 ### It tries to keep
 
+- **a symlink inside the secrets directory from resolving outside it** —
+  refused by default since 0.7.1 with an error naming the entry
+  (`allow_external_symlinks(true)` is the deliberate opt-out); the
+  kubelet's `..data` indirection stays inside the mount and keeps
+  working. Pinned by the adversarial half of `tests/secrets_dir.rs`.
+
 **Secrets stay out of diagnostics.** `#[config(secret)]` redacts a field in
 `Debug`; reload diffs, `check()` reports, unknown-key suggestions and *error
 messages* all report paths and types, never values, so nothing routes around the
@@ -68,12 +74,16 @@ with your privileges.
 
 | Version | Supported |
 |---|---|
-| 0.0.x | ✅ the latest patch |
-| < 0.0.1 | — nothing older exists |
+| 0.7.x | ✅ the latest patch |
+| ≤ 0.6 | — end of life |
 
-Before 1.0, fixes land on the latest published version and nothing is
-backported: there is no version old enough to be worth pinning to. After 1.0,
-the current and previous minor versions.
+Security fixes land on the **latest patch of the line above** and
+nothing is backported before 1.0: when a release ships, every prior
+patch of its line is end-of-life the same day. Older toolchains resolve
+older published versions through cargo's MSRV-aware resolver and are
+explicitly unsupported. After 1.0, the current and previous minor
+lines. The full promise lives in the engine book's
+[Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html).
 
 ## Threat model, stated plainly
 

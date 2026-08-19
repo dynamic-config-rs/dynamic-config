@@ -1,0 +1,7 @@
+{
+  "key": "app",
+  "defaults": {
+    "host": "from-default",
+    "port": 1
+  }
+}

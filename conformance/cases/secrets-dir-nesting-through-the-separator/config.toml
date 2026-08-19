@@ -1,0 +1,2 @@
+[app.pool]
+max_size = "2"

@@ -40,7 +40,7 @@ what this engine owes to each of them.
 |---|---|
 | **Three mandatory dependencies** | `figment`, `serde`, `arc-swap`. Every format, client, crypto stack and runtime is behind a feature or in a companion crate |
 | **`#![forbid(unsafe_code)]`** | in every crate here, checked by CI rather than trusted |
-| **MSRV 1.71** | and every feature that raises it says so, verified against real toolchains |
+| **MSRV 1.88** | one number for core, every feature, the CLI and the embedded cell — verified against the real toolchain |
 | **No global singleton** | each configuration type owns its storage; there is no `Config::get()` returning something a library set |
 | **`no_std`** | a separate crate for microcontrollers: no filesystem, no allocator, no runtime |
 

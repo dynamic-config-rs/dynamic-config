@@ -68,6 +68,8 @@ argument to opt in with; an unused method costs nothing.
 | `prepare() -> Result<Commit, Error>` | | Load and validate through the remembered builder without installing — the fallible half of a reload, for a `ReloadGroup`. |
 | `on_reload(hook)` | | Run a callback on every later reload, for the life of the process. |
 | `on_reload_scoped(hook) -> HookGuard` | | The same, until the guard is dropped. |
+| `on_reload_failed(hook)` | | The failure twin of `on_reload`: fires for every reload that installs nothing, with the refusal's `FailureStatus`. Same panic isolation; `current()` still answers the last good snapshot while it runs. |
+| `on_reload_failed_scoped(hook) -> HookGuard` | | The same, until the guard is dropped. |
 | `on_reload_with(hook)` | | The same list, told *why*: the callback gets a `ReloadEvent` — both snapshots, the [`ReloadReason`](reload-lifecycle.md#why-a-reload-happened) and the install's `SnapshotMeta`. It fires for the **first** install too, with `previous: None`, which the pair form has nowhere to say. |
 | `on_reload_with_scoped(hook) -> HookGuard` | | The same, until the guard is dropped. |
 | `set_default(path, value)` / `set_override(path, value)` | | The two runtime layers bracketing everything else: a fallback used only when nothing supplies the key, and a value that wins over every file and variable. |
@@ -85,6 +87,7 @@ argument to opt in with; an unused method costs nothing.
 | `bind_clap(matches, bindings)` | `clap` | Copy named clap arguments into the flags layer — only ones that really came from the command line. |
 | `load_async()` / `init_async()` | `async` | The remembered builder's load and init, off the async executor. |
 | `changes()` | `async` | A handle woken by every later reload; a `Future`, so any executor drives it. |
+| `events()` | `async` | `changes()` widened to refusals: a stream of `Event`s — installs and reloads that kept the previous snapshot. The push half of `status()`. |
 | `set_remote_async(source)` / `refresh_remote_async()` | `async` | The same remote surface, for a store whose client is async. |
 
 Three names from before the split are **not** on this list:

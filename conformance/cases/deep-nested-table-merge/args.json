@@ -1,0 +1,8 @@
+{
+  "key": "app",
+  "overrides": {
+    "db": {
+      "host": "b"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "key": "app",
+  "aliases": {
+    "size": "max_size"
+  }
+}

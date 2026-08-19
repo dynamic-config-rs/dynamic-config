@@ -82,6 +82,39 @@ pub(super) fn hook_methods(path: &TokenStream) -> TokenStream {
             Self::dynamic_config_cell().on_reload_with(hook);
         }
 
+        /// The failure twin of [`on_reload`](Self::on_reload): fires for
+        /// every reload that installs nothing, with the `FailureStatus`
+        /// the refusal published. Same panic isolation, same "short
+        /// callbacks" contract; `current()` still answers the last good
+        /// snapshot while it runs.
+        pub fn on_reload_failed<__DynamicConfigHook>(hook: __DynamicConfigHook)
+        where
+            __DynamicConfigHook: ::core::ops::Fn(
+                    &#path::FailureStatus,
+                ) + ::core::marker::Send
+                + ::core::marker::Sync
+                + 'static,
+        {
+            Self::dynamic_config_cell().on_reload_failed(hook);
+        }
+
+        /// [`on_reload_failed`](Self::on_reload_failed), scoped: dropping
+        /// the returned guard unregisters the callback.
+        #[must_use = "dropping the guard unregisters the hook; bind it for \
+                      as long as the hook should fire"]
+        pub fn on_reload_failed_scoped<__DynamicConfigHook>(
+            hook: __DynamicConfigHook,
+        ) -> #path::HookGuard<Self>
+        where
+            __DynamicConfigHook: ::core::ops::Fn(
+                    &#path::FailureStatus,
+                ) + ::core::marker::Send
+                + ::core::marker::Sync
+                + 'static,
+        {
+            Self::dynamic_config_cell().on_reload_failed_scoped(hook)
+        }
+
         /// [`on_reload_with`](Self::on_reload_with), scoped: dropping the
         /// returned guard unregisters the callback.
         #[must_use = "dropping the guard unregisters the hook; bind it for \

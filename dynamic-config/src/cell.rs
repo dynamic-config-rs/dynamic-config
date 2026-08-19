@@ -15,6 +15,11 @@ type Hook<T> = Arc<dyn Fn(&Arc<T>, &Arc<T>) + Send + Sync>;
 /// A callback run after every install, with the whole event.
 type EventHook<T> = Arc<dyn Fn(&ReloadEvent<T>) + Send + Sync>;
 
+/// [`ConfigCell::on_reload_failed`]: the failure's category and key path —
+/// deliberately the [`FailureStatus`] and nothing free-text, for the same
+/// reason the status surface carries no message.
+type FailedHook = Arc<dyn Fn(&crate::reload::FailureStatus) + Send + Sync>;
+
 /// The two hook shapes, in one list.
 ///
 /// One list rather than two, so there is one dispatch loop and the two
@@ -28,6 +33,10 @@ enum Callback<T> {
     /// [`ConfigCell::on_reload_with`]: the whole event, first install
     /// included.
     Event(EventHook<T>),
+    /// [`ConfigCell::on_reload_failed`]: fires when a reload installs
+    /// nothing. Same list as the success forms, so panic isolation and
+    /// registration order cannot drift between the two directions.
+    Failed(FailedHook),
 }
 
 impl<T> Clone for Callback<T> {
@@ -35,6 +44,7 @@ impl<T> Clone for Callback<T> {
         match self {
             Self::Pair(hook) => Self::Pair(Arc::clone(hook)),
             Self::Event(hook) => Self::Event(Arc::clone(hook)),
+            Self::Failed(hook) => Self::Failed(Arc::clone(hook)),
         }
     }
 }
@@ -135,6 +145,12 @@ pub struct ConfigCell<T> {
     last_failure: ArcSwapOption<FailureStatus>,
     consecutive_failures: AtomicU32,
 
+    /// Reloads that installed nothing since the process started. Monotonic
+    /// where `consecutive_failures` resets: the events stream needs a
+    /// counter a success cannot erase, or a refusal raced by an install
+    /// would never be delivered.
+    refusals: std::sync::atomic::AtomicU64,
+
     /// Generation counter and parked wakers, so async tasks can await a reload
     /// instead of polling. No runtime involved: it is an atomic and a list.
     #[cfg(feature = "async")]
@@ -154,6 +170,7 @@ impl<T> ConfigCell<T> {
             last_reason: ArcSwapOption::const_empty(),
             last_failure: ArcSwapOption::const_empty(),
             consecutive_failures: AtomicU32::new(0),
+            refusals: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "async")]
             notify: crate::asynchronous::Notify::new(),
         }
@@ -171,6 +188,7 @@ impl<T> ConfigCell<T> {
             last_reason: ArcSwapOption::const_empty(),
             last_failure: ArcSwapOption::const_empty(),
             consecutive_failures: AtomicU32::new(0),
+            refusals: std::sync::atomic::AtomicU64::new(0),
             #[cfg(feature = "async")]
             notify: crate::asynchronous::Notify::new(),
         }
@@ -322,12 +340,67 @@ impl<T> ConfigCell<T> {
             }
         }
 
-        self.last_failure
-            .store(Some(Arc::new(FailureStatus::of(error))));
+        let status = FailureStatus::of(error);
+
+        self.last_failure.store(Some(Arc::new(status.clone())));
+
+        // `Release`, paired with the events stream's `Acquire` load: a
+        // reader woken by the bump below must see the status stored above.
+        self.refusals
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+
+        // Waiters first, hooks second — the same order an install uses, for
+        // the same reason: one slow callback must not delay every async
+        // reader. `changes()` filters on the *published* generation, which a
+        // refusal does not move, so success waiters see at most a spurious
+        // re-registration; the events stream is who this wake is for.
+        #[cfg(feature = "async")]
+        self.notify.bump();
+
+        self.dispatch_failure(&status);
 
         // The category and the key path, never the value: see `telemetry`.
         #[cfg(feature = "tracing")]
         crate::telemetry::refused::<T>(error);
+    }
+
+    /// Refusals since the process started; zero before the first.
+    ///
+    /// Monotonic — the streak that resets on success is
+    /// [`status().consecutive_failures`](Self::status).
+    #[must_use]
+    pub fn refusals(&self) -> u64 {
+        self.refusals.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Runs every [`on_reload_failed`](Self::on_reload_failed) callback.
+    ///
+    /// The same panic isolation as [`dispatch`](Self::dispatch): a hook that
+    /// panics is reported and skipped, the rest still run, the calling
+    /// thread survives.
+    fn dispatch_failure(&self, status: &FailureStatus) {
+        let Some(hooks) = self.hooks.get() else {
+            return;
+        };
+
+        let hooks = hooks.load();
+
+        for registered in hooks.iter() {
+            let Callback::Failed(hook) = &registered.callback else {
+                continue;
+            };
+
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                hook(status);
+            }));
+
+            if outcome.is_err() {
+                crate::log::warning!(
+                    "a reload-failure hook panicked; it stays registered and \
+                     the remaining hooks still run"
+                );
+            }
+        }
     }
 
     /// What is true of this configuration right now.
@@ -414,6 +487,25 @@ impl<T> ConfigCell<T> {
         let _ = self.register(Callback::Event(Arc::new(hook)));
     }
 
+    /// Registers a callback for every reload that installs nothing.
+    ///
+    /// The callback receives the [`FailureStatus`] — the category, the key
+    /// path, never the message — and runs on whichever thread performed the
+    /// failed reload, under the same contract as
+    /// [`on_reload`](Self::on_reload): keep it short, panics are caught and
+    /// reported, registration is permanent. The next successful install
+    /// does not unregister it.
+    ///
+    /// This is the push half of [`status`](Self::status): a process that
+    /// wants to *react* to refusals — page, count, flip a readiness detail —
+    /// no longer has to poll for them.
+    pub fn on_reload_failed(
+        &self,
+        hook: impl Fn(&crate::reload::FailureStatus) + Send + Sync + 'static,
+    ) {
+        let _ = self.register(Callback::Failed(Arc::new(hook)));
+    }
+
     /// [`on_reload`](Self::on_reload), scoped: dropping the returned guard
     /// unregisters the hook.
     ///
@@ -450,6 +542,22 @@ impl<T> ConfigCell<T> {
         }
     }
 
+    /// [`on_reload_failed`](Self::on_reload_failed), scoped: dropping the
+    /// returned guard unregisters the hook. The same panic isolation and
+    /// "short callbacks" contract.
+    #[must_use = "dropping the guard unregisters the hook; bind it for as long \
+                  as the hook should fire, or use `on_reload_failed` for a \
+                  permanent one"]
+    pub fn on_reload_failed_scoped(
+        &'static self,
+        hook: impl Fn(&crate::reload::FailureStatus) + Send + Sync + 'static,
+    ) -> HookGuard<T> {
+        HookGuard {
+            token: self.register(Callback::Failed(Arc::new(hook))),
+            cell: GuardCell::Static(self),
+        }
+    }
+
     /// The scoped hook over an instance's shared cell; what
     /// [`Dynamic::on_reload_scoped`](crate::Dynamic::on_reload_scoped)
     /// hands out — the guard co-owns the cell, so it outliving the
@@ -474,6 +582,18 @@ impl<T> ConfigCell<T> {
     ) -> HookGuard<T> {
         HookGuard {
             token: cell.register(Callback::Event(Arc::new(hook))),
+            cell: GuardCell::Shared(Arc::clone(cell)),
+        }
+    }
+
+    /// The scoped failure hook over an instance's shared cell; what
+    /// `Dynamic::on_reload_failed_scoped` hands out.
+    pub(crate) fn on_reload_failed_scoped_shared(
+        cell: &Arc<Self>,
+        hook: impl Fn(&crate::reload::FailureStatus) + Send + Sync + 'static,
+    ) -> HookGuard<T> {
+        HookGuard {
+            token: cell.register(Callback::Failed(Arc::new(hook))),
             cell: GuardCell::Shared(Arc::clone(cell)),
         }
     }
@@ -559,6 +679,9 @@ impl<T> ConfigCell<T> {
                         }
                     }
                     Callback::Event(hook) => hook(&event),
+                    // Failure hooks have their own dispatch; an install is
+                    // exactly what they do not fire for.
+                    Callback::Failed(_) => {}
                 }
             }));
 
@@ -627,6 +750,25 @@ impl<T> ConfigCell<T> {
         T: Send + Sync,
     {
         crate::Changes::new(self)
+    }
+
+    /// A stream of installs **and refusals**, where [`changes`](Self::changes)
+    /// delivers installs alone.
+    ///
+    /// Each await resolves with the next [`Event`](crate::Event): a
+    /// [`Reloaded`](crate::Event::Reloaded) for an install, a
+    /// [`Refused`](crate::Event::Refused) for a reload that kept the
+    /// previous snapshot. Latest-wins within each kind — ten installs while
+    /// nothing awaited collapse to one event carrying the newest snapshot —
+    /// but a refusal is never collapsed *into* a success: a refusal raced by
+    /// an install yields both, refusal first.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub fn events(&'static self) -> crate::Events<T>
+    where
+        T: Send + Sync,
+    {
+        crate::Events::new(self)
     }
 
     #[cfg(feature = "async")]

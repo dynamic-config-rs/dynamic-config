@@ -8,7 +8,7 @@ edition.workspace = true
 # dependencies: `core::error::Error` in `no_std` needs 1.81 and inline `const`
 # blocks need 1.79. Declared as 1.83 — the floor CI actually verifies — and
 # still far below anything a device toolchain would struggle with.
-rust-version = "1.83"
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true

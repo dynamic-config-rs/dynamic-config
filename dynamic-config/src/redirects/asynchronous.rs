@@ -44,6 +44,13 @@ macro_rules! __async_methods {
         pub fn changes() -> $crate::Changes<Self> {
             Self::dynamic_config_cell().changes()
         }
+
+        /// `changes()` widened to refusals: a stream of `Event`s —
+        /// installs *and* reloads that kept the previous snapshot.
+        /// The push half of `status()`.
+        pub fn events() -> $crate::Events<Self> {
+            Self::dynamic_config_cell().events()
+        }
     };
 }
 

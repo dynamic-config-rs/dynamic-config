@@ -405,6 +405,18 @@ pub struct LoadSpec<'a> {
     /// Rejects environment values from the yes/no/on/off family instead of
     /// letting them arrive as strings where a boolean was meant.
     pub strict_env: bool,
+    /// Whether a symlink in [`secrets_dir`](Self::secrets_dir) may resolve
+    /// outside that directory.
+    ///
+    /// `false` — the default — refuses the escape with an error naming the
+    /// entry: a directory of mounted credentials that silently reads
+    /// `/etc/shadow` through a planted link is the vulnerability shape
+    /// Pydantic Settings shipped a CVE for in 2026. Links *inside* the
+    /// directory keep working — Kubernetes mounts every key as a symlink
+    /// through `..data`, and those targets live under the same mount.
+    /// `true` restores the old follow-anything behaviour for the rare
+    /// deliberate cross-mount layout.
+    pub allow_external_symlinks: bool,
     /// Whether the documents this reads carry a section header at all.
     ///
     /// `false` — the default — means every top-level key in a document is a
@@ -462,6 +474,7 @@ impl<'a> LoadSpec<'a> {
             nest: DEFAULT_NEST,
             allow_empty_env: false,
             strict_env: false,
+            allow_external_symlinks: false,
             whole_document: false,
         }
     }
@@ -536,6 +549,13 @@ impl<'a> LoadSpec<'a> {
     #[must_use]
     pub const fn with_secrets_dir(mut self, path: &'a str) -> Self {
         self.secrets_dir = Some(path);
+        self
+    }
+
+    /// Sets [`allow_external_symlinks`](Self::allow_external_symlinks).
+    #[must_use]
+    pub const fn with_allow_external_symlinks(mut self, allow: bool) -> Self {
+        self.allow_external_symlinks = allow;
         self
     }
 

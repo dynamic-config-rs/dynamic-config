@@ -23,6 +23,7 @@
 
 - [Serving HTTP](serving-http.md)
 - [The CLI](cli.md)
+- [Containers: Docker, Compose, Podman](containers.md)
 
 # Advanced
 
@@ -42,6 +43,16 @@
 - [Migrating from 0.6](migrations/from-0.6.md)
 - [Cargo Features](features.md)
 - [MSRV & Features](msrv-features.md)
+- [The Compatibility Contract](compatibility.md)
+- [The Performance Budget](performance-budget.md)
+- [Change Notification](change-notification.md)
+- [The Metrics Contract](metrics-contract.md)
+- [Readiness & Liveness](readiness.md)
+- [The Secret Lifecycle](secret-lifecycle.md)
+- [Schema Migration](schema-migration.md)
+- [Kubernetes Files](kubernetes-files.md)
+- [Explain as a Contract](explain-contract.md)
+- [Two-Layer Caching](two-layer-caching.md)
 - [Stability Tiers](stability-tiers.md)
 - [Limitations & Not Planned](limitations.md)
 - [Comparisons](comparisons.md)
@@ -54,3 +65,4 @@
 - [The Rest of the Family](family.md)
 - [Python Bindings](python.md)
 - [Node.js Bindings](node.md)
+- [Kubernetes](kubernetes.md)

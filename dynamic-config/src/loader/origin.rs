@@ -39,8 +39,61 @@ fn message(error: &figment::Error) -> String {
                 kind_of(actual)
             )
         }
-        _ => without_quoted_source(&error.to_string()),
+        _ => without_backticked_values(&without_quoted_source(&error.to_string())),
     }
+}
+
+/// Drops the backtick-quoted payload serde itself embeds in a message.
+///
+/// The figment kinds above are scrubbed structurally, but a serde error
+/// that reaches figment as plain text — `serde_json` failing inside a
+/// whole-document extract renders `invalid type: integer \`555511…\`,
+/// expected a map` — carries the offending *value* in backticks, and a
+/// password mistyped into a numeric field is exactly that value. The
+/// found-value span goes; the expected type, which serde writes in plain
+/// words after the comma, survives. Messages outside serde's two
+/// value-carrying prefixes pass through untouched, so `unknown field
+/// \`retries\`` keeps naming the field — a field name is a key path,
+/// which every diagnostic here is allowed to say.
+///
+/// Found by the `lkg_serves_previous` fuzz target, first corpus run.
+fn without_backticked_values(message: &str) -> String {
+    let leaky = message.contains("invalid type:") || message.contains("invalid value:");
+
+    if !leaky {
+        return message.to_owned();
+    }
+
+    // serde spells the found value two ways: backticks for numbers and
+    // friends, double quotes for strings — the second being the one a
+    // pasted password actually arrives in.
+    let mut out = String::with_capacity(message.len());
+    let mut rest = message;
+
+    loop {
+        let tick = rest.find('`');
+        let quote = rest.find('"');
+
+        let (open, mark) = match (tick, quote) {
+            (Some(t), Some(q)) if t < q => (t, '`'),
+            (Some(t), None) => (t, '`'),
+            (_, Some(q)) => (q, '"'),
+            (None, None) => break,
+        };
+
+        let Some(close) = rest[open + 1..].find(mark) else {
+            break;
+        };
+
+        out.push_str(&rest[..open]);
+        out.push(mark);
+        out.push_str("<redacted>");
+        out.push(mark);
+        rest = &rest[open + 1 + close + 1..];
+    }
+
+    out.push_str(rest);
+    out
 }
 
 /// Drops the source excerpt a parser echoes back at a syntax error.

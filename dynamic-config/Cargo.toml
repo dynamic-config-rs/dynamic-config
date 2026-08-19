@@ -205,6 +205,11 @@ name = "instructions"
 harness = false
 required-features = ["json", "toml"]
 
+[[bench]]
+name = "matrix"
+harness = false
+required-features = ["json"]
+
 [[example]]
 name = "basic"
 required-features = ["json"]

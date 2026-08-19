@@ -4,11 +4,11 @@
 
 **Hot-reloadable, layered configuration for Rust — one attribute, lock-free reads.**
 
-[![CI](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml)
-[![Security](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml)
+[![CI](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/ci.yml)
+[![Security](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml/badge.svg?event=pull_request)](https://github.com/dynamic-config-rs/dynamic-config/actions/workflows/security.yml)
 [![crates.io](https://img.shields.io/crates/v/dynamic-config.svg)](https://crates.io/crates/dynamic-config)
 [![docs.rs](https://img.shields.io/docsrs/dynamic-config)](https://docs.rs/dynamic-config)
-[![MSRV](https://img.shields.io/badge/MSRV-1.71-blue)](https://dynamic-config-rs.github.io/msrv-features.html)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://dynamic-config-rs.github.io/msrv-features.html)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/dynamic-config-rs/dynamic-config/badge)](https://scorecard.dev/viewer/?uri=github.com/dynamic-config-rs/dynamic-config)
 
@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.7.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.7.1", features = ["toml", "watch"] }
 ```
 
 ```rust
@@ -116,19 +116,16 @@ patches automatically. Details in
 
 ## MSRV
 
-| | floor |
-|---|---|
-| `dynamic-config` core | **1.71** |
-| `schema` feature | 1.74 (schemars) |
-| `watch` / `age` / `full` features | 1.85 (measured, not declared) |
-| `dynamic-config-cli` | 1.85 |
-| `dynamic-config-embedded` | 1.83 |
+**1.88, one number for the whole organisation** — core, every feature,
+the CLI and the embedded cell alike. The per-feature ladder collapsed in
+0.7.1 as security work: three advisory fixes the old floors could not
+take are ordinary lockfile entries at 1.88, and older toolchains resolve
+the last pre-raise releases through the MSRV-aware resolver (EOL, per
+the [Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html)).
 
-The store crates, the server and the bindings declare their own floors, in
-their own repositories — a companion pays for what it pulls in.
-
-MSRV changes are breaking. Every floor has a CI row against a real
-toolchain; the full table with reasons is in
+MSRV changes are breaking and announced. The floor has CI rows against
+the real toolchain; the story with reasons — and what each feature
+weighs — is in
 [MSRV & Features](https://dynamic-config-rs.github.io/msrv-features.html).
 
 ## Contributing
@@ -143,6 +140,8 @@ what might be is in [ROADMAP.md](https://github.com/dynamic-config-rs/dynamic-co
 
 What this engine is built on and whose ideas it took —
 [CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md).
+
+What you may build on and find unchanged tomorrow is written down: the [Compatibility Contract](https://dynamic-config-rs.github.io/compatibility.html).
 
 ## License
 

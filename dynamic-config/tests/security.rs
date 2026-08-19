@@ -1026,3 +1026,31 @@ fn a_store_url_never_becomes_a_span_or_event_field() {
         "what survives is the outcome: {lines}"
     );
 }
+
+/// Found by the `lkg_serves_previous` fuzz target on its first corpus
+/// run: a serde error reaching figment as plain text — a whole-document
+/// extract failing on a wrong-typed root — rendered the offending value
+/// in backticks. A password mistyped into a numeric field is exactly
+/// that value.
+#[cfg(feature = "json")]
+#[test]
+fn a_serde_type_error_does_not_quote_the_value() {
+    let text = "\"hunter2-pasted-where-a-number-goes\"";
+    let sources = [dynamic_config::Source::inline(
+        text,
+        dynamic_config::Format::Json,
+    )];
+    let spec = dynamic_config::LoadSpec::new("doc", &sources).with_whole_document(true);
+
+    let error = dynamic_config::load::<u32>(&spec).expect_err("a string is not a u32");
+    let rendered = format!("{error}");
+
+    assert!(
+        !rendered.contains("hunter2"),
+        "the refused value reached a diagnostic: {rendered}"
+    );
+    assert!(
+        rendered.contains("<redacted>") || rendered.contains("invalid type"),
+        "the shape of the failure must survive the scrub: {rendered}"
+    );
+}

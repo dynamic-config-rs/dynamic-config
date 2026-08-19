@@ -1,0 +1,58 @@
+name: Nightly
+
+# The long-running evidence PATH-TO-1.0 §3 asks for, at the cadence a
+# hosted runner allows: a 5-hour soak (the 6-hour job wall minus
+# teardown), the million-reload leak budget, and a corpus run over the
+# property fuzz targets. The 24-hour claim is made from a committed
+# local run (`just soak-24h`), not per-night.
+on:
+  schedule:
+    - cron: "7 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: the five-hour soak holds its invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo run --release -p dynamic-config-soak -- soak --seconds 18000 --readers 32
+
+  leak:
+    name: a million reloads leak nothing
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo run --release -p dynamic-config-soak -- leak --reloads 1000000
+
+  fuzz-corpus:
+    name: the property targets run their corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - run: |
+          cd fuzz
+          for target in merge_laws provenance_winner lkg_serves_previous redaction; do
+            cargo +nightly fuzz run "$target" -- -max_total_time=900
+          done

@@ -46,5 +46,5 @@ dynamic-config completions bash > /etc/bash_completion.d/dynamic-config
 dynamic-config man > /usr/local/share/man/man1/dynamic-config.1
 ```
 
-MSRV 1.85; Beta, like every crate here — the flag surface is settled, and
+MSRV 1.88, the organisation's one floor; Beta, like every crate here — the flag surface is settled, and
 the diagnostics it prints hold the library's own guarantees.

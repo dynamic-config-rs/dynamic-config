@@ -7,8 +7,6 @@ name: Security
 # No push trigger for `dev` — same reasoning as ci.yml: dev travels through
 # pull requests, and a push twin under required checks poisons the gate.
 on:
-  push:
-    branches: [main]
   pull_request:
   schedule:
     - cron: "17 6 * * 1"
@@ -23,6 +21,24 @@ permissions:
   contents: read
 
 jobs:
+  policy:
+    name: the security policy names the current line
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # The stale-table drift this org has already lived through once:
+      # SECURITY.md said 0.0.x while the workspace shipped 0.7. The table's
+      # top row must name the line that is actually published.
+      - run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          line="${version%.*}.x"
+          if ! grep -qF "| ${line}" SECURITY.md; then
+            echo "::error file=SECURITY.md::the supported-versions table does not name ${line} (workspace is ${version})"
+            exit 1
+          fi
+          echo "SECURITY.md names ${line} — current"
+
   deny:
     name: advisories, licences, sources
     runs-on: ubuntu-latest
@@ -127,12 +143,11 @@ jobs:
           # This action reads no configuration file of its own, so the
           # decision is repeated here rather than left to disagree with the
           # scanner's.
-          # GHSA-q83h-524g-xf6h and GHSA-r6v5-fh4h-64xc are h2 0.3 (no
-          # patched release on that line) and `time` (fix needs Rust 1.88,
-          # above the 1.71 floor) — both dev-only through the actix-web
-          # example, both answered at length in deny.toml and
-          # osv-scanner.toml.
-          allow-ghsas: GHSA-rhfx-m35p-ff5j, GHSA-q83h-524g-xf6h, GHSA-r6v5-fh4h-64xc
+          # GHSA-q83h-524g-xf6h is h2 0.3 (no patched release on that
+          # line), dev-only through the actix-web example; answered at
+          # length in deny.toml and osv-scanner.toml. The `time` entry
+          # retired with the 1.88 floor — the fix is simply in the lock now.
+          allow-ghsas: GHSA-rhfx-m35p-ff5j, GHSA-q83h-524g-xf6h
 
   # The one status branch protection requires from this workflow — same
   # reasoning as CI's gate. `supply-chain` IS in the needs even though it only
@@ -141,7 +156,7 @@ jobs:
   # — which is the whole point of running it.
   security-ok:
     name: Security is green
-    needs: [deny, unsafe, secrets-in-diagnostics, supply-chain]
+    needs: [policy, deny, unsafe, secrets-in-diagnostics, supply-chain]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

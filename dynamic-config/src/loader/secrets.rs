@@ -111,6 +111,19 @@ fn read(directory: &Path, spec: &LoadSpec<'_>) -> Result<Vec<Secret>, Error> {
     // a diagnostic.
     paths.sort();
 
+    // The containment root, resolved once: every followed link must land
+    // under it unless the spec opted out. `read_dir` above succeeded, so
+    // the directory exists and canonicalization cannot race its absence.
+    let root = if spec.allow_external_symlinks {
+        None
+    } else {
+        Some(
+            directory
+                .canonicalize()
+                .map_err(|error| io(directory, &error))?,
+        )
+    };
+
     let mut secrets = Vec::new();
 
     for path in paths {
@@ -138,10 +151,46 @@ fn read(directory: &Path, spec: &LoadSpec<'_>) -> Result<Vec<Secret>, Error> {
             continue;
         }
 
+        // Containment: the entry's fully-resolved target must live under
+        // the directory's own resolved root. Kubernetes' `..data` links
+        // pass by construction — their targets are inside the mount — and
+        // a link planted to `/etc/shadow` (or climbing out through `..`)
+        // is refused with the entry's name, never its contents. Reading
+        // happens through the *verified* target below, so the check and
+        // the read cannot be split by a swap of the link itself; swapping
+        // the target file afterwards is the same trust boundary as any
+        // configuration file. This is the shape Pydantic Settings shipped
+        // a CVE for; `LoadSpec::allow_external_symlinks` is the opt-out
+        // for a deliberate cross-mount layout.
+        let read_from = match &root {
+            None => path.clone(),
+            Some(root) => {
+                let target = match path.canonicalize() {
+                    Ok(target) => target,
+                    // The link went dangling between `metadata` and here:
+                    // the same mount-swap instant handled above.
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => return Err(io(&path, &error)),
+                };
+
+                if !target.starts_with(root) {
+                    return Err(Error::invalid(format!(
+                        "secrets directory entry `{}` resolves outside `{}`; \
+                         a symlink escaping the mount is refused (see \
+                         `allow_external_symlinks`)",
+                        path.display(),
+                        directory.display(),
+                    )));
+                }
+
+                target
+            }
+        };
+
         // A file whose bytes are not UTF-8 fails here rather than arriving
         // lossily converted: a mangled credential that loads is worse than
         // one that does not.
-        let text = std::fs::read_to_string(&path).map_err(|error| io(&path, &error))?;
+        let text = std::fs::read_to_string(&read_from).map_err(|error| io(&path, &error))?;
 
         secrets.push(Secret {
             path,
