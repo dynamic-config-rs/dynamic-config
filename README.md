@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.8.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.9.0", features = ["toml", "watch"] }
 ```
 
 ```rust

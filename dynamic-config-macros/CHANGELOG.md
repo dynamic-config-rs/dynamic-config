@@ -25,6 +25,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-20
+
 ## [0.7.1] — 2026-08-19
 
 ## [0.7.0] — 2026-08-18
@@ -136,7 +138,8 @@ Initial release.
 - Compile-fail suites (`trybuild`) pinning the diagnostics, including the
   ones that only exist when a feature is off.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...v0.9.0
 [0.7.1]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.2...v0.6.3
