@@ -10,8 +10,10 @@ that would break a line below is a release that does not ship.
    against `1.x` compiles against `1.(x+1)`. Pre-1.0, the same promise
    holds within a 0.y line: `0.7.z` never breaks a `0.7` user.
 2. **Precedence never silently changes.** The layer order — defaults,
-   discovered files, named files, secrets directory, environment,
-   `--set`, overrides — is part of the API. Reordering it is a major
+   discovered files, named files, remote, secrets directory, `.env`,
+   environment, bindings, `--set`, overrides — is part of the API, and
+   [How resolution works](how-resolution-works.md) is the full order
+   with the argument for each position. Reordering it is a major
    version, loudly, never a side effect.
 3. **Reload-failure semantics never silently change.** A refused
    document leaves the previous snapshot serving — last-known-good is
@@ -20,7 +22,9 @@ that would break a line below is a release that does not ship.
    resumes delivery without a restart.
 4. **`Origin` and provenance are stable.** `source_of` and the explain
    surface keep naming the same winner for the same stack; provenance
-   output only grows fields, never renames or removes them.
+   output only grows fields, never renames or removes them. The origin
+   of a leaf is [recorded as the fold runs](how-resolution-works.md),
+   so it says which layer won rather than what happened to supply it.
 5. **Features are additive-only.** Enabling a cargo feature never
    changes the behaviour of code that compiled without it; no feature
    is ever load-bearing for another's semantics.

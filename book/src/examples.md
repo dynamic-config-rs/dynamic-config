@@ -1,6 +1,6 @@
 # Examples
 
-Thirty of them, each showing one idea. All run from the workspace root.
+Thirty-one of them, each showing one idea. All run from the workspace root.
 
 ## Getting started
 
@@ -71,6 +71,7 @@ For a handler reading **two** sections that must agree,
 | [`encrypted`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/encrypted.rs) | `age`, `json` | A `secrets.json.age` next to a plain `config.json`: generated key, real ciphertext, and what the wrong key looks like. |
 | [`schema`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/schema.rs) | `schema`, `json` | A JSON Schema for the file two config types share, with secrets marked and `required` dropped. |
 | [`no_macro`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/no_macro.rs) | `json` | `load`, `LoadSpec`, `Layer` and `ConfigCell` without the attribute. |
+| [`engines`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/engines.rs) | `json`, `yaml` | Both seams a load can swap: every engine in `engine::all()` folding the same layers to the same answer, every reader in `reader::all()` on the same document, and the one corner where two readers disagree. |
 | [`flat_formats`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/flat_formats.rs) | `ini`, `properties` | The two flat formats as first-class sources: an INI base with a properties override, one resolution — and the layering works across formats. |
 | [`ini_provider`](https://github.com/dynamic-config-rs/dynamic-config/blob/main/dynamic-config/examples/ini_provider.rs) | `json`, `figment` | A format this crate does not read, plugged in as a source: `Source::provider` is the whole extension point, and the layer stack above it is unchanged. |
 

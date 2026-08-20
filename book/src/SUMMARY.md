@@ -8,6 +8,8 @@
 - [The Builder, Feature by Feature](builder-tour.md)
 - [Attribute Reference](attribute-reference.md)
 - [Sources & Precedence](sources-and-precedence.md)
+- [How Resolution Works](how-resolution-works.md)
+- [Engines & Readers](engines.md)
 - [Formats](formats.md)
 - [Document Shape](document-shape.md)
 - [Profiles & Discovery](profiles-and-discovery.md)

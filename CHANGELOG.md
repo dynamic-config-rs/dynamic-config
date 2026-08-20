@@ -25,6 +25,279 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+### Added
+
+- **Watching is part of the store contract.** A store says how it
+  learns that its document changed — `WatchCapability::Native` if it
+  pushes, `Conditional` if it can be asked cheaply, `Interval` if
+  neither — and overrides `RemoteSource::watch` with its own mechanism
+  where it has one. Both are default methods, so no existing store
+  changes and none has to be edited.
+
+  `Remote::watch` and `Remote::watch_async` drive whichever is
+  installed, which is the piece that was missing: the source is held
+  erased, so a watch that was not on the trait could not be reached at
+  all. A store with no watch of its own still gets one — a poll that
+  installs **only a document that differs from the last one**, so a
+  process does not fire every reload hook it has once an interval.
+
+- **`Pace`**: the waits a watch loop makes, as one type. Rounds are
+  spread by up to a quarter in either direction, because fifty replicas
+  started by one rollout otherwise hit a store simultaneously every
+  interval forever; and they double after each failure up to a ceiling,
+  because a store that is down should not be hammered by everything
+  that depends on it. A failing fetch is waited out rather than
+  returned — outliving an outage is what a watch is for.
+
+- **A resolve allocates less** — 1923 to 1760 per load on a
+  twenty-section document, counted rather than estimated. Two things
+  were doing avoidable work on every load, including every reload: the
+  provenance repair cloned the whole resolved tree to enumerate its
+  leaves and then scanned a `Vec` per leaf per layer, and the default
+  engine wrote an origin string onto every value it handed the backend,
+  including tables whose origin nothing reads.
+
+  A third change — packing a layer for the backend at construction
+  rather than when the backend asks — was tried and **reverted**: it
+  moves the copy onto the representation that carries those origin
+  strings, and measured 57 allocations per resolve *worse*.
+
+- **One directory per backend.** Everything about figment — its value
+  conversions, its reader, its fold, its error translation and the
+  provider-reading half of `Source::provider` — was spread across six
+  files; the same was becoming true of `config-rs`. They are
+  `src/backend/figment/` and `src/backend/config_rs/` now, grouped by
+  backend rather than by seam, because that is the axis they change on:
+  a backend's major release, or a decision to stop carrying one, touches
+  one directory. The seams themselves stay beside the contracts they
+  define, and outside that directory nothing in the crate names a
+  backend type except `Source::provider` and the tests that compare
+  against one on purpose.
+
+- **`reader`**: the [`Reader`] trait, `native()`, `config_rs()`,
+  `figment()`, `all()`, `set_reader`, plus `Builder::reader` and
+  `LoadSpec::with_reader`. **Which parser reads a document is a
+  choice**, on the same terms the engine is — and for a reason worth
+  spelling out: this crate's own YAML is `serde_yaml`, which its author
+  archived, and the backend's is `yaml-rust2`, which is maintained.
+
+  **This crate's own parsers stay the default**, unlike the engine,
+  because the two seams differ in what can be proved. A fold is one rule
+  with an implementation on each side and the tests hold both to it leaf
+  by leaf; a parser is a dialect, this crate's INI is the one the book
+  specifies, and `.properties` has no parser anywhere else — a load that
+  chooses a backend's reader still reads one, through this crate's, which
+  `tests/readers.rs` asserts by loading the same document through every
+  reader. `tests/readers.rs`
+  holds every reader to agreement on the shapes documents actually take
+  and to never putting document content in an error — and *records* the
+  two places they diverge rather than smoothing them over.
+
+  A reader that does not read a format hands it to one that does, so the
+  fallback is additive: it can only fire where the chosen reader would
+  have failed outright.
+
+- **`ron` and `json5`**: two read-only formats, parsed by the
+  `config-rs` reader and by nothing in this crate. `save()` refuses
+  them, the same way it refuses INI.
+
+- **`engine`**: the [`Engine`] trait, `native()`, `config_rs()`,
+  `figment()`, `all()`, `set_engine`, `has_engine`, plus
+  `Builder::engine` and `LoadSpec::with_engine`. See the Changed
+  section for what an engine is and what choosing one does — and does
+  not — change. The book's **Engines** page has the contract an
+  implementation owes, the four traps every adapter here fell into,
+  and the checklist for shipping a new one behind its own feature;
+  `all()` is the single list the agreement tests walk, so an engine
+  added to it is compared against the others on every corpus without a
+  test being edited.
+
+- **`Value` takes the obvious conversions**: `From` for the integers,
+  floats, booleans, strings, `Vec`, `BTreeMap` and `Option`, so a tree
+  can be written down in code without naming a variant every time.
+
+- **Three fewer crates in a TOML build, and two floors moved.** This
+  crate's `toml` is declared at the requirement the engine crate
+  declares, so the two share one parser instead of compiling a `0.9`
+  beside a `1.x` — `toml`, `toml_datetime` and their edit half were each
+  in a `features = ["toml"]` graph twice. Reading and writing are
+  unchanged, including the datetime rule the readers agree on.
+
+  The `serde` floor is now `1.0.228` and `serde_json`'s `1.0.149`,
+  because the engine crate requires them; a build resolving minimum
+  versions could not have satisfied both otherwise. Neither moves the
+  MSRV.
+
+- **Every pairwise feature combination is now linted, not just
+  compiled.** The lint gate ran the two feature *extremes*, so anything
+  dead or unreachable only in a build between them was invisible: a
+  refusal helper the reader seam had replaced, a `#[must_use]` missing
+  from `Dynamic::events` where its sibling had one, an unreachable
+  statement in the figment reader with no format feature on. All three
+  are gone, and `cargo hack clippy --feature-powerset -- -D warnings`
+  keeps them gone.
+
+- **`examples/engines.rs`**, the two seams side by side: every engine in
+  `engine::all()` folding the same layers to the same answer, every
+  reader in `reader::all()` on the same document, a `.properties` file
+  read through every one of them — the fallback, printed rather than
+  promised — and the dotted-key corner where two readers part company.
+
+### Changed
+
+- **The resolved tree is this crate's own.** A snapshot holds the
+  crate's [`Value`] rather than the backend's, and reading one into a
+  type goes through this crate's own reader. Two things follow that a
+  caller can see: a comparison no longer has to look past a provenance
+  tag or an integer width to decide whether a value changed, because
+  the tree never carried them; and a read error names the *kind* of
+  thing it found — "invalid type: a string, expected a u16" — where
+  the message used to be scrubbed of the value after the fact. The
+  reading itself is unchanged, held there by a differential test that
+  runs twenty-one target types over generated trees and compares both
+  the value and the path an error stopped at.
+
+- **A format feature turns the parser on in every backend present.**
+  `json`, `toml`, `yaml` and `ini` each enable the matching parser in
+  `config-rs` and in `figment` when those are enabled, through cargo's
+  `backend?/format` form — which fires only when the backend is already
+  on, so none of them enters a build that did not ask for it. What this
+  replaces is a `default-features = false` list that had to be kept in
+  step with a backend's own feature set by hand, and would have gone
+  quietly stale the first time that set changed.
+
+- **The resolution engine is swappable, and the default is
+  [`config`](https://docs.rs/config).** The engine is the step that
+  folds one tree per layer into one configuration — everything before
+  it (discovery, decryption, sections, the environment, `.env`,
+  `--set`) and everything after it (aliases, provenance, the snapshot,
+  the reload) stays this crate's. Two ship: `config-rs`, which is not
+  optional because this crate has no fold of its own, and `figment`
+  behind its feature. A third is anything implementing `Engine`.
+  Choose one per load with `.engine(..)`, or once for the process with
+  `set_engine`.
+
+  This crate did write its own fold for this release, as the reference
+  the others were measured against, and then deleted it: a second
+  implementation of a rule somebody else already implements is
+  maintenance with no reader. The rule stayed, and so did the tests
+  that hold every engine to it.
+
+  **Switching does not change what a configuration means.** Both of them
+  implement the same rule — tables descend, everything else replaces —
+  and the precedence order is decided before an engine is called. That
+  is tested rather than asserted: the whole composition corpus, a
+  generated corpus of layer stacks and the corners where a backend's
+  habits could show through all run through every engine, compared on
+  the tree *and* on the winner of every leaf. Two corners are what the
+  adapters exist to absorb — one backend reads a top-level key as a
+  path, so `{"my.module": "debug"}` would have become a nested table;
+  another cannot report provenance for a key with a dot in it.
+
+- **figment is out of the default dependency graph.** Everything it
+  used to do here except the fold is now this crate's: it parses the
+  documents, walks the environment, reads the value strings, records
+  the provenance, and reads the result into a type. What is left of
+  the backend is one engine, one interop adapter behind the `figment`
+  feature — `Source::provider` still takes a figment provider, and
+  figment is still re-exported for it — and a permanent
+  dev-dependency, because every piece that was ported is proved
+  against the original rather than against a description of it.
+  `cargo tree` on a default build names no figment.
+
+- **The layers compose here now, and provenance is made while they do.**
+  Every source hands over the same thing — a tree of what it has to say
+  about one section — and the fold that merges them in precedence order
+  records the layer that wins each leaf as it wins it, rather than
+  asking afterwards which provider a value came from. Two consequences
+  a caller can see. Provenance no longer depends on **recognising a
+  provider by the words in its name**, which is how a value used to be
+  traced back to the file or variable that set it; the origin is
+  recorded when the layer is built, so it cannot be lost to a backend
+  that renamed something. And `explain()` and `check()` read the
+  contributions that one walk already collected rather than rebuilding
+  the load once per layer.
+
+- **A section is a subtree, not a profile.** Sections were the
+  backend's profiles with a reserved prefix, and about five hundred
+  lines existed to keep the two apart. A section is now what it always
+  looked like: the subtree under its key. `global` and `default` are
+  ordinary section names again rather than words the machinery had to
+  neutralise, and the profile *variants* a file layer overlays
+  (`config.production.toml`) are unchanged.
+
+- **Values written by a program are serialized here now.** A default,
+  an override, a struct on its way to `save()` and the cache all go
+  through one serializer into this crate's tree, held to the original
+  by a test that runs both over the scalars, the tuples, every enum
+  shape, maps and byte strings — including the two shapes both refuse.
+
+- **The environment is walked here now**, and every layer builds this
+  crate's tree rather than the backend's: the prefixed variables, the
+  `.env` files, the bound variables, the secrets directory, `--set`,
+  the defaults and the overrides. The rules that a deployment depends
+  on are written down where they run — the prefix is matched without
+  regard to case, names are lowercased after it, a name with an empty
+  segment is passed by rather than refused, and a blank variable is
+  dropped unless the program asked to keep it. Held to the letter by a
+  test that reads the same variables through both implementations. One
+  consequence worth naming: strict mode and the layer it guards now
+  walk the environment through the same code, so a variable one of
+  them sees is a variable the other sees.
+
+- **Documents are parsed here now.** TOML, JSON and YAML are read
+  straight into this crate's tree through the serde crates it already
+  depended on — the backend was reading them through its own second
+  copies of the same three — and the INI and `.properties` readers,
+  which were always this crate's own, no longer pretend to be the
+  backend's providers. A missing file is answered before a parser is
+  ever built, and a document that is not a table of keys is refused
+  where it is read rather than where it is deserialized.
+
+- **A TOML syntax error no longer risks printing the line it failed
+  on** (security). The parser's own rendering draws that line under a
+  caret — and the line that failed to parse is, on a bad day, the line
+  holding the password. The message is now built from the parser's
+  reason and the position, and never from its picture of the document.
+
+- **Configuration text is read here now.** `8080` becoming a port,
+  `true` becoming a flag and `[a, b]` becoming a list is one grammar
+  in this crate rather than a delegation, and `--set`, `.env` lines
+  and bound variables already share it. The reading is unchanged —
+  ported bug-for-bug and held there by a differential test against the
+  original implementation over 50 000 generated strings, plus a fuzz
+  target that ran 2.8 million inputs without a crash.
+
+### Removed
+
+- **`__fuzz::section_profile`**, the hidden door that mapped a section
+  name to the profile it was filed under. There is no such profile any
+  more, and the property it existed for — that a document's top-level
+  key can never collide with a reserved profile name — is now a test
+  that loads sections called `global` and `default` and reads back what
+  they hold.
+
+### Fixed
+
+- **A configuration value could take the process down** (security).
+  The parser this crate delegated its text reading to indexes a byte
+  range with a character position while resolving escapes, so any
+  quoted string holding a non-ASCII character before an escape —
+  `APP_GREETING='"é\n"'`, a `--set`, a `.env` line — aborted the
+  load instead of returning a value. There was no error to catch: the
+  surface cannot fail, so it panicked. The ported grammar reads those
+  inputs as what they say, pinned by a regression test and by the
+  fuzz target that now covers the surface.
+
+- **A recovery dropped the flag and override layers.** `--set` values
+  and everything `set_override` had written were merged under the bare
+  key while the recovery selected the section profile, so neither was
+  ever read: the cache won instead. The strongest thing a caller can
+  say went missing at exactly the moment somebody was steering a
+  broken start by hand. Both layers now use the same profile
+  `build()` files them under, pinned by a test that fails against the
+  old code.
+
 ## [0.8.0] — 2026-08-19
 
 ### Added

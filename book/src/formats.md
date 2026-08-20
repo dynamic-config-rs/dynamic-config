@@ -12,10 +12,20 @@ naming the feature to enable.
 | INI | `ini` | `.ini` | widened | no |
 | properties | `properties` | `.properties` | widened | no |
 
-The first three are figment's providers. The last two are parsers in this
-crate, added for the configuration that already exists in the world —
-Java services carry `.properties`, and a generation of tools wrote
-`.ini` — with **no new dependency and no effect on the MSRV**.
+All five are read by this crate by default. The first three go through the
+serde crates it already depends on, straight into its own value tree; the
+last two are hand-written parsers, added for the configuration that
+already exists in the world — Java services carry `.properties`, and a
+generation of tools wrote `.ini` — with **no new dependency and no effect
+on the MSRV**.
+
+**Two more arrive with a backend's parser.** RON and JSON5 have no reader
+in this crate; behind the `ron` and `json5` features they are read by the
+`config-rs` reader, and they are read-only — `save()` refuses them the
+same way it refuses INI. A backend's reader can also take over the three
+above it, which is how a deployment gets YAML through a maintained parser.
+[Engines & Readers](engines.md#readers) has the table, the trade and the
+two places the dialects differ.
 
 A `.age` suffix is looked through for all five: `config.ini.age` is INI
 that happens to be encrypted.
@@ -57,6 +67,11 @@ max = 8
 - **A collision is an error, not last-wins.** `a = 1` and `a.b = 2` in
   one document contradict each other, and the error names both keys —
   and only the keys.
+- **One parser, whichever reader is chosen.** Neither backend crate ships
+  a `.properties` parser, so this one reads the format in every build —
+  including a load that selected `config-rs`'s or figment's reader for
+  the YAML beside it. See
+  [Engines and Readers](engines.md#a-reader-that-cannot-read-a-format-hands-it-on).
 
 ```properties
 db.host = db.internal

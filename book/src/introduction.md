@@ -1,7 +1,7 @@
 # dynamic-config
 
 Hot-reloadable, lock-free application configuration for Rust: one attribute
-declares the type, one builder states its sources. Built on [figment].
+declares the type, one builder states its sources.
 
 - **crates.io:** <https://crates.io/crates/dynamic-config>
 - **API documentation:** <https://docs.rs/dynamic-config>
@@ -26,10 +26,12 @@ broken file. This crate is all three.
 | Typed struct API | ✅ | ✅ | partial | ✅ |
 | Async: await config changes | ❌ | ❌ | callback | ✅ |
 
-The loader is figment — layered providers, profile selection and loose typing of
-environment values are problems it already solves well. What this crate adds is
-everything around it: the attribute and its builder, the lock-free snapshot,
-the watcher, and a reload that cannot take the process down.
+The loader is this crate's own: it reads the documents, walks the environment,
+folds the layers in precedence order and records which one won each key as it
+wins. [How resolution works](how-resolution-works.md) is that walk in full.
+Around it sits everything a long-running service needs and a startup-time
+loader does not: the attribute and its builder, the lock-free snapshot, the
+watcher, and a reload that cannot take the process down.
 [Comparisons](comparisons.md) is the row-by-row version of the table above, and
 [CREDITS.md](https://github.com/dynamic-config-rs/dynamic-config/blob/main/CREDITS.md) is
 what this engine owes to each of them.
@@ -38,7 +40,7 @@ what this engine owes to each of them.
 
 | | |
 |---|---|
-| **Three mandatory dependencies** | `figment`, `serde`, `arc-swap`. Every format, client, crypto stack and runtime is behind a feature or in a companion crate |
+| **Two mandatory dependencies** | `serde` and `arc-swap`. The default engine's crate makes a third in a default build and `--no-default-features` takes it away again; every format, client, crypto stack and runtime is behind a feature or in a companion crate |
 | **`#![forbid(unsafe_code)]`** | in every crate here, checked by CI rather than trusted |
 | **MSRV 1.88** | one number for core, every feature, the CLI and the embedded cell — verified against the real toolchain |
 | **No global singleton** | each configuration type owns its storage; there is no `Config::get()` returning something a library set |
@@ -61,6 +63,5 @@ Docker daemon.
 MIT
 
 [`config`]: https://docs.rs/config
-[figment]: https://docs.rs/figment
 [`figment`]: https://docs.rs/figment
 [Viper]: https://github.com/spf13/viper

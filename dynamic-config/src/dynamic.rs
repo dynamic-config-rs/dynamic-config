@@ -339,6 +339,7 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     /// previous snapshot. The push half of [`status`](Self::status).
     #[cfg(feature = "async")]
     #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    #[must_use]
     pub fn events(&self) -> crate::Events<T> {
         crate::Events::new_shared(Arc::clone(&self.cell))
     }

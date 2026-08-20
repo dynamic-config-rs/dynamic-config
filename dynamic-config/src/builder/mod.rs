@@ -131,6 +131,8 @@ pub struct Builder<T> {
     allow_empty_env: bool,
     strict_env: bool,
     whole_document: bool,
+    engine: Option<&'static dyn crate::engine::Engine>,
+    reader: Option<&'static dyn crate::reader::Reader>,
     env_files: Vec<String>,
     secrets_dir: Option<String>,
     allow_external_symlinks: bool,
@@ -170,6 +172,8 @@ impl<T> Clone for Builder<T> {
             allow_empty_env: self.allow_empty_env,
             strict_env: self.strict_env,
             whole_document: self.whole_document,
+            engine: self.engine,
+            reader: self.reader,
             env_files: self.env_files.clone(),
             secrets_dir: self.secrets_dir.clone(),
             allow_external_symlinks: self.allow_external_symlinks,
@@ -209,6 +213,8 @@ impl<T: DeserializeOwned> Builder<T> {
             allow_empty_env: false,
             strict_env: false,
             whole_document: false,
+            engine: None,
+            reader: None,
             env_files: Vec::new(),
             secrets_dir: None,
             allow_external_symlinks: false,
@@ -407,6 +413,42 @@ impl<T: DeserializeOwned> Builder<T> {
         self
     }
 
+    /// Folds this load's layers with `engine` rather than the installed one.
+    ///
+    /// Every engine that ships implements the same merge rule, so this says
+    /// whose code does the folding and not what the configuration means —
+    /// [`engine`](crate::engine) has the list and the two places they cannot
+    /// agree.
+    ///
+    /// ```no_run
+    /// # use serde::Deserialize;
+    /// # #[derive(Deserialize)] struct Db { host: String }
+    /// # #[cfg(feature = "figment")]
+    /// # fn example() -> Result<(), dynamic_config::Error> {
+    /// let config: Db = dynamic_config::Builder::new("db")
+    ///     .file("config.toml")
+    ///     .engine(dynamic_config::engine::figment())
+    ///     .load()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn engine(mut self, engine: &'static dyn crate::engine::Engine) -> Self {
+        self.engine = Some(engine);
+        self
+    }
+
+    /// Parses this load's documents with `reader`.
+    ///
+    /// Every reader is a different *dialect* where the formats overlap, so
+    /// this is a choice with consequences — [`reader`](crate::reader) has
+    /// the table and the divergences.
+    #[must_use]
+    pub fn reader(mut self, reader: &'static dyn crate::reader::Reader) -> Self {
+        self.reader = Some(reader);
+        self
+    }
+
     /// Reads each document as this section's values, with no section header.
     ///
     /// The default is one file, several sections — every top-level key names
@@ -599,6 +641,12 @@ impl<T: DeserializeOwned> Builder<T> {
             .with_whole_document(self.whole_document)
             .with_env_files(&env_files);
 
+        if let Some(engine) = self.engine {
+            spec = spec.with_engine(engine);
+        }
+        if let Some(reader) = self.reader {
+            spec = spec.with_reader(reader);
+        }
         if let Some(prefix) = &self.env {
             spec = spec.with_env(prefix);
         }

@@ -170,14 +170,23 @@ feature table and, if it moves the floor, the MSRV table.
 Changing any of these is fine — arguing for it is the price:
 
 - **Reading is lock-free.** `current()` is an atomic load and nothing more.
-- **`figment` is the loader and does not appear in a signature.** A figment
-  major bump should not be a breaking change here.
+- **The resolution is this crate's, and only the fold is swappable.** An
+  `Engine` folds the collected layers and nothing else; every engine
+  implements the same merge rule, and the tests compare them leaf by leaf on
+  every corpus. Adding one is fine. Letting one change what a configuration
+  means is not.
+- **figment is interop, not the loader.** It is out of the default dependency
+  graph and appears in a signature only behind the `figment` feature, so a
+  figment major bump is not a breaking change here. It stays a permanent
+  dev-dependency: the ported reader, deserializer, serializer and fold are
+  each proved against it rather than against a description of it.
 - **Secrets are paths, never values.** Every diagnostic reports which key moved,
   not what it moved to.
 - **The core crate's MSRV is 1.71**, and every feature that raises it says so in
   the README table. Features that raise it are verified against real toolchains
   in CI, not trusted from a manifest — `age` declares 1.74 and needs 1.85.
-- **No mandatory dependency** beyond `figment`, `serde` and `arc-swap`.
+- **No mandatory dependency** beyond `serde`, `arc-swap` and the default
+  engine's crate. `--no-default-features` leaves the first two.
 
 ## Style
 

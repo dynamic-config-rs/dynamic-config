@@ -21,7 +21,7 @@ single crate in:
 Neither raises the MSRV, and with both off there is no code: the module
 is not compiled, and the read path is byte-for-byte what it was.
 
-The design is the same one the crate applies to runtimes and to figment.
+The design is the same one the crate applies to runtimes and to formats.
 The library states facts; the binary chooses the machinery. An
 application already running a `metrics` recorder or an OpenTelemetry SDK
 reads [`status()`](reload-lifecycle.md) in its own exporter and never

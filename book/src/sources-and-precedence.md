@@ -145,7 +145,7 @@ Turn this on when empty really is a value you need to be able to send.
 DbConfig::builder("db").file("config.toml").env("APP_").strict_env()
 ```
 
-figment reads environment values loosely — ergonomic, and ambiguous at the
+Environment values are read loosely — ergonomic, and ambiguous at the
 edges. `APP_DB_TLS=off` reads like a boolean and arrives as the string
 `"off"`: silently correct into a `String` field, silently wrong everywhere
 else. With `strict_env`, the yes/no/on/off family (and `null`/`nil`/`none`)
@@ -406,9 +406,10 @@ let sources = [Source::provider(&provider)];
 ```
 
 This is the **one** place figment appears in the API, which is why it is behind
-a feature: with it off, a figment major bump is not a breaking change here; with
-it on, you have opted into that coupling knowingly. figment itself is
-re-exported so there is no second version in your graph.
+a feature: with it off figment is not in your graph at all, and a figment major
+bump is not a breaking change here; with it on, you have opted into that
+coupling knowingly. figment itself is re-exported so there is no second version
+in your graph.
 
 Two things become yours to get right. The provider has to produce the section
 as a profile (`.nested()` does that). And provenance comes from the metadata's

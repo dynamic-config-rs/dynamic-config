@@ -12,10 +12,13 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use figment::value::{Dict, Value};
 use serde::de::DeserializeOwned;
 
 use crate::error::{Error, ErrorKind, Origin};
+use crate::value::Value;
+
+/// The shape a resolved section takes: keys at the top, values below.
+type Table = BTreeMap<String, Value>;
 
 /// What happened to one key between two snapshots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -61,7 +64,7 @@ impl fmt::Display for Change {
 /// [`extract`](Self::extract).
 #[derive(Clone, Default)]
 pub struct Snapshot {
-    values: Dict,
+    values: Table,
     /// Where each leaf came from, captured while the figment that knew was
     /// still alive. Empty for a snapshot that was not produced by a live
     /// resolution — one read back from the cache, for instance.
@@ -69,7 +72,7 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    pub(crate) fn new(values: Dict) -> Self {
+    pub(crate) fn new(values: Table) -> Self {
         Self {
             values,
             provenance: BTreeMap::new(),
@@ -106,12 +109,7 @@ impl Snapshot {
     /// included — the paths-only rule governs what this crate *prints*.
     #[must_use]
     pub fn to_value(&self) -> crate::Value {
-        crate::value::Value::Table(
-            self.values
-                .iter()
-                .map(|(key, value)| (key.clone(), crate::value::from_figment(value)))
-                .collect(),
-        )
+        Value::Table(self.values.clone())
     }
 
     /// Deserializes the section into `T`.
@@ -121,18 +119,13 @@ impl Snapshot {
     /// If a required value is missing or cannot become the field's type.
     ///
     /// Errors here carry the key path but **not** the originating file or
-    /// variable: provenance lives in figment's metadata, which a snapshot has
-    /// already left behind. Call [`load`](crate::load) when the error is going
-    /// to be read by a person.
+    /// variable: provenance is captured against the tree, and a snapshot
+    /// handed around on its own has left the sources behind. Call
+    /// [`load`](crate::load) when the error is going to be read by a person.
     pub fn extract<T: DeserializeOwned>(&self) -> Result<T, Error> {
-        Value::from(self.values.clone())
-            .deserialize()
-            // Through the loader's translation, which strips the offending
-            // value out of the backend's message. This used to render
-            // `error.to_string()`, and figment renders a type mismatch as
-            // ``found string "hunter2"`` — the leak the rest of the crate is
-            // built to prevent, on the door that skips the loader.
-            .map_err(|error: figment::Error| crate::loader::translate(&error))
+        let tree = self.to_value();
+
+        T::deserialize(crate::de::Reader(&tree)).map_err(crate::de::Error::into_error)
     }
 
     /// Every key that differs between `self` and `other`, in path order.
@@ -172,11 +165,10 @@ impl Snapshot {
             Error::new(ErrorKind::Missing, "no value at this path").prepend_key(path)
         })?;
 
-        // See `extract`: the translation is what keeps a mistyped secret out
-        // of the message.
-        value
-            .deserialize()
-            .map_err(|error: figment::Error| crate::loader::translate(&error).prepend_key(path))
+        // See `extract`: the reader never renders a value into a message,
+        // which is what keeps a mistyped secret out of one.
+        T::deserialize(crate::de::Reader(value))
+            .map_err(|error| error.into_error().prepend_key(path))
     }
 
     /// This snapshot minus one top-level key — how the cache strips its own
@@ -211,7 +203,7 @@ impl Snapshot {
     #[must_use]
     pub fn sub(&self, path: &str) -> Option<Self> {
         match self.at(path)? {
-            Value::Dict(_, nested) => {
+            Value::Table(nested) => {
                 let prefix = format!("{path}.");
                 let provenance = self
                     .provenance
@@ -236,7 +228,7 @@ impl Snapshot {
         let mut current = self.values.get(segments.next()?)?;
 
         for segment in segments {
-            let Value::Dict(_, nested) = current else {
+            let Value::Table(nested) = current else {
                 return None;
             };
 
@@ -263,7 +255,7 @@ impl Snapshot {
     }
 
     /// The resolved tree, for the few places that need it whole.
-    pub(crate) fn values(&self) -> &Dict {
+    pub(crate) fn values(&self) -> &Table {
         &self.values
     }
 
@@ -313,8 +305,8 @@ impl fmt::Debug for Snapshot {
 /// paths to compare.
 pub fn changed_paths<T: serde::Serialize>(previous: &T, current: &T) -> Result<Vec<Change>, Error> {
     let as_snapshot = |value: &T| -> Result<Snapshot, Error> {
-        match Value::serialize(value) {
-            Ok(Value::Dict(_, dict)) => Ok(Snapshot::new(dict)),
+        match crate::ser::to_value(value) {
+            Ok(crate::Value::Table(table)) => Ok(Snapshot::new(table)),
             Ok(_) => Err(Error::new(
                 ErrorKind::Type,
                 "only a table has paths to compare; this serializes to a scalar",
@@ -327,12 +319,12 @@ pub fn changed_paths<T: serde::Serialize>(previous: &T, current: &T) -> Result<V
 }
 
 /// Records the dotted path of every leaf, treating an empty table as one.
-fn collect_leaves(values: &Dict, path: &mut Vec<String>, paths: &mut Vec<String>) {
+fn collect_leaves(values: &Table, path: &mut Vec<String>, paths: &mut Vec<String>) {
     for (key, value) in values {
         path.push(key.clone());
 
         match value {
-            Value::Dict(_, nested) if !nested.is_empty() => {
+            Value::Table(nested) if !nested.is_empty() => {
                 collect_leaves(nested, path, paths);
             }
             _ => paths.push(path.join(".")),
@@ -343,7 +335,7 @@ fn collect_leaves(values: &Dict, path: &mut Vec<String>, paths: &mut Vec<String>
 }
 
 /// Walks two tables in step, recording the leaves that differ.
-fn compare(previous: &Dict, current: &Dict, path: &mut Vec<String>, changes: &mut Vec<Change>) {
+fn compare(previous: &Table, current: &Table, path: &mut Vec<String>, changes: &mut Vec<Change>) {
     for (key, before) in previous {
         path.push(key.clone());
 
@@ -375,25 +367,12 @@ fn compare_values(
     match (before, after) {
         // Two tables are compared key by key, so a change deep inside one is
         // reported at the leaf that actually moved rather than at the table.
-        (Value::Dict(_, before), Value::Dict(_, after)) => compare(before, after, path, changes),
-        _ if values_equal(before, after) => {}
+        (Value::Table(before), Value::Table(after)) => compare(before, after, path, changes),
+        // No tag and no width to look past: the tree carries what the
+        // configuration said and nothing about how it was carried.
+        _ if before == after => {}
         _ => changes.push(change(path, ChangeKind::Modified)),
     }
-}
-
-/// Compared through this crate's own untagged [`Value`](crate::Value) — the
-/// tree [`Snapshot::to_value`] already hands out — rather than through the
-/// figment value in hand.
-///
-/// figment's value carries a provenance tag and a numeric *width*, neither of
-/// which is part of the configuration: an integer that arrived as `u8` from
-/// one provider and `u64` from another is the same setting. This used to
-/// compare `Debug` renderings, which stripped the tag but kept the width, so
-/// a reload could report every such key as changed — and which made
-/// correctness rest on an upstream crate's rendering, where a future addition
-/// to it would be silent in both directions.
-fn values_equal(before: &Value, after: &Value) -> bool {
-    crate::value::from_figment(before) == crate::value::from_figment(after)
 }
 
 fn change(path: &[String], kind: ChangeKind) -> Change {
@@ -407,7 +386,7 @@ fn change(path: &[String], kind: ChangeKind) -> Change {
 mod tests {
     use super::*;
 
-    fn dict(entries: &[(&str, Value)]) -> Dict {
+    fn dict(entries: &[(&str, Value)]) -> Table {
         entries
             .iter()
             .map(|(key, value)| ((*key).to_owned(), value.clone()))
@@ -426,23 +405,26 @@ mod tests {
         assert!(one.diff(&two).is_empty());
     }
 
-    /// A value as a provider hands it over — figment records where it came
-    /// from in a tag, and two providers tag the same value differently.
+    /// A value as it arrives from a provider, through the conversion every
+    /// resolved document goes through.
+    ///
+    /// The backend records *where* a value came from beside the value, and
+    /// two providers record that differently for the same setting. The tree
+    /// this crate keeps holds the configuration and not the bookkeeping, so
+    /// the difference cannot reach a diff — which is the property this test
+    /// exists for, and it now holds by construction rather than by a
+    /// comparison that remembered to look past a tag.
     fn from_provider(key: &str, value: impl serde::Serialize) -> Value {
-        figment::Figment::from((key, value))
+        let supplied = figment::Figment::from((key, value))
             .find_value(key)
-            .expect("the provider supplies exactly this key")
+            .expect("the provider supplies exactly this key");
+
+        crate::backend::figment::from_figment(&supplied)
     }
 
     #[test]
     fn the_same_value_from_two_providers_is_not_a_change() {
         let (left, right) = (from_provider("host", "a"), from_provider("host", "a"));
-
-        assert_ne!(
-            left.tag(),
-            right.tag(),
-            "the point of this test is two differently tagged values"
-        );
 
         assert!(snapshot(&[("host", left)])
             .diff(&snapshot(&[("host", right)]))
@@ -451,12 +433,12 @@ mod tests {
 
     /// The width an integer arrived at is the provider's business, not the
     /// configuration's: `5432` from a `u8`-shaped default and `5432` from a
-    /// JSON file are one setting. Comparing rendered figment values called
+    /// JSON file are one setting. Comparing rendered backend values called
     /// that a change on every reload.
     #[test]
     fn the_same_number_at_two_widths_is_not_a_change() {
-        let narrow = snapshot(&[("port", Value::from(1u8))]);
-        let wide = snapshot(&[("port", Value::from(1u64))]);
+        let narrow = snapshot(&[("port", from_provider("port", 1u8))]);
+        let wide = snapshot(&[("port", from_provider("port", 1u64))]);
 
         assert!(narrow.diff(&wide).is_empty());
     }

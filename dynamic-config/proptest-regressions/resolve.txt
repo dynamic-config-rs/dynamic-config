@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7ecafb0183e51e3624d2986d05f490119e70595533256f3f27afd65fe1bd8fad # shrinks to layers = [("layer0", {"a": {}})]
+cc 589b82964fa789dff50626b250486d211df86d724426267fffe35f928cada34a # shrinks to layers = [("layer0", {"a": {}}), ("layer0", Null)]
+cc aed9f3bbdda43a556a8f51ccf5134fbff222af6070a66745815ecc22d9dd1bf0 # shrinks to layers = [("layer0", {"b": {}}), ("layer0", {"b": {"a": Null}})]

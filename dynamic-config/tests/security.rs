@@ -1049,8 +1049,15 @@ fn a_serde_type_error_does_not_quote_the_value() {
         !rendered.contains("hunter2"),
         "the refused value reached a diagnostic: {rendered}"
     );
+    // The shape of the failure has to survive whatever removed the value.
+    // A document that is one bare scalar is refused as soon as it is read —
+    // a section is keys — so the reading that names the shape is the parse's,
+    // not the deserializer's; either wording is a real account of what was
+    // wrong, and neither may carry what was there.
     assert!(
-        rendered.contains("<redacted>") || rendered.contains("invalid type"),
+        rendered.contains("<redacted>")
+            || rendered.contains("invalid type")
+            || rendered.contains("table of keys"),
         "the shape of the failure must survive the scrub: {rendered}"
     );
 }

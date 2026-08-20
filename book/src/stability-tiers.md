@@ -106,4 +106,5 @@ or a compatibility shim, and 1.0 of this crate will not extend its
 stability promise across that boundary. That is the feature's price and
 its point: it exists precisely so the long tail of sources this crate
 will never ship stays reachable without forking. With the feature off —
-the default — a figment major bump is not a breaking change here.
+the default — figment is not in the dependency graph at all, and a figment
+major bump is not a breaking change here.

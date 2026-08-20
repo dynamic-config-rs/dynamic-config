@@ -79,10 +79,11 @@ per-key report of which layer won.
 
 ## figment
 
-figment is what this crate is built on, so the comparison is unusually
-concrete: **everything figment does is still reachable from here**, and
-everything this crate reports about provenance *is* figment metadata,
-converted at the one moment the figment that knew is still alive.
+figment is what this crate was built on through 0.8, and the port that
+replaced it was proved against it piece by piece — so the comparison is
+unusually concrete. The resolution here is now this crate's own
+([How resolution works](how-resolution-works.md)), and figment remains
+reachable as a source: `Source::provider` takes any figment provider.
 
 Providers are merged in order, profiles select between variants, `extract()`
 produces the struct, and `Metadata` records where each value came from.
@@ -95,11 +96,12 @@ rather than against the working directory.
 
 - **You are already holding one.** Rocket's configuration is a figment. Using
   the mechanism your framework already exposes beats adding a second one.
-- **You want figment's profiles.** This crate spends profiles on **sections** —
-  `builder("db")` selects the `db` profile — and rebuilds the profile *idea*
-  on top with [`profile_env`](profiles-and-discovery.md#profile_env) and
-  sibling files. A provider's own profiles
-  therefore cannot pass through; see
+- **You want figment's profiles.** A section here is the subtree under its
+  key, and the profile *idea* is rebuilt on top with
+  [`profile_env`](profiles-and-discovery.md#profile_env) and sibling files.
+  A provider handed to `Source::provider` has three of its profiles read —
+  the default, the section's own name, and `global` — and a profile
+  *hierarchy* therefore cannot pass through; see
   [Not planned](limitations.md#not-planned).
 - **You want to assemble and extract yourself.** If the configuration is read
   once and stored wherever your application already stores things, the storage
@@ -137,7 +139,7 @@ running the program.
 
 ## What it costs
 
-- **Weight.** figment, serde and arc-swap are unconditional; everything else is
+- **Weight.** serde and arc-swap are unconditional; everything else is
   a [feature or a companion crate](features.md). serde and a format crate is a
   smaller dependency than any of the three libraries, and always will be.
 - **Global storage.** A configuration type's snapshot, layers and bindings live

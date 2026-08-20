@@ -9,12 +9,30 @@ not come for.
 ## Built on
 
 **[figment](https://docs.rs/figment)** — the layering and merge engine
-underneath every load. Providers, profiles, the `Value` tree and the
-merge semantics are figment's; what this crate adds is the declaration,
-the snapshot cell, the watcher, provenance that survives the merge, and
-a set of refusals figment deliberately leaves to its caller. Where the
-two disagree — reserved profile names, environment provenance — the
-reasoning is in [the book](book/src/limitations.md), not here.
+underneath every load through 0.8, and the shape of the one that
+replaced it. The precedence model, the merge rule, the loose reading of
+environment values and the widening a configuration value gets on its way
+into a type are all figment's, and this crate's own implementations of
+them were ported from it and are held to it: figment is a **permanent
+dev-dependency**, and differential tests compare the value-string reader,
+the deserializer, the serializer and the fold against the original on
+every run. It ships as an optional
+[engine and reader](book/src/engines.md), and stays reachable as a source
+through `Source::provider`.
+
+**[config](https://docs.rs/config)** (`config-rs`) — the **engine**: the
+fold that merges the collected layers, and an optional reader beside it.
+It is not optional, because this crate has no fold of its own — it had
+one, and deleting a second implementation of somebody else's rule was
+worth more than keeping it. Two things it brings that this crate does not
+have on its own — a maintained YAML parser (`yaml-rust2`, where this
+crate's own `serde_yaml` is archived), and RON and JSON5, which nothing
+here parses.
+
+Having two independent implementations of the same merge rule is worth
+more than either of them: the property test that holds every engine to
+the same tree and the same winner for every leaf can only exist because
+there is something to compare against.
 
 **[serde](https://serde.rs)** — the only bound this crate puts on a
 configuration type is `DeserializeOwned`, which is why a plain struct, a

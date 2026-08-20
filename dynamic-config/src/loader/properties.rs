@@ -18,87 +18,59 @@
 //!   in one document contradict each other, and the error names both
 //!   keys — and only the keys.
 
-use std::path::PathBuf;
-
-use figment::value::{Dict, Map};
-use figment::Profile;
-use figment::{Metadata, Provider};
+use std::collections::BTreeMap;
 
 use super::ini::{insert, scalar};
+use crate::error::{Error, ErrorKind};
+use crate::value::Value;
 
-/// The provider behind [`Format::Properties`](crate::Format::Properties).
-pub(crate) struct Properties {
-    text: Result<String, String>,
-    path: Option<PathBuf>,
+/// Reads `.properties` text into a document.
+///
+/// # Errors
+///
+/// On a line with no separator, a key that is empty or has an empty
+/// segment, an escape the format does not define, and a key that would have
+/// to be both a value and a table. Every message names the line, never the
+/// value.
+pub(crate) fn parse(text: &str) -> Result<Value, Error> {
+    let mut root: BTreeMap<String, Value> = BTreeMap::new();
+
+    for (number, line) in logical_lines(text) {
+        let trimmed = line.trim_start();
+
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+            continue;
+        }
+
+        let (raw_key, raw_value) =
+            split(trimmed).ok_or_else(|| refused(number, "no `=` or `:` separator"))?;
+
+        let key = unescape(raw_key.trim(), number).map_err(parse_error)?;
+        let value = unescape(raw_value.trim_start(), number).map_err(parse_error)?;
+
+        if key.is_empty() {
+            return Err(refused(number, "a separator with no key before it"));
+        }
+
+        let path: Vec<&str> = key.split('.').collect();
+
+        if path.iter().any(|part| part.is_empty()) {
+            return Err(refused(number, &format!("`{key}` has an empty segment")));
+        }
+
+        insert(&mut root, &path, scalar(&value), number).map_err(parse_error)?;
+    }
+
+    Ok(Value::Table(root))
 }
 
-impl Properties {
-    pub(crate) fn file(path: impl Into<PathBuf>) -> Self {
-        let path = path.into();
-
-        Self {
-            text: std::fs::read_to_string(&path).map_err(|error| error.to_string()),
-            path: Some(path),
-        }
-    }
-
-    pub(crate) fn string(text: &str) -> Self {
-        Self {
-            text: Ok(text.to_owned()),
-            path: None,
-        }
-    }
+/// A refusal that names the line and nothing on it.
+fn refused(line: usize, reason: &str) -> Error {
+    Error::new(ErrorKind::Parse, format!("line {line}: {reason}"))
 }
 
-impl Provider for Properties {
-    fn metadata(&self) -> Metadata {
-        match &self.path {
-            Some(path) => Metadata::from("properties file", path.as_path()),
-            None => Metadata::named("properties source"),
-        }
-    }
-
-    fn data(&self) -> Result<Map<Profile, Dict>, figment::Error> {
-        let text = match &self.text {
-            Ok(text) => text,
-            Err(error) => return Err(figment::Error::from(error.clone())),
-        };
-
-        let mut root = Dict::new();
-
-        for (number, line) in logical_lines(text) {
-            let trimmed = line.trim_start();
-
-            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
-                continue;
-            }
-
-            let (raw_key, raw_value) = split(trimmed).ok_or_else(|| {
-                figment::Error::from(format!("line {number}: no `=` or `:` separator"))
-            })?;
-
-            let key = unescape(raw_key.trim(), number).map_err(figment::Error::from)?;
-            let value = unescape(raw_value.trim_start(), number).map_err(figment::Error::from)?;
-
-            if key.is_empty() {
-                return Err(figment::Error::from(format!(
-                    "line {number}: a separator with no key before it"
-                )));
-            }
-
-            let path: Vec<&str> = key.split('.').collect();
-
-            if path.iter().any(|part| part.is_empty()) {
-                return Err(figment::Error::from(format!(
-                    "line {number}: `{key}` has an empty segment"
-                )));
-            }
-
-            insert(&mut root, &path, scalar(&value), number).map_err(figment::Error::from)?;
-        }
-
-        Ok(Map::from([(Profile::Default, root)]))
-    }
+fn parse_error(reason: String) -> Error {
+    Error::new(ErrorKind::Parse, reason)
 }
 
 /// Joins continuation lines: a line whose backslashes at the end number

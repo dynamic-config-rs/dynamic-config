@@ -23,9 +23,9 @@ SETTINGS.apply(br#"{"interval_ms": 250, "verbose": true}"#, Format::Json)?;
 
 ## Why a separate crate
 
-The core crate reads files, searches directories and merges layers with
-figment. A microcontroller has none of that, and figment is `std` — so
-this is **not** the core with a feature switched off. It is the same
+The core crate reads files, searches directories and folds layers into a
+tree. A microcontroller has none of that — no filesystem, no allocator —
+so this is **not** the core with a feature switched off. It is the same
 *shape*, built from what a device actually has.
 
 **What it keeps:** a snapshot in a `static` replaced whole (a reader
@@ -38,7 +38,7 @@ executor all drive it.
 
 **What it cannot keep, and why:** files, discovery and profiles (no
 filesystem); environment variables (no environment); layered merging
-(figment is `std`, and a value tree allocates); `Arc` snapshots (no
+(a value tree allocates); `Arc` snapshots (no
 allocator — readers clone the value out, which for a struct of scalars is
 a memcpy; `T: Clone` is the price of admission); provenance (one source —
 the question does not arise).

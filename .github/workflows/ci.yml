@@ -186,18 +186,25 @@ jobs:
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
         with:
           tool: cargo-hack
-      # Every combination has to compile, not just the ones we happen to test.
+      # Every combination has to compile *warning-free*, not just the ones we
+      # happen to test.
       #
       # `--depth 2` rather than the full powerset: the full set is thousands
       # of builds, and the pairs are where feature interactions actually live —
       # a `cfg` that is wrong is almost always wrong for one feature or for two
       # together.
-      - run: cargo hack check -p dynamic-config --feature-powerset --depth 2
+      #
+      # `clippy … -D warnings` rather than `check`: the lint job runs the two
+      # feature *extremes*, and a dead function or an unreachable statement in
+      # a build between them shows up here or nowhere. `--lib` because a
+      # combination's examples and tests are the `check` job's business, and
+      # `-D warnings` after `--` reaches this crate and not its dependencies.
+      - run: cargo hack clippy -p dynamic-config --feature-powerset --depth 2 --lib -- -D warnings
       # The two features that gate a *public API* rather than an internal path
-      # get their own check with everything else off, because that is the
+      # get their own run with everything else off, because that is the
       # combination a user reaching for one of them will have.
-      - run: cargo check -p dynamic-config --no-default-features --features figment
-      - run: cargo check -p dynamic-config --no-default-features --features decrypt
+      - run: cargo clippy -p dynamic-config --no-default-features --features figment --lib -- -D warnings
+      - run: cargo clippy -p dynamic-config --no-default-features --features decrypt --lib -- -D warnings
 
   loader:
     needs: [changes]

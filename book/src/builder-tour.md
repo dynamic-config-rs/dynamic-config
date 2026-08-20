@@ -123,7 +123,7 @@ value.
 AppConfig::builder("app").env("APP_").strict_env().init()?;
 ```
 
-figment reads environment values loosely: `8080` reaches a `u16`, `true` a
+Environment values are read loosely: `8080` reaches a `u16`, `true` a
 `bool`. Loose is ergonomic and ambiguous at the edges — `APP_APP_TLS=off`
 reads like a boolean and arrives as the string `"off"`, silently right in
 a `String` field and silently wrong everywhere else. Strict mode makes the

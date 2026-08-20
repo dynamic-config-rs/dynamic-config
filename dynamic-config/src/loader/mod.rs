@@ -1,20 +1,23 @@
-//! The loader, built on [`figment`](https://docs.rs/figment).
+//! The loader: every source's say, folded in precedence order.
 //!
-//! figment is the only backend. It already solves layered providers, profile
-//! selection and loose typing of environment values; reimplementing that would
-//! mean maintaining a second set of edge cases that behave *almost* the same.
-//!
-//! What this module owns is the arrangement:
+//! One walk collects a *contribution* per layer — a tree of what that layer
+//! has to say about the section being loaded, and where it said it — and
+//! [`resolve::compose`](crate::resolve::compose) folds them lowest to
+//! highest, recording the layer that wins each leaf as it wins it. Nothing
+//! afterwards has to guess where a value came from:
 //!
 //! ```text
-//! files (left → right, later wins)   →  nested providers
-//!                                    →  Env::prefixed(..).split("__")
-//!                                    →  select(key)
-//!                                    →  extract()
+//! defaults · discovered · files · remote · secrets · .env
+//!          · environment · bindings · flags · overrides
+//!     │
+//!     └── one contribution each ──▶ fold ──▶ (tree, origin per leaf)
+//!                                              │
+//!                                              └── aliases, then the snapshot
 //! ```
 //!
-//! and the translation of `figment::Error` into this crate's [`Error`], so no
-//! figment type reaches a caller's signature.
+//! **The precedence order lives in [`contributions`] and nowhere else.**
+//! Adding a layer means adding a call, and the position needs an argument in
+//! a comment beside it.
 
 mod aliases_pass;
 mod environment;
@@ -22,16 +25,14 @@ mod environment;
 // so the module compiles for either feature; the `Ini` provider itself is
 // gated inside.
 #[cfg(any(feature = "ini", feature = "properties"))]
-mod ini;
-mod origin;
+pub(crate) mod ini;
+pub(crate) mod origin;
 #[cfg(feature = "properties")]
-mod properties;
+pub(crate) mod properties;
 mod recover;
 mod secrets;
 pub(crate) mod sections;
 
-use figment::value::Dict;
-use figment::Figment;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -39,349 +40,85 @@ use std::sync::Arc;
 use serde::de::DeserializeOwned;
 
 use crate::error::{Error, Origin};
-use crate::layer::{DEFAULTS_NAME, FLAGS_NAME, OVERRIDES_NAME};
 use crate::snapshot::Snapshot;
 use crate::source::LoadSpec;
 
 use aliases_pass::apply_aliases;
-use environment::{environment, merge_env_files};
-use origin::convert;
-use secrets::merge_secrets_dir;
 
-pub(crate) use origin::translate;
 pub(crate) use recover::recover;
-pub(crate) use sections::parse_document;
-
-/// Metadata name for the recovery provider.
-pub(crate) const CACHED_NAME: &str = "the last configuration that worked";
-
-/// The figment profile a section's data files under.
-///
-/// Prefixed, because figment reserves two profile names with inheritance
-/// semantics — `global` overrides every profile's own values, `default`
-/// seeds them — and an unprefixed mapping handed those powers to any
-/// config file with an innocently named top-level table, silently and
-/// invisibly to every diagnostic. Both sides go through here: the `Sections`
-/// provider files each top-level key this way, and every select asks the
-/// same way, so a user's key can never collide with figment's machinery.
-pub(crate) fn section_profile(key: &str) -> String {
-    format!("section:{key}")
-}
-
-/// Prefixed onto a remote store's own description, so that a value traced back
-/// to one names the store rather than reporting "an inline source" — which is
-/// what figment sees, and is the wrong answer to the question being asked.
-const REMOTE_PREFIX: &str = "the remote store ";
 
 pub(crate) fn load<T: DeserializeOwned>(spec: &LoadSpec<'_>) -> Result<T, Error> {
-    merged(spec)?
-        .extract()
-        .map_err(|error| convert(error, spec))
-}
+    let snapshot = resolved(spec)?;
 
-/// The composed figment: every layer merged, aliases applied, the section
-/// selected. What every question below starts from.
-pub(crate) fn merged(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    Ok(apply_aliases(build(spec)?, spec).select(section_profile(spec.key)))
+    // A snapshot on its own reports the path and not the source, because it
+    // has been handed around without them. Here the sources are still in
+    // reach, so the leaf that failed is looked up and the error says which
+    // file or variable to go and fix.
+    snapshot.extract().map_err(|error| {
+        let path = error.path();
+
+        match snapshot.source_of(&path) {
+            Some(origin) if !path.is_empty() => error.with_origin(origin.clone()),
+            _ => error,
+        }
+    })
 }
 
 /// Resolves the section without deserializing it.
 pub(crate) fn snapshot(spec: &LoadSpec<'_>) -> Result<Snapshot, Error> {
-    resolved(spec).map(|(snapshot, _figment)| snapshot)
+    resolved(spec)
 }
 
-/// The resolved section together with the figment it came from.
+/// Every layer, folded in precedence order, with the record of who won what.
 ///
-/// For a caller that wants to ask [`origin_in`] many times: `check()` reports
-/// the origin of every leaf key, and building the figment per question would
-/// re-read and re-parse every source once per key — O(keys × sources) file
-/// I/O for one report. `extract` takes `&self`, so the figment survives it.
-pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<(Snapshot, Figment), Error> {
-    let figment = merged(spec)?;
-    let mut snapshot = figment
-        .extract::<Dict>()
-        .map(Snapshot::new)
-        .map_err(|error| convert(error, spec))?;
+/// One walk of the sources answers every question below: `check()` reports
+/// the origin of every leaf, and asking a source per key would re-read and
+/// re-parse every file once per key — O(keys × sources) of file I/O for one
+/// report. The snapshot carries its provenance with it instead.
+pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<Snapshot, Error> {
+    let engine = spec.engine();
+    let mut collected = contributions(spec)?;
+    let (mut tree, mut provenance) = crate::resolve::compose(engine, collected.take_layers())?;
 
-    // The one moment the figment that knows where every value came from is
-    // still alive — asked for every leaf before it is dropped, so the
-    // snapshot can answer `source_of` for itself later.
-    let provenance = snapshot
-        .leaf_paths()
-        .into_iter()
-        .filter_map(|path| match origin_in(&figment, &path, spec.nest) {
-            // An `Unknown` row answers the question with a shrug; absence
-            // says the same without taking up a slot.
-            Origin::Unknown => None,
-            origin => Some((path, origin)),
-        })
-        .collect();
+    apply_aliases(&mut tree, &mut provenance, &collected, spec);
+
+    // The environment layer names the prefix; a leaf it supplied can name the
+    // variable, which is the answer somebody is actually looking for.
+    for (path, origin) in &mut provenance {
+        if let crate::Origin::Env(_) = origin {
+            *origin = origin::refine_env(origin.clone(), path.split('.'), spec.nest);
+        }
+    }
+
+    let mut snapshot = Snapshot::new(tree);
     snapshot.attach_provenance(provenance);
 
-    Ok((snapshot, figment))
+    Ok(snapshot)
 }
 
-/// Where `path` comes from, in a figment [`resolved`] already built.
-pub(crate) fn origin_in(figment: &Figment, path: &str, nest: &str) -> Origin {
-    origin::refine_env(
-        figment
-            .find_metadata(path)
-            .map_or(Origin::Unknown, origin::origin_of),
-        path.split('.'),
-        nest,
-    )
+/// A parser's own account of a failure, with anything it quoted from the
+/// document taken out.
+///
+/// The line a parser stopped on is frequently the line holding the
+/// password, and a message is the one place a configuration value has no
+/// business appearing.
+pub(crate) fn redacted(message: &str) -> String {
+    origin::without_backticked_values(message)
 }
 
-/// Where the value at `path` would come from, if anywhere.
+/// An environment origin narrowed from the prefix to the variable that
+/// actually supplied this leaf.
+pub(crate) fn refine(origin: Origin, path: &str, nest: &str) -> Origin {
+    origin::refine_env(origin, path.split('.'), nest)
+}
+
 pub(crate) fn source_of(spec: &LoadSpec<'_>, path: &str) -> Result<Option<Origin>, Error> {
-    Ok(merged(spec)?.find_metadata(path).map(|metadata| {
-        origin::refine_env(origin::origin_of(metadata), path.split('.'), spec.nest)
-    }))
+    Ok(resolved(spec)?.source_of(path).cloned())
 }
 
 /// Whether anything supplies `path`.
 pub(crate) fn is_set(spec: &LoadSpec<'_>, path: &str) -> Result<bool, Error> {
-    Ok(merged(spec)?.contains(path))
-}
-
-/// One layer of the precedence order.
-///
-/// A layer knows three things: what it is called in diagnostics, whether the
-/// spec configures it at all, and how it merges itself into a figment. Both
-/// [`build`] and [`explain`](crate::explain) walk the same table, so the
-/// composed load and the per-layer explanation cannot disagree about what the
-/// layers are or which order they come in.
-pub(crate) struct LayerDef {
-    name: &'static str,
-    active: fn(&LoadSpec<'_>) -> bool,
-    merge: fn(Figment, &LoadSpec<'_>) -> Result<Figment, Error>,
-}
-
-/// **The precedence order lives here and nowhere else.** Adding a layer means
-/// adding a row, and the position needs an argument in a comment.
-const LAYERS: &[LayerDef] = &[
-    // Merged first, so anything at all displaces them.
-    LayerDef {
-        name: "default",
-        active: |spec| spec.defaults.is_some_and(|layer| !layer.is_empty()),
-        merge: merge_defaults,
-    },
-    // Discovered files sit below the explicitly listed ones: `files = [..]`
-    // is a deliberate statement, a search result is a guess about the
-    // machine.
-    LayerDef {
-        name: "discovered",
-        active: |spec| spec.search.is_some(),
-        merge: merge_discovered,
-    },
-    LayerDef {
-        name: "file",
-        active: |spec| !spec.sources.is_empty(),
-        merge: merge_listed,
-    },
-    // Above the files: what a central store distributes should beat what a
-    // package shipped. Below the environment, which comes next.
-    LayerDef {
-        name: "remote",
-        active: |spec| {
-            spec.remote
-                .is_some_and(|remote| remote.document().is_some())
-        },
-        merge: merge_remote,
-    },
-    // Above the remote store and below the environment, which is the same
-    // argument made twice: a mounted secret is a fact about *this*
-    // deployment, so it beats a document a central store hands to every
-    // deployment alike — and loses to a variable exported for this one run,
-    // which is more specific still. pydantic-settings agrees on the second
-    // half and has no remote layer to disagree about the first.
-    LayerDef {
-        name: "secrets",
-        active: |spec| spec.secrets_dir.is_some(),
-        merge: merge_secrets_dir,
-    },
-    // A `.env` is the environment layer sourced from disk, so it goes just
-    // below the real thing: a variable somebody exported for this run beats
-    // a file in the repository.
-    LayerDef {
-        name: ".env",
-        active: |spec| !spec.env_files.is_empty(),
-        merge: merge_env_files,
-    },
-    // Filed under the same profile the files use, so one `select` sees both.
-    // Merged after every file, so the environment wins over all of them.
-    LayerDef {
-        name: "environment",
-        active: |spec| spec.full_env_prefix().is_some(),
-        merge: merge_environment,
-    },
-    // Above the environment: a binding, like a flag, is a deliberate act of
-    // wiring rather than whatever the deployment happens to export.
-    LayerDef {
-        name: "binding",
-        active: |spec| {
-            spec.env_bindings
-                .is_some_and(|bindings| !bindings.is_empty())
-        },
-        merge: merge_bindings,
-    },
-    // A flag is typed by a person for this one run.
-    LayerDef {
-        name: "flag",
-        active: |spec| spec.flags.is_some_and(|layer| !layer.is_empty()),
-        merge: merge_flags,
-    },
-    // Merged last, so nothing displaces them. This is what makes a test
-    // authoritative without editing anything on disk.
-    LayerDef {
-        name: "override",
-        active: |spec| spec.overrides.is_some_and(|layer| !layer.is_empty()),
-        merge: merge_overrides,
-    },
-];
-
-/// Assembles the providers for `spec`, in precedence order.
-fn build(spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    // Unconditional, not positional: a path-shaped profile must be rejected
-    // whether or not any layer that *uses* it is active — an env-only load
-    // with `profile_env` pointing at `../secrets` is exactly the load that
-    // must not wait for a file layer to notice.
-    sections::validated_profile(spec)?;
-
-    let mut figment = Figment::new();
-
-    for layer in LAYERS {
-        if (layer.active)(spec) {
-            figment = (layer.merge)(figment, spec)?;
-        }
-    }
-
-    Ok(figment)
-}
-
-/// Every active layer's name next to a figment holding only that layer —
-/// what [`crate::explain`] walks to answer "who had what to say".
-///
-/// "Active" means the layer has something to say at all: the generated code
-/// wires every runtime layer unconditionally, so `Some` alone would put an
-/// empty `flag` row in every table. Content decides, not wiring.
-pub(crate) fn layer_figments(spec: &LoadSpec<'_>) -> Result<Vec<(&'static str, Figment)>, Error> {
-    // The same unconditional guard as `build` — the two walk the same table
-    // and must refuse the same profiles.
-    sections::validated_profile(spec)?;
-
-    LAYERS
-        .iter()
-        .filter(|layer| (layer.active)(spec))
-        .map(|layer| {
-            Ok((
-                layer.name,
-                (layer.merge)(Figment::new(), spec)?.select(section_profile(spec.key)),
-            ))
-        })
-        .collect()
-}
-
-fn merge_defaults(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    match spec.defaults {
-        Some(defaults) => {
-            Ok(figment.merge(defaults.provider(&section_profile(spec.key), DEFAULTS_NAME)))
-        }
-        None => Ok(figment),
-    }
-}
-
-fn merge_discovered(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    let profile = sections::validated_profile(spec)?;
-    let layout = sections::Layout::of(spec);
-
-    if let Some(search) = &spec.search {
-        for (path, format) in search.resolve() {
-            figment = sections::merge_file(figment, &path, format, layout)?;
-            figment = sections::merge_profile_variant(
-                figment,
-                &path,
-                format,
-                profile.as_deref(),
-                layout,
-            )?;
-        }
-    }
-
-    Ok(figment)
-}
-
-fn merge_listed(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    let profile = sections::validated_profile(spec)?;
-    let layout = sections::Layout::of(spec);
-
-    for source in spec.sources {
-        figment = sections::merge(figment, source, layout)?;
-
-        if let (Some(path), Some(format)) = (source.path(), source.format()) {
-            figment = sections::merge_profile_variant(
-                figment,
-                Path::new(path),
-                format,
-                profile.as_deref(),
-                layout,
-            )?;
-        }
-    }
-
-    Ok(figment)
-}
-
-fn merge_remote(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    if let Some(remote) = spec.remote {
-        if let Some(document) = remote.document() {
-            let name = format!(
-                "{REMOTE_PREFIX}{}",
-                remote.describe().unwrap_or_else(|| "(unnamed)".to_owned())
-            );
-
-            return sections::merge_named_text(
-                figment,
-                &document.text,
-                document.format,
-                &name,
-                None,
-                sections::Layout::of(spec),
-            );
-        }
-    }
-
-    Ok(figment)
-}
-
-fn merge_environment(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    match spec.full_env_prefix() {
-        Some(prefix) => {
-            if spec.strict_env {
-                environment::reject_ambiguous(&prefix)?;
-            }
-
-            Ok(figment.merge(environment(
-                &prefix,
-                spec.key,
-                spec.nest,
-                spec.allow_empty_env,
-            )))
-        }
-        None => Ok(figment),
-    }
-}
-
-fn merge_bindings(mut figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    if let Some(bindings) = spec.env_bindings {
-        let fallback = env_file_entries(spec)?;
-
-        for binding in bindings.providers(spec.key, spec.allow_empty_env, fallback) {
-            figment = figment.merge(binding);
-        }
-    }
-
-    Ok(figment)
+    Ok(resolved(spec)?.contains(path))
 }
 
 /// What the `.env` files say, for the bindings to fall back to.
@@ -428,29 +165,211 @@ pub(crate) fn env_file_entries(
     Ok(Arc::default())
 }
 
-fn merge_flags(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    match spec.flags {
-        Some(flags) => Ok(figment.merge(flags.provider(&section_profile(spec.key), FLAGS_NAME))),
-        None => Ok(figment),
-    }
-}
-
-fn merge_overrides(figment: Figment, spec: &LoadSpec<'_>) -> Result<Figment, Error> {
-    match spec.overrides {
-        Some(overrides) => {
-            Ok(figment.merge(overrides.provider(&section_profile(spec.key), OVERRIDES_NAME)))
-        }
-        None => Ok(figment),
-    }
-}
-
 /// Fuzzing doors — see `crate::__fuzz`.
 #[cfg(feature = "ini")]
-pub(crate) fn __fuzz_ini(text: &str) -> ini::Ini {
-    ini::Ini::string(text)
+pub(crate) fn __fuzz_ini(text: &str) -> Result<crate::Value, Error> {
+    ini::parse(text)
 }
 
 #[cfg(feature = "properties")]
-pub(crate) fn __fuzz_properties(text: &str) -> properties::Properties {
-    properties::Properties::string(text)
+pub(crate) fn __fuzz_properties(text: &str) -> Result<crate::Value, Error> {
+    properties::parse(text)
+}
+
+// ---------------------------------------------------------------------------
+// Contributions: every layer's say, in this crate's own tree.
+//
+// The composition the loader is moving onto. Each function here answers the
+// same question the matching `merge_*` above answers, in the shape
+// `resolve::compose` folds — and `tests/composition.rs` composes a spec both
+// ways and compares the tree and the winner of every leaf.
+// ---------------------------------------------------------------------------
+
+/// Every layer's contribution, in precedence order.
+pub(crate) fn contributions(spec: &LoadSpec<'_>) -> Result<crate::resolve::Collected, Error> {
+    // Unconditional, not positional: a path-shaped profile must be rejected
+    // whether or not any layer that *uses* it is active — an env-only load
+    // with `profile_env` pointing at `../secrets` is exactly the load that
+    // must not wait for a file layer to notice.
+    sections::validated_profile(spec)?;
+
+    let mut collected = crate::resolve::Collected::default();
+
+    // Collected first, so anything at all displaces them.
+    collect_defaults(&mut collected, spec);
+    // Discovered files sit below the explicitly listed ones: `files = [..]`
+    // is a deliberate statement, a search result is a guess about the
+    // machine.
+    collect_discovered(&mut collected, spec)?;
+    collect_listed(&mut collected, spec)?;
+    // Above the files: what a central store distributes should beat what a
+    // package shipped. Below the environment, which comes further down.
+    collect_remote(&mut collected, spec)?;
+    // Above the remote store and below the environment, which is the same
+    // argument made twice: a mounted secret is a fact about *this*
+    // deployment, so it beats a document a central store hands to every
+    // deployment alike — and loses to a variable exported for this one run,
+    // which is more specific still. pydantic-settings agrees on the second
+    // half and has no remote layer to disagree about the first.
+    secrets::collect(&mut collected, spec)?;
+    // A `.env` is the environment layer sourced from disk, so it goes just
+    // below the real thing: a variable somebody exported for this run beats
+    // a file in the repository.
+    environment::collect_env_files(&mut collected, spec)?;
+    collect_environment(&mut collected, spec)?;
+    // Above the environment: a binding, like a flag, is a deliberate act of
+    // wiring rather than whatever the deployment happens to export.
+    collect_bindings(&mut collected, spec)?;
+    // Flags, then overrides, last of all — a flag is typed by a person for
+    // this one run, and nothing displaces an override. That is what makes a
+    // test authoritative without editing anything on disk.
+    collect_runtime(&mut collected, spec);
+
+    Ok(collected)
+}
+
+fn collect_defaults(into: &mut crate::resolve::Collected, spec: &LoadSpec<'_>) {
+    if let Some(defaults) = spec.defaults {
+        if !defaults.is_empty() {
+            into.layer("default", Origin::Runtime("default"), defaults.tree());
+        }
+    }
+}
+
+fn collect_discovered(
+    into: &mut crate::resolve::Collected,
+    spec: &LoadSpec<'_>,
+) -> Result<(), Error> {
+    let profile = sections::validated_profile(spec)?;
+    let layout = sections::Layout::of(spec);
+
+    if let Some(search) = &spec.search {
+        for (path, format) in search.resolve() {
+            sections::collect_file(into, "discovered", &path, format, layout, spec.key)?;
+            sections::collect_profile_variant(
+                into,
+                "discovered",
+                &path,
+                format,
+                profile.as_deref(),
+                layout,
+                spec.key,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_listed(into: &mut crate::resolve::Collected, spec: &LoadSpec<'_>) -> Result<(), Error> {
+    let profile = sections::validated_profile(spec)?;
+    let layout = sections::Layout::of(spec);
+
+    for source in spec.sources {
+        sections::collect_source(into, "file", source, layout, spec.key)?;
+
+        if let (Some(path), Some(format)) = (source.path(), source.format()) {
+            sections::collect_profile_variant(
+                into,
+                "file",
+                Path::new(path),
+                format,
+                profile.as_deref(),
+                layout,
+                spec.key,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_remote(into: &mut crate::resolve::Collected, spec: &LoadSpec<'_>) -> Result<(), Error> {
+    let Some(remote) = spec.remote else {
+        return Ok(());
+    };
+
+    let Some(document) = remote.document() else {
+        return Ok(());
+    };
+
+    let store = remote.describe().unwrap_or_else(|| "(unnamed)".to_owned());
+    let parsed = crate::document::parse_with(spec.reader(), &document.text, document.format)?;
+
+    let (section, siblings) = sections::section_of(
+        sections::table_of(parsed),
+        sections::Layout::of(spec),
+        spec.key,
+    )?;
+
+    into.document("remote", &Origin::Remote(store), section, siblings);
+
+    Ok(())
+}
+
+fn collect_environment(
+    into: &mut crate::resolve::Collected,
+    spec: &LoadSpec<'_>,
+) -> Result<(), Error> {
+    let Some(prefix) = spec.full_env_prefix() else {
+        return Ok(());
+    };
+
+    // The invariant a caller opted into is checked before the layer is
+    // built, not after: an ambiguous spelling is refused whether or not the
+    // value it holds would have won anything.
+    if spec.strict_env {
+        environment::reject_ambiguous(&prefix)?;
+    }
+
+    let tree = crate::env_layer::tree(&prefix, spec.nest, spec.allow_empty_env);
+
+    if let crate::Value::Table(values) = tree {
+        // Recorded even when it is empty: a configured prefix that supplied
+        // nothing is an answer — `explain` prints it as `absent`, which is
+        // how somebody finds out their variable is spelled wrong.
+        into.layer(
+            // The prefix, until `refine_env` narrows a leaf to the variable
+            // that actually supplied it.
+            "environment",
+            Origin::Env(format!("{}*", prefix.to_ascii_uppercase())),
+            values,
+        );
+    }
+
+    Ok(())
+}
+
+fn collect_bindings(
+    into: &mut crate::resolve::Collected,
+    spec: &LoadSpec<'_>,
+) -> Result<(), Error> {
+    let Some(bindings) = spec.env_bindings else {
+        return Ok(());
+    };
+
+    let fallback = env_file_entries(spec)?;
+
+    for (path, variable, value) in bindings.resolved(spec.allow_empty_env, fallback) {
+        let mut values = std::collections::BTreeMap::new();
+        crate::layer::insert_path(&mut values, &path, value);
+
+        into.layer("binding", Origin::Env(variable), values);
+    }
+
+    Ok(())
+}
+
+fn collect_runtime(into: &mut crate::resolve::Collected, spec: &LoadSpec<'_>) {
+    if let Some(flags) = spec.flags {
+        if !flags.is_empty() {
+            into.layer("flag", Origin::Runtime("command-line flag"), flags.tree());
+        }
+    }
+
+    if let Some(overrides) = spec.overrides {
+        if !overrides.is_empty() {
+            into.layer("override", Origin::Runtime("override"), overrides.tree());
+        }
+    }
 }

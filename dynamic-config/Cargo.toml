@@ -1,6 +1,6 @@
 [package]
 name = "dynamic-config"
-description = "Hot-reloadable, lock-free application configuration with a one-attribute API, built on figment."
+description = "Hot-reloadable, lock-free application configuration with a one-attribute API."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -16,13 +16,25 @@ exclude.workspace = true
 
 [features]
 default = ["json"]
-json = ["figment/json", "dep:serde_json"]
-toml = ["figment/toml", "dep:toml"]
-yaml = ["figment/yaml", "dep:serde_yaml"]
-# Hand-written parsers over figment's provider seam — no new dependency.
+# A format feature says *this build reads and writes that format*, and
+# turns the matching parser on in whichever backend is present. The `?/`
+# form fires only when the backend is enabled, so there is no
+# `default-features = false` list to keep in step with a backend's own
+# feature set — which is the maintenance this shape exists to avoid.
+json = ["dep:serde_json", "config_rs/json", "figment?/json"]
+toml = ["dep:toml", "config_rs/toml", "figment?/toml"]
+yaml = ["dep:serde_yaml", "config_rs/yaml", "figment?/yaml"]
+# Hand-written parsers, like every other format reader here — no new dependency.
 # INI's dialect and properties' deliberate JDK deviations are in the book.
-ini = []
+# INI has two readers here — this crate's own, whose dialect the book
+# documents, and the backend's `rust-ini`. `.properties` has one.
+ini = ["config_rs/ini"]
 properties = []
+# Read-only formats, and neither is parsed by code in this crate: they
+# arrive with the `config-rs` reader and `save()` refuses them, the same
+# way it refuses INI.
+ron = ["config_rs/ron"]
+json5 = ["config_rs/json5"]
 watch = ["dep:notify"]
 tracing = ["dep:tracing"]
 # The engine's own diagnostics through the `log` crate's global logger —
@@ -43,10 +55,13 @@ schema = ["dep:schemars", "dep:serde_json"]
 # The `Decryptor` trait and `set_decryptor`, for a scheme of your own. Pulls in
 # `zeroize`, so the decrypted text is wiped whatever the scheme is.
 decrypt = ["dep:zeroize"]
-# `Source::provider`, and figment itself re-exported. The only feature that puts
-# figment in a signature: with it off, a figment major bump is not a breaking
-# change here, and with it on you have opted into that coupling knowingly.
-figment = []
+# Interop: `Source::provider`, so a figment provider can be one layer of a
+# load, and figment itself re-exported. **Off by default** — the engine
+# resolves configuration itself and figment is not in the default dependency
+# graph. The only feature that puts figment in a signature: with it off, a
+# figment major bump is not a breaking change here, and with it on you have
+# opted into that coupling knowingly.
+figment = ["dep:figment"]
 # `.env` files, read as the environment layer rather than as documents.
 dotenv = []
 # Transparent decryption of `age`-encrypted config files.
@@ -61,6 +76,8 @@ full = [
     "yaml",
     "ini",
     "properties",
+    "ron",
+    "json5",
     "watch",
     "async",
     "tokio",
@@ -80,18 +97,55 @@ dynamic-config-macros = { workspace = true }
 # is the union's, which is what `-Z direct-minimal-versions` measures.
 arc-swap = "1.9"
 log = { version = "0.4.22", optional = true }
-serde = "1.0.221"
-# The loader. Not optional: it is the only backend.
-figment = { version = "0.10.19", default-features = false, features = ["env"] }
+# `1.0.228`: `config` requires `serde_core ^1.0.228`, and `serde x` pins
+# `serde_core =x` — so under `-Z direct-minimal-versions` a lower floor
+# here contradicts the engine this crate folds with.
+serde = "1.0.228"
+# Interop only, and off by default: the resolution, the parsers, the value
+# tree and the deserializer are all this crate's own. Kept as a permanent
+# dev-dependency below, where it is the oracle the port is proved against.
+figment = { version = "0.10.19", optional = true, default-features = false, features = [
+    "env",
+] }
+# **The engine**: the fold that merges the collected layers, and an
+# optional reader beside it. Not optional, because this crate has no fold
+# of its own — carrying a second implementation of a rule somebody else
+# already implements is maintenance with no reader.
+#
+# Renamed, because the crate is called `config` and this crate's attribute
+# is `#[config(secret)]`: with the plain name in scope, rustc appends
+# "`config` is in scope, but it is a crate, not an attribute" to a
+# diagnostic that was clear without it.
+#
+# `default-features = false` so the backend's own idea of a sensible build
+# does not decide this one's: the format features above turn on exactly
+# the parsers this crate names, and nothing else follows.
+config_rs = { package = "config", version = "0.15.25", default-features = false }
 clap = { version = "4.4", optional = true, default-features = false, features = [
     "std",
 ] }
 
-# Writing configuration back out. figment reads through its own copies of these;
-# depending on them directly costs no extra compilation, only the serializers it
-# does not expose.
-serde_json = { version = "1.0.127", optional = true }
-toml = { version = "0.9", optional = true }
+# Reading and writing configuration. Reading has alternatives — a backend's
+# reader can take a format over — but **writing has none**: neither backend
+# here has a serializer at all, so these are what `save()` and
+# `Value::render` are built on and the reason the format features cannot be
+# satisfied by a backend alone.
+# `1.0.149`: the `config` crate's `json` feature — which this crate's own
+# `json` turns on — requires it, and under `-Z direct-minimal-versions`
+# every direct declaration is pinned to its own floor, so a lower one here
+# is a contradiction rather than a wider range.
+serde_json = { version = "1.0.149", optional = true }
+# `1.0.6`: the same requirement `config` declares, so the two share one
+# TOML parser instead of compiling a `0.9` beside a `1.x` — three crates
+# (`toml`, `toml_datetime`, and their edit half) that used to be in a
+# `features = ["toml"]` build twice. Nothing in the port changed: this
+# crate reads with `from_str` and writes with `to_string_pretty`, and both
+# mean what they meant.
+toml = { version = "1.0.6", optional = true }
+# YAML is the case that does not unify: this crate's writer is built on
+# `serde_yaml` and the backend reads with `yaml-rust2`, so a build that
+# turns YAML on carries both. The archived parser leaves when YAML writing
+# does, not when a different reader is chosen.
 serde_yaml = { version = "0.9", optional = true }
 
 schemars = { version = "1.2", optional = true, default-features = false, features = [
@@ -105,20 +159,35 @@ zeroize = { version = "1.8", optional = true }
 
 notify = { version = "8.0", optional = true }
 tracing = { version = "0.1.40", optional = true }
+# `time` beside `rt`: the default async watch polls on a timer, and this
+# crate picks no runtime of its own to get one from.
 tokio = { version = "1.47", optional = true, default-features = false, features = [
     "rt",
+    "time",
 ] }
 
 [dev-dependencies]
-serde = { version = "1.0.221", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+# **The oracle, permanently.** This crate's value-string parser, its
+# deserializer, its serializer and its fold were ported from figment, and each
+# is proved against the original here rather than against a description of it.
+# A dev-dependency: it is not in a user's graph unless they ask for the
+# `figment` feature.
+figment = { version = "0.10.19", default-features = false, features = [
+    "env",
+    "json",
+    "toml",
+    "yaml",
+] }
 schemars = "1.2"
 # The example encrypts a file before reading it back, which is what a
 # deployment does once with the CLI.
 age = "0.12"
 
 clap = { version = "4.4", features = ["derive"] }
-# Only for inspecting what `save` wrote.
-serde_json = "1.0.127"
+# Only for inspecting what `save` wrote. The floor is the one above, for
+# the same reason: one workspace resolves once.
+serde_json = "1.0.149"
 
 # `3.26`: `gix-odb` requires it, and `dynamic-config-python-remote` puts the
 # git store in the same graph as everything else. `-Z direct-minimal-versions`
@@ -141,8 +210,9 @@ trybuild = "1.0"
 [target.'cfg(not(any(loom, shuttle)))'.dev-dependencies]
 # The statistics-driven benches (`benches/engine.rs`). Default features off:
 # the HTML reports pull a plotting stack nobody reads in CI. Held at 0.5,
-# not the newest: 0.6+ requires `clap ^4.5`, and the CLI pins `clap 4.4`
-# for the MSRV floor — one workspace lockfile cannot hold both.
+# not the newest: 0.6+ requires `clap ^4.5`, and this crate declares `^4.4`
+# so a user on clap 4.4 can still enable the `clap` feature — one workspace
+# lockfile cannot hold both.
 criterion = { version = "0.5", default-features = false }
 # `benches/instructions.rs`. The library half only; the `iai-callgrind-runner`
 # binary it shells out to is installed separately and must match this version
@@ -319,6 +389,10 @@ required-features = ["json"]
 [[example]]
 name = "ini_provider"
 required-features = ["figment", "json"]
+
+[[example]]
+name = "engines"
+required-features = ["json", "yaml", "properties"]
 
 [[example]]
 name = "flat_formats"

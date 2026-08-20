@@ -47,6 +47,13 @@ debug-assertions = true
 overflow-checks = true
 
 [[bin]]
+name = "text_value"
+path = "fuzz_targets/text_value.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "units"
 path = "fuzz_targets/units.rs"
 test = false

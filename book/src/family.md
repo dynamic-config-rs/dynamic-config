@@ -28,3 +28,11 @@ the engine-side view and the adapter-side view of one design.
 knows nothing else about it. That is what lets the stores live elsewhere
 without this crate having a feature flag for each of them, and what lets
 somebody write a store this project has never heard of.
+
+The trait carries **watching** as well as reading. A store says how it
+learns that its document changed — `Native` if it pushes, `Conditional` if
+it can be asked cheaply, `Interval` if neither — and overrides `watch` with
+its own mechanism where it has one. A store that says nothing still gets
+watched, by a poll that is spread across a fleet and backs off through an
+outage. [Hot Reload & Watching](hot-reload.md#watching-a-remote-store) is
+the caller's side.

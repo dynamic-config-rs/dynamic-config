@@ -32,6 +32,16 @@ pub enum Format {
     /// Java-style `.properties`, via the `properties` feature. UTF-8,
     /// dotted keys nest, collisions are errors.
     Properties,
+    /// RON, via the `ron` feature — **read only**.
+    ///
+    /// No reader here is written in this crate; it comes from the
+    /// [`config-rs` reader](crate::reader::config_rs), and neither that
+    /// crate nor this one has a writer for it. `save()` refuses it, the
+    /// same way it refuses INI.
+    Ron,
+    /// JSON5, via the `json5` feature — **read only**, on the same terms
+    /// as [`Ron`](Self::Ron).
+    Json5,
 }
 
 impl Format {
@@ -63,6 +73,8 @@ impl Format {
             Self::Yaml => "yaml",
             Self::Ini => "ini",
             Self::Properties => "properties",
+            Self::Ron => "ron",
+            Self::Json5 => "json5",
         }
     }
 
@@ -78,6 +90,8 @@ impl Format {
             "yaml" | "yml" => Some(Self::Yaml),
             "ini" => Some(Self::Ini),
             "properties" => Some(Self::Properties),
+            "ron" => Some(Self::Ron),
+            "json5" | "jsonc" => Some(Self::Json5),
             _ => None,
         }
     }
@@ -109,6 +123,8 @@ enum Kind<'a> {
     /// Somebody else's figment provider, merged in place.
     #[cfg(feature = "figment")]
     Provider(&'a (dyn figment::Provider + Send + Sync)),
+    /// Somebody else's `config` source, likewise.
+    ConfigSource(&'a (dyn config_rs::Source + Send + Sync)),
 }
 
 /// One layer of configuration.
@@ -229,6 +245,31 @@ impl<'a> Source<'a> {
         }
     }
 
+    /// A [`config`](https://docs.rs/config) source, as one layer.
+    ///
+    /// The twin of [`provider`](Self::provider) for the other backend, at
+    /// the same precedence slot and with the same job: a store, a format
+    /// or a shape this crate does not ship, wired in without forking it.
+    /// Anything implementing `config::Source` — including that crate's own
+    /// `File`, `Environment` and `Config` — is one.
+    ///
+    /// The values it collects are taken as this section's, whole: a
+    /// `config` source has no notion of the sections this crate loads by,
+    /// so narrowing one would be inventing a rule its author never wrote.
+    /// Hand over a source that carries this section's keys.
+    ///
+    /// The `Send + Sync` bound is not decoration: a `LoadSpec` is moved to
+    /// another thread by `load_async` and by the file watcher.
+    #[must_use]
+    pub const fn config_source(source: &'a (dyn config_rs::Source + Send + Sync)) -> Self {
+        Self {
+            kind: Kind::ConfigSource(source),
+            // It parses nothing: the values are already the backend's.
+            // `format()` says so by answering `None`.
+            format: Format::Json,
+        }
+    }
+
     /// This source's format, for the kinds that parse text.
     ///
     /// `None` for a [`provider`](Self::provider), which hands over values that
@@ -238,6 +279,7 @@ impl<'a> Source<'a> {
         match self.kind {
             #[cfg(feature = "figment")]
             Kind::Provider(_) => None,
+            Kind::ConfigSource(_) => None,
             _ => Some(self.format),
         }
     }
@@ -293,6 +335,14 @@ impl<'a> Source<'a> {
             _ => None,
         }
     }
+
+    /// The `config` source this is, if it is one.
+    pub(crate) fn foreign_config(&self) -> Option<&'a (dyn config_rs::Source + Send + Sync)> {
+        match self.kind {
+            Kind::ConfigSource(source) => Some(source),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Debug for Source<'_> {
@@ -312,6 +362,11 @@ impl std::fmt::Debug for Source<'_> {
                 .debug_tuple("Provider")
                 .field(&provider.metadata().name)
                 .finish(),
+            // The backend's own `Debug` is derived and prints whatever
+            // the source holds — a file's path, an environment prefix,
+            // and for `Config` its entire collected tree. So only the
+            // shape, as everywhere else here.
+            Kind::ConfigSource(_) => f.write_str("ConfigSource"),
         }
     }
 }
@@ -430,6 +485,21 @@ pub struct LoadSpec<'a> {
     /// from it. It simply stops being looked for inside the document. See
     /// [`with_whole_document`](Self::with_whole_document).
     pub whole_document: bool,
+    /// Which engine folds this load's layers.
+    ///
+    /// `None` — the default — uses whatever
+    /// [`set_engine`](crate::engine::set_engine) installed, and the crate's
+    /// default engine when nothing did. Every engine that ships implements
+    /// the same merge rule, so this chooses whose code runs and not what a
+    /// configuration means.
+    pub engine: Option<&'static dyn crate::engine::Engine>,
+    /// Which reader parses this load's documents.
+    ///
+    /// `None` — the default — uses whatever
+    /// [`set_reader`](crate::reader::set_reader) installed, and this
+    /// crate's own when nothing did. A reader that cannot read a format
+    /// hands it to one that can.
+    pub reader: Option<&'static dyn crate::reader::Reader>,
 }
 
 impl std::fmt::Debug for LoadSpec<'_> {
@@ -476,6 +546,38 @@ impl<'a> LoadSpec<'a> {
             strict_env: false,
             allow_external_symlinks: false,
             whole_document: false,
+            engine: None,
+            reader: None,
+        }
+    }
+
+    /// Folds this load's layers with `engine`, whatever is installed.
+    #[must_use]
+    pub const fn with_engine(mut self, engine: &'static dyn crate::engine::Engine) -> Self {
+        self.engine = Some(engine);
+        self
+    }
+
+    /// Parses this load's documents with `reader`, whatever is installed.
+    #[must_use]
+    pub const fn with_reader(mut self, reader: &'static dyn crate::reader::Reader) -> Self {
+        self.reader = Some(reader);
+        self
+    }
+
+    /// The reader this load's documents go through.
+    pub(crate) fn reader(&self) -> &'static dyn crate::reader::Reader {
+        match self.reader {
+            Some(reader) => reader,
+            None => crate::reader::installed(),
+        }
+    }
+
+    /// The engine this load folds with.
+    pub(crate) fn engine(&self) -> &'static dyn crate::engine::Engine {
+        match self.engine {
+            Some(engine) => engine,
+            None => crate::engine::installed(),
         }
     }
 

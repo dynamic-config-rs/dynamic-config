@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "arc-swap",
  "dynamic-config-macros",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-config-macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

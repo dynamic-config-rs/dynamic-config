@@ -51,6 +51,17 @@ jobs:
           # duplicate-dependency policy in deny.toml is enforced somewhere
           # rather than assumed to be enforced somewhere else.
           command: check
+          # An exception that no longer matches anything is a decision about
+          # a dependency that left, still being carried as though it were
+          # current — and the reason beside it is then documentation of
+          # something untrue. This is the only way that drift is visible
+          # without somebody going and looking, so it fails the job.
+          arguments: --all-features
+          # After the subcommand, not before it: the action puts
+          # `arguments` ahead of `check`, where a lint level is not a
+          # flag cargo-deny takes — it exits on the usage message
+          # rather than on anything it found.
+          command-arguments: -D advisory-not-detected
 
   unsafe:
     name: no unsafe code

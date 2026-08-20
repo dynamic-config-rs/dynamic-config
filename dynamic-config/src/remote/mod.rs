@@ -111,9 +111,9 @@ mod watch;
 pub use sink::RemoteSink;
 #[cfg(feature = "async")]
 pub use source::AsyncRemoteSource;
-pub use source::{Fetched, RemoteSource};
+pub use source::{Fetched, RemoteSource, WatchCapability};
 pub use status::RemoteStatus;
-pub use watch::{RemoteWatch, Watching};
+pub use watch::{Pace, RemoteWatch, Watching};
 
 use std::sync::Arc;
 
@@ -456,6 +456,161 @@ impl Remote {
     #[doc(hidden)]
     pub fn install_if_for_loom(&self, generation: u64, document: Fetched) -> Result<(), Error> {
         self.install_if(generation, document)
+    }
+
+    /// How the installed store learns that its document changed.
+    ///
+    /// `None` when nothing is installed. What an agent reads to decide
+    /// whether to run a watch at all, and what a report prints so an
+    /// operator can see why a change took as long as it did.
+    #[must_use]
+    pub fn watch_capability(&self) -> Option<WatchCapability> {
+        match self.state().source.as_ref()? {
+            Kind::Blocking(source) => Some(source.watch_capability()),
+
+            #[cfg(feature = "async")]
+            Kind::Asynchronous(source) => Some(source.watch_capability()),
+        }
+    }
+
+    /// Watches the installed store, keeping every document it delivers.
+    ///
+    /// The store's own mechanism where it has one — a blocking query, a
+    /// stream, a subscription — and a jittered, backing-off poll where it
+    /// does not. `interval` is the poll period, and a *resync* period for a
+    /// store that pushes: a stream that has silently stalled looks exactly
+    /// like a store where nothing has changed.
+    ///
+    /// Blocks until the watch is stopped, so it belongs on a thread of its
+    /// own. Each document is stored the way a
+    /// [`refresh`](Self::refresh) stores one, generation fence included —
+    /// a document from a source that has since been replaced is discarded
+    /// rather than installed.
+    ///
+    /// # Errors
+    ///
+    /// If no source is installed, if the installed one is async, or if the
+    /// store's watch gives up. A *fetch* failing is not an error: a watch
+    /// outlives an outage by design.
+    pub fn watch(&self, watching: &Watching, interval: Duration) -> Result<(), Error> {
+        let (source, fence) = {
+            let state = self.state();
+
+            match state.source.as_ref() {
+                Some(Kind::Blocking(source)) => (Arc::clone(source), Fence::of(&state)),
+
+                #[cfg(feature = "async")]
+                Some(Kind::Asynchronous(source)) => {
+                    return Err(Error::new(
+                        ErrorKind::Remote,
+                        format!(
+                            "`{}` is an async source; watch it with `watch_async`",
+                            source.describe()
+                        ),
+                    ))
+                }
+                None => {
+                    return Err(Error::new(
+                        ErrorKind::Remote,
+                        "no remote source is configured",
+                    ))
+                }
+            }
+        };
+
+        let mut deliver = |document| {
+            self.commit(document, fence);
+            self.record_fetch(None, fence.generation);
+
+            Ok(())
+        };
+
+        if source.watch_capability() != WatchCapability::Native {
+            return source.watch(watching, interval, &mut deliver);
+        }
+
+        // A store that pushes still gets read on the interval, because the
+        // failure mode of a stream is silence: a connection that dropped
+        // without an error, a subscription the broker forgot, a blocking
+        // query answering an index that will never move again. All three
+        // look exactly like a store where nothing has changed, and the only
+        // way to tell them apart is to go and ask.
+        //
+        // Scoped threads rather than an executor: the resync is this call's
+        // for as long as this call lasts, and nothing outlives it.
+        std::thread::scope(|scope| {
+            let source = Arc::clone(&source);
+            let watcher = scope.spawn(move || source.watch(watching, interval, &mut deliver));
+            let mut pace = Pace::new(interval);
+
+            while watching.keep_going() && !watcher.is_finished() {
+                // Sliced rather than slept whole, so the resync notices the
+                // store's own watch returning instead of waiting out an
+                // interval to find out.
+                let mut left = pace.next_wait();
+
+                while left > Duration::ZERO && watching.keep_going() && !watcher.is_finished() {
+                    let slice = left.min(Duration::from_millis(250));
+
+                    std::thread::sleep(slice);
+                    left -= slice;
+                }
+
+                if watching.keep_going() && !watcher.is_finished() {
+                    match self.refresh() {
+                        Ok(()) => pace.succeeded(),
+                        Err(_) => pace.failed(),
+                    }
+                }
+            }
+
+            watcher
+                .join()
+                .unwrap_or_else(|_| Err(Error::new(ErrorKind::Remote, "the watch panicked")))
+        })
+    }
+
+    /// [`watch`](Self::watch), for a store that is read asynchronously.
+    ///
+    /// Cancellation is dropping the future.
+    ///
+    /// # Errors
+    ///
+    /// As [`watch`](Self::watch), with the sides swapped.
+    #[cfg(feature = "async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
+    pub async fn watch_async(&self, watching: &Watching, interval: Duration) -> Result<(), Error> {
+        let (source, fence) = {
+            let state = self.state();
+
+            match state.source.as_ref() {
+                Some(Kind::Asynchronous(source)) => (Arc::clone(source), Fence::of(&state)),
+                Some(Kind::Blocking(source)) => {
+                    return Err(Error::new(
+                        ErrorKind::Remote,
+                        format!(
+                            "`{}` is a blocking source; watch it with `watch` on a thread",
+                            source.describe()
+                        ),
+                    ))
+                }
+                None => {
+                    return Err(Error::new(
+                        ErrorKind::Remote,
+                        "no remote source is configured",
+                    ))
+                }
+            }
+        };
+
+        let mut deliver = |document| {
+            self.commit(document, fence);
+            self.record_fetch(None, fence.generation);
+
+            Ok(())
+        };
+
+        source.watch(watching, interval, &mut deliver).await
     }
 
     /// The document last fetched, if any.

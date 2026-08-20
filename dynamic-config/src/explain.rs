@@ -12,8 +12,6 @@
 
 use std::fmt;
 
-use figment::value::Value;
-
 use crate::error::{Error, Origin};
 use crate::source::LoadSpec;
 
@@ -204,12 +202,16 @@ impl fmt::Display for Explanation {
 /// bury the answer.
 pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Error> {
     let mut rows = Vec::new();
+    let collected = crate::loader::contributions(spec)?;
 
-    for (name, figment) in crate::loader::layer_figments(spec)? {
-        let value = figment.find_value(path).ok();
-        let origin = value
-            .is_some()
-            .then(|| crate::loader::origin_in(&figment, path, spec.nest));
+    for (name, values, origins) in collected.by_layer(spec.engine())? {
+        let value = crate::resolve::at(&values, path).cloned();
+        let origin = value.as_ref().and_then(|_| {
+            origins
+                .get(path)
+                .cloned()
+                .map(|origin| crate::loader::refine(origin, path, spec.nest))
+        });
 
         rows.push(Contribution {
             layer: name,
@@ -219,17 +221,24 @@ pub(crate) fn explain(spec: &LoadSpec<'_>, path: &str) -> Result<Explanation, Er
         });
     }
 
-    // Aliases are a gap-fill, not a layer, and they can *win*: a value
-    // that only an alias supplies shows up in no per-layer probe, and an
-    // alias deliberately displaces a runtime default at its destination.
-    // Both cases are caught the same way — ask the composed load and, when
-    // its answer comes from somewhere no per-layer row claims, give the
-    // alias a row of its own (above every raw layer, which is where it
-    // actually sits).
-    let merged = crate::loader::merged(spec)?;
+    // Aliases are a gap-fill, not a layer, and they can *win*: a value that
+    // only an alias supplies shows up in no per-layer probe, and an alias
+    // deliberately displaces a runtime default at its destination. Both
+    // cases are caught the same way — ask the composed load and, when its
+    // answer comes from somewhere no per-layer row claims, give the alias a
+    // row of its own (above every raw layer, which is where it actually
+    // sits).
+    let merged = crate::loader::resolved(spec)?;
 
-    if let Ok(value) = merged.find_value(path) {
-        let origin = crate::loader::origin_in(&merged, path, spec.nest);
+    if let Some(value) = merged
+        .to_value()
+        .as_table()
+        .and_then(|tree| crate::resolve::at(tree, path).cloned())
+    {
+        let origin = merged
+            .source_of(path)
+            .cloned()
+            .unwrap_or(crate::Origin::Unknown);
         let walk_winner = rows.iter().rev().find(|row| row.value.is_some());
         let disagrees = match walk_winner {
             None => true,
@@ -269,20 +278,17 @@ fn aliased_from(spec: &LoadSpec<'_>, path: &str) -> Option<String> {
 
 /// A short, single-line rendering — the value for scalars, the shape for
 /// containers.
-fn render(value: &Value) -> String {
+fn render(value: &crate::Value) -> String {
+    use crate::Value;
+
     match value {
-        Value::String(_, string) => string.clone(),
-        Value::Char(_, character) => character.to_string(),
-        Value::Bool(_, boolean) => boolean.to_string(),
-        Value::Num(_, number) => number
-            .to_i128()
-            .map(|whole| whole.to_string())
-            .or_else(|| number.to_u128().map(|whole| whole.to_string()))
-            .or_else(|| number.to_f64().map(|float| float.to_string()))
-            .unwrap_or_else(|| "a number".to_owned()),
-        Value::Empty(..) => "null".to_owned(),
-        Value::Dict(_, table) => format!("a table ({} keys)", table.len()),
-        Value::Array(_, items) => format!("a list ({} items)", items.len()),
+        Value::String(text) => text.clone(),
+        Value::Bool(boolean) => boolean.to_string(),
+        Value::Integer(whole) => whole.to_string(),
+        Value::Float(float) => float.to_string(),
+        Value::Null => "null".to_owned(),
+        Value::Table(table) => format!("a table ({} keys)", table.len()),
+        Value::Array(items) => format!("a list ({} items)", items.len()),
     }
 }
 

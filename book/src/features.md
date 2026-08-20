@@ -25,15 +25,22 @@ runtime data now: the message says exactly what to put in
 | `json` | ✅ | `.json` sources, via `serde_json` |
 | `toml` | | `.toml` sources |
 | `yaml` | | `.yaml` / `.yml` sources |
-| `ini` | | `.ini` sources — a parser in this crate, no dependency |
-| `properties` | | `.properties` sources — likewise |
+| `ini` | | `.ini` sources — a parser in this crate, and the backend's |
+| `properties` | | `.properties` sources — the only parser anywhere, so every reader reads it |
+| `ron` | | `.ron` sources, **read only**, through the `config-rs` reader |
+| `json5` | | `.json5` sources, **read only**, likewise |
 
-One per format because each is its own parser dependency — except the
-two flat formats, whose parsers live in this crate and cost nothing but
-code; their dialects are the [Formats](formats.md) chapter's subject,
-and neither can be a `save` target (the chapter says why). `json` is the
-default as the least controversial single choice; turn it off with
-`default-features = false` if the build reads only TOML. The extension
+One per format because each is its own parser dependency — except
+`properties`, whose parser lives in this crate and costs nothing but
+code, and `ron`/`json5`, which have no parser here at all and turn the
+`config-rs` reader's on. A format feature turns the matching parser on in
+**every** backend present, so there is no second list to keep in step;
+[Engines & Readers](engines.md#readers) has the table and the two places
+the dialects differ. Neither flat format can be a `save` target, and
+neither can RON or JSON5 — no backend here writes them.
+
+`json` is the default as the least controversial single choice; turn it
+off with `default-features = false` if the build reads only TOML. The extension
 picks the parser at load time, which is why these are load-time rather
 than compile-time failures when missing.
 
@@ -66,13 +73,28 @@ arguments into the flags layer. The only feature that pins another
 crate's *major* version, which is exactly why it is opt-in and separate —
 with it off, a clap major release is not this crate's breaking change.
 
+**`config` is not a feature** — it is one of three dependencies every
+build has, because it carries the [fold](engines.md) and this crate has
+none of its own. It is also an opt-in [reader](engines.md#readers),
+bringing YAML through the maintained `yaml-rust2` plus two formats this
+crate has no parser for.
+
+Its format parsers follow this crate's own format features rather than a
+second list: `features = ["yaml"]` turns on the backend's YAML too, so
+there is no `default-features` set to keep in step with.
+
+**`ron`, `json5`** — two read-only formats, parsed by the `config-rs`
+reader and by nothing in this crate. `save()` refuses them, as it refuses
+INI.
+
 **`figment`** — `Source::provider(&dyn figment::Provider)` and figment
 itself re-exported: the escape hatch for the long tail of sources this
-crate will never ship (a database, an in-house format). The only feature
-that puts figment in a public signature; with it off, a figment major
-bump is not a breaking change here, and with it on you have opted into
-that coupling knowingly. See
-[Stability Tiers](stability-tiers.md).
+crate will never ship (a database, an in-house format). Interop only —
+the resolution is this crate's own, and with the feature off figment is
+not in the dependency graph at all. It is the only feature that puts
+figment in a public signature; with it off, a figment major bump is not a
+breaking change here, and with it on you have opted into that coupling
+knowingly. See [Stability Tiers](stability-tiers.md).
 
 **`dotenv`** — `.env_file(..)`: a `.env` file read as the environment
 layer, below the real environment. Does not call `setenv` —

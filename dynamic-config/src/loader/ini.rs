@@ -18,109 +18,79 @@
 //! diagnostic here follows, because a mangled line is most often a pasted
 //! secret.
 
-#[cfg(feature = "ini")]
-use std::path::PathBuf;
+// `insert` and `scalar` are `properties`' too, and both name `Dict` — so
+// the map and the alias compile whenever either format does, while the INI
+// parser itself stays behind `ini`.
+use std::collections::BTreeMap;
 
 #[cfg(feature = "ini")]
-use figment::value::Map;
-use figment::value::{Dict, Value};
-#[cfg(feature = "ini")]
-use figment::{Metadata, Profile, Provider};
+use crate::error::{Error, ErrorKind};
+use crate::value::Value;
 
-/// The INI provider behind [`Format::Ini`](crate::Format::Ini).
+/// A document's keys.
+type Dict = BTreeMap<String, Value>;
+
+/// Reads INI text into a document.
+///
+/// # Errors
+///
+/// On a line that is neither a section header nor `key = value`, on an
+/// empty section name or key, and on a key that would have to be both a
+/// value and a table. Every message names the line and never the value.
 #[cfg(feature = "ini")]
-pub(crate) struct Ini {
-    text: Result<String, String>,
-    path: Option<PathBuf>,
+pub(crate) fn parse(text: &str) -> Result<Value, Error> {
+    let mut root = Dict::new();
+    let mut section: Vec<String> = Vec::new();
+
+    for (index, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+
+        if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
+            continue;
+        }
+
+        if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = header
+                .split('.')
+                .map(|part| part.trim().to_owned())
+                .collect();
+
+            if section.iter().any(String::is_empty) {
+                return Err(refused(index + 1, "an empty section name"));
+            }
+
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once('=') {
+            let key = key.trim();
+
+            if key.is_empty() {
+                return Err(refused(index + 1, "`= value` with no key"));
+            }
+
+            let mut path: Vec<&str> = section.iter().map(String::as_str).collect();
+            path.push(key);
+
+            insert(&mut root, &path, scalar(value.trim()), index + 1)
+                .map_err(|reason| Error::new(ErrorKind::Parse, reason))?;
+
+            continue;
+        }
+
+        return Err(refused(
+            index + 1,
+            "neither a section header nor `key = value`",
+        ));
+    }
+
+    Ok(Value::Table(root))
 }
 
+/// A refusal that names the line and nothing on it.
 #[cfg(feature = "ini")]
-impl Ini {
-    pub(crate) fn file(path: impl Into<PathBuf>) -> Self {
-        let path = path.into();
-
-        Self {
-            text: std::fs::read_to_string(&path).map_err(|error| error.to_string()),
-            path: Some(path),
-        }
-    }
-
-    pub(crate) fn string(text: &str) -> Self {
-        Self {
-            text: Ok(text.to_owned()),
-            path: None,
-        }
-    }
-}
-
-#[cfg(feature = "ini")]
-impl Provider for Ini {
-    fn metadata(&self) -> Metadata {
-        match &self.path {
-            Some(path) => Metadata::from("INI file", path.as_path()),
-            None => Metadata::named("INI source"),
-        }
-    }
-
-    fn data(&self) -> Result<Map<Profile, Dict>, figment::Error> {
-        let text = match &self.text {
-            Ok(text) => text,
-            Err(error) => return Err(figment::Error::from(error.clone())),
-        };
-
-        let mut root = Dict::new();
-        let mut section: Vec<String> = Vec::new();
-
-        for (index, raw) in text.lines().enumerate() {
-            let line = raw.trim();
-
-            if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
-                continue;
-            }
-
-            if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-                section = header
-                    .split('.')
-                    .map(|part| part.trim().to_owned())
-                    .collect();
-
-                if section.iter().any(String::is_empty) {
-                    return Err(figment::Error::from(format!(
-                        "line {}: an empty section name",
-                        index + 1
-                    )));
-                }
-
-                continue;
-            }
-
-            if let Some((key, value)) = line.split_once('=') {
-                let key = key.trim();
-
-                if key.is_empty() {
-                    return Err(figment::Error::from(format!(
-                        "line {}: `= value` with no key",
-                        index + 1
-                    )));
-                }
-
-                let mut path: Vec<&str> = section.iter().map(String::as_str).collect();
-                path.push(key);
-
-                insert(&mut root, &path, scalar(value.trim()), index + 1)
-                    .map_err(figment::Error::from)?;
-
-                continue;
-            }
-
-            return Err(figment::Error::from(format!(
-                "line {} is neither a section header nor `key = value`",
-                index + 1
-            )));
-        }
-
-        Ok(Map::from([(Profile::Default, root)]))
-    }
+fn refused(line: usize, reason: &str) -> Error {
+    Error::new(ErrorKind::Parse, format!("line {line}: {reason}"))
 }
 
 /// Puts `value` at `path`, building tables on the way, refusing to turn a
@@ -139,10 +109,10 @@ pub(super) fn insert(
     for part in walk {
         let slot = here
             .entry((*part).to_owned())
-            .or_insert_with(|| Value::from(Dict::new()));
+            .or_insert_with(|| Value::Table(Dict::new()));
 
         match slot {
-            Value::Dict(_, dict) => here = dict,
+            Value::Table(dict) => here = dict,
             _ => {
                 return Err(format!(
                     "line {line}: `{part}` is already a value, so it cannot also \
@@ -152,7 +122,7 @@ pub(super) fn insert(
         }
     }
 
-    if let Some(Value::Dict(..)) = here.get(*last) {
+    if let Some(Value::Table(_)) = here.get(*last) {
         return Err(format!(
             "line {line}: `{last}` is already a table, so it cannot also be a value"
         ));
@@ -172,11 +142,11 @@ pub(super) fn scalar(text: &str) -> Value {
     }
 
     if let Ok(flag) = text.parse::<bool>() {
-        Value::from(flag)
+        Value::Bool(flag)
     } else if let Ok(whole) = text.parse::<i64>() {
-        Value::from(whole)
+        Value::Integer(i128::from(whole))
     } else if let Ok(real) = text.parse::<f64>() {
-        Value::from(real)
+        Value::Float(real)
     } else {
         Value::from(text)
     }

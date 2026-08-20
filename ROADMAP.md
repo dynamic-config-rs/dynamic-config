@@ -9,9 +9,9 @@ What is not in the crate yet and might be. Everything that shipped is described
 in [README.md](README.md); what will *not* be built, and why, is under
 [Not planned](book/src/limitations.md#not-planned) there.
 
-Tags: **[figment]** is something the underlying loader,
-[figment](https://docs.rs/figment), can do that this crate does not expose.
-**[own]** is neither — an idea from using the thing.
+Tags: **[own]** is an idea from using the thing. (**[figment]** used to mark
+something the backend could do that this crate did not expose; the resolution
+is this crate's own as of 0.9, so the tag has no items left.)
 
 <!-- Keep this shape. An item earns a place here when it has a *decision* in it:
      what the alternatives are, and why one of them is not obviously right. An
@@ -110,8 +110,8 @@ Two 0.6 answers are worth keeping in view because they will be asked again:
 **Deliberately still out**, each with a reason that is not "later": a
 [`WriteDurability` mode](#writedurability-as-api-own) nobody has measured a
 need for, the [runtime-agnostic S3 sleep](#runtime-agnostic-s3-watch-sleep-own)
-that is blocked on the AWS SDK, [serde_yaml](#serde_yamls-future-own) which
-moves when figment moves, [a ninth store](#a-store-nobody-has-asked-for-yet-own)
+that is blocked on the AWS SDK, [serde_yaml](#serde_yamls-future-own) which is
+now this crate's decision alone, [a ninth store](#a-store-nobody-has-asked-for-yet-own)
 nobody has asked for. The book question is
 [answered](#one-book-or-a-book-per-crate--answered-three-books-own): three
 books, one per audience.
@@ -263,8 +263,13 @@ sophisticated has been beaten up by strangers yet.
 pain from that, a `Normal`/`Fsync` mode is the escape hatch — not before.
 
 ### serde_yaml's future **[own]**
-Archived upstream (`0.9.34+deprecated`); figment pulls it regardless, so a
-local switch buys nothing. Track figment; move when it moves.
+Archived upstream (`0.9.34+deprecated`). The reason not to move used to be
+that the backend pulled it in regardless, so a local switch bought nothing;
+with figment out of the default graph as of 0.9, that reason is gone and
+the choice is this crate's alone. It is still a choice rather than an
+action: every candidate is a fork of the same archived code, and YAML is
+behind a feature. Move when a maintained successor is the obvious one, or
+when an advisory forces the question.
 
 ### Runtime-agnostic S3 watch sleep **[own]**
 Blocked on the AWS SDK itself being tokio-bound; revisit if smithy's

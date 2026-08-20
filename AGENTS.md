@@ -91,15 +91,23 @@ type was expected — never what was there. `dynamic-config/tests/security.rs`
 enforces this. A change that puts a value into a diagnostic is a security
 regression even if every test still passes.
 
-**figment does not appear in a public signature** unless the `figment` feature
-is on. That feature exists precisely so the coupling is opt-in; do not widen it.
+**The resolution is this crate's own**, and only the fold is swappable: an
+`Engine` merges the collected layers and nothing else, every engine
+implements the same merge rule, and the tests compare them leaf by leaf.
+figment is one engine and one interop adapter — out of the default
+dependency graph, in a public signature only behind the `figment` feature. That feature exists precisely so the coupling is opt-in; do not widen
+it. figment stays a permanent dev-dependency, because the ported reader,
+deserializer, serializer and fold are each proved against it — do not remove
+those differential tests.
 
 **`dynamic-config-embedded` shares no code with the rest**, and that is
-deliberate: figment is `std`, so there is nothing to share. Do not try to unify
+deliberate: the core allocates a value tree and reads files, so there is
+nothing to share. Do not try to unify
 them. It keeps the *shape* — a snapshot in a `static`, a bad document leaving
 the previous one serving, `changes()` — and nothing else.
 
-**No mandatory dependency** beyond `figment`, `serde` and `arc-swap`. Everything
+**No mandatory dependency** beyond `serde`, `arc-swap` and the default
+engine's crate; `--no-default-features` leaves the first two. Everything
 else is a feature or a companion crate.
 
 **`#![forbid(unsafe_code)]`** in every crate, checked by CI.

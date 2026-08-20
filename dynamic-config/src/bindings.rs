@@ -49,8 +49,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use figment::value::{Dict, Value};
-use figment::{Metadata, Profile, Provider};
+use crate::value::Value;
 
 use crate::error::Error;
 
@@ -118,20 +117,21 @@ impl EnvBindings {
     /// environment does not set. A binding names one variable exactly, and a
     /// deployment that writes that variable into a `.env` file rather than
     /// exporting it means the same thing by it.
-    pub(crate) fn providers(
+    /// Every bound variable that has a value, as `(path, variable, value)`.
+    ///
+    /// The same resolution the provider does, answering with the value
+    /// instead of a layer — one variable, one contribution, so provenance
+    /// names the variable that supplied the leaf.
+    pub(crate) fn resolved(
         &self,
-        key: &str,
         allow_empty: bool,
         fallback: Arc<BTreeMap<String, String>>,
-    ) -> Vec<BindingProvider> {
+    ) -> Vec<(String, String, crate::Value)> {
         self.lock()
             .iter()
-            .map(|(path, variable)| BindingProvider {
-                path: path.clone(),
-                variable: variable.clone(),
-                key: key.to_owned(),
-                allow_empty,
-                fallback: Arc::clone(&fallback),
+            .filter_map(|(path, variable)| {
+                resolve(variable, allow_empty, &fallback)
+                    .map(|value| (path.clone(), variable.clone(), value))
             })
             .collect()
     }
@@ -142,43 +142,6 @@ impl EnvBindings {
         self.entries
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-}
-
-/// Prefixed onto the variable's name, so the loader can recognise this layer
-/// and report the variable rather than a category.
-pub(crate) const BINDING_PREFIX: &str = "the environment variable ";
-
-/// One binding: one path, one variable.
-pub(crate) struct BindingProvider {
-    path: String,
-    variable: String,
-    key: String,
-    allow_empty: bool,
-    /// What the `.env` files say, consulted only when the real environment
-    /// does not set the variable — the same order the layers themselves are in.
-    fallback: Arc<BTreeMap<String, String>>,
-}
-
-impl Provider for BindingProvider {
-    fn metadata(&self) -> Metadata {
-        Metadata::named(format!("{BINDING_PREFIX}{}", self.variable))
-    }
-
-    fn data(&self) -> figment::Result<figment::value::Map<Profile, Dict>> {
-        let mut values = Dict::new();
-
-        if let Some(value) = resolve(&self.variable, self.allow_empty, &self.fallback) {
-            crate::layer::insert_path(&mut values, &self.path, value);
-        }
-
-        let mut map = figment::value::Map::new();
-        map.insert(
-            Profile::from(crate::loader::section_profile(&self.key)),
-            values,
-        );
-
-        Ok(map)
     }
 }
 
@@ -212,10 +175,7 @@ fn resolve(
 
     // Parsed the way the environment layer parses: `8080` is a number, `[1,2]`
     // a list, and anything else a string.
-    Some(
-        text.parse::<Value>()
-            .unwrap_or_else(|_| Value::from(text.to_owned())),
-    )
+    Some(crate::text_value::from_text(text))
 }
 
 #[cfg(test)]

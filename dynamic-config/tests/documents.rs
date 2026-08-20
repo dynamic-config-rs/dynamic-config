@@ -287,3 +287,73 @@ fn the_parse_seam_names_no_backend_type() {
         );
     }
 }
+
+/// figment is optional, and nothing but its own feature turns it on.
+///
+/// The property a user feels: a build that did not ask for figment does
+/// not compile it, which is what makes a figment major release not a
+/// breaking change here. It is a property of the *manifest*, so the
+/// manifest is what is read; the code side is proved by the build, which
+/// CI runs with `--no-default-features`.
+///
+/// `config` is **not** optional and is asserted so on purpose: it carries
+/// the fold, and this crate has none of its own. A change that made it
+/// optional would leave a build with no way to resolve anything.
+#[test]
+fn figment_is_optional_and_the_engine_is_not() {
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
+    )
+    .expect("the manifest is next to the tests");
+
+    let declaration = |name: &str| {
+        manifest
+            .lines()
+            .find(|line| line.starts_with(&format!("{name} = {{ ")))
+            .unwrap_or_else(|| panic!("{name} is a dependency of some kind"))
+    };
+
+    assert!(
+        declaration("figment").contains("optional = true"),
+        "figment must be optional: {}",
+        declaration("figment")
+    );
+    assert!(
+        !declaration("config_rs").contains("optional = true"),
+        "the engine cannot be optional — nothing else here folds layers: {}",
+        declaration("config_rs")
+    );
+
+    let features = manifest
+        .split("[features]")
+        .nth(1)
+        .and_then(|rest| rest.split("\n[").next())
+        .expect("the manifest has a features table");
+
+    for line in features.lines() {
+        let Some((feature, enables)) = line.split_once(" = [") else {
+            continue;
+        };
+
+        if feature == "figment" || feature == "full" {
+            continue;
+        }
+
+        // Of the three spellings that reach an optional dependency only
+        // two turn it on: `dep:figment` and `figment/json` do,
+        // `figment?/json` does not — the `?` means *only if something
+        // else already enabled it*. That distinction is how a format
+        // feature says "and the backend's parser too" without putting the
+        // backend into every build.
+        let enabling: Vec<&str> = enables
+            .split(',')
+            .map(|entry| entry.trim().trim_matches(['"', ']']))
+            .filter(|entry| *entry == "dep:figment" || entry.starts_with("figment/"))
+            .collect();
+
+        assert!(
+            enabling.is_empty(),
+            "the `{feature}` feature enables figment ({enabling:?}): {line}"
+        );
+    }
+}

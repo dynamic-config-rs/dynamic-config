@@ -19,20 +19,13 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use figment::value::{Dict, Map, Value};
-use figment::{Metadata, Profile, Provider};
+use crate::value::Value;
+
+/// The layer's own shape: a path to a value, flat until it is asked for.
+type Tree = BTreeMap<String, Value>;
 use serde::Serialize;
 
 use crate::error::{Error, ErrorKind};
-
-/// Metadata name for the defaults layer. Matched when attributing an error.
-pub(crate) const DEFAULTS_NAME: &str = "values set as defaults";
-
-/// Metadata name for the overrides layer.
-pub(crate) const OVERRIDES_NAME: &str = "values set as overrides";
-
-/// Metadata name for the command-line layer.
-pub(crate) const FLAGS_NAME: &str = "values set from the command line";
 
 /// A set of values addressed by dotted path.
 ///
@@ -56,7 +49,7 @@ pub(crate) const FLAGS_NAME: &str = "values set from the command line";
 /// ```
 #[derive(Default)]
 pub struct Layer {
-    entries: Mutex<BTreeMap<String, Value>>,
+    entries: Mutex<Tree>,
 }
 
 impl Layer {
@@ -82,7 +75,7 @@ impl Layer {
     pub fn set<T: Serialize>(&self, path: &str, value: T) -> Result<(), Error> {
         check_path(path)?;
 
-        let value = Value::serialize(value)
+        let value = crate::ser::to_value(&value)
             .map_err(|error| Error::new(ErrorKind::Type, error.to_string()).prepend_key(path))?;
 
         self.lock().insert(path.to_owned(), value);
@@ -102,14 +95,14 @@ impl Layer {
     /// If `value` does not serialize, or serializes to something other than
     /// a map — defaults have named fields by definition.
     pub fn set_struct<T: serde::Serialize>(&self, value: &T) -> Result<(), Error> {
-        let serialized = Value::serialize(value).map_err(|error| {
+        let serialized = crate::ser::to_value(value).map_err(|error| {
             Error::new(
                 crate::ErrorKind::Type,
                 format!("the defaults struct did not serialize: {error}"),
             )
         })?;
 
-        let Value::Dict(_, entries) = serialized else {
+        let Value::Table(entries) = serialized else {
             return Err(Error::new(
                 crate::ErrorKind::Type,
                 "defaults must be a struct or a map; a bare value has no field name to live under",
@@ -138,12 +131,10 @@ impl Layer {
     pub fn set_text(&self, path: &str, text: &str) -> Result<(), Error> {
         check_path(path)?;
 
-        // Parsed the way the environment layer parses, fallback included:
-        // `figment`'s parser does not fail today, but "cannot fail" is its
-        // implementation detail, not this crate's to promise on.
-        let value = text
-            .parse::<Value>()
-            .unwrap_or_else(|_| Value::from(text.to_owned()));
+        // Parsed the way the environment layer parses: one grammar for every
+        // surface that receives configuration as text, so `--set port=8080`
+        // and `APP_PORT=8080` cannot come to different conclusions.
+        let value = crate::text_value::from_text(text);
 
         self.lock().insert(path.to_owned(), value);
 
@@ -283,23 +274,14 @@ impl Layer {
     }
 
     /// Expands the dotted paths into the nested shape the loader wants.
-    fn dict(&self) -> Dict {
-        let mut root = Dict::new();
+    pub(crate) fn tree(&self) -> Tree {
+        let mut root = Tree::new();
 
         for (path, value) in self.lock().iter() {
             insert_path(&mut root, path, value.clone());
         }
 
         root
-    }
-
-    /// A figment provider emitting this layer under `profile`.
-    pub(crate) fn provider<'a>(&'a self, profile: &str, name: &'static str) -> LayerProvider<'a> {
-        LayerProvider {
-            layer: self,
-            profile: Profile::from(profile),
-            name,
-        }
     }
 }
 
@@ -351,7 +333,7 @@ pub(crate) fn check_path(path: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn insert_path(root: &mut Dict, path: &str, value: Value) {
+pub(crate) fn insert_path(root: &mut Tree, path: &str, value: Value) {
     let mut segments = path.split('.').peekable();
     let mut current = root;
 
@@ -363,24 +345,18 @@ pub(crate) fn insert_path(root: &mut Dict, path: &str, value: Value) {
 
         let entry = current
             .entry(segment.to_owned())
-            .or_insert_with(|| Value::from(Dict::new()));
+            .or_insert_with(|| Value::Table(Tree::new()));
 
-        if !matches!(entry, Value::Dict(..)) {
-            *entry = Value::from(Dict::new());
+        if !matches!(entry, Value::Table(_)) {
+            *entry = Value::Table(Tree::new());
         }
 
-        let Value::Dict(_, nested) = entry else {
-            unreachable!("just replaced with a dict")
+        let Value::Table(nested) = entry else {
+            unreachable!("just replaced with a table")
         };
 
         current = nested;
     }
-}
-
-pub(crate) struct LayerProvider<'a> {
-    layer: &'a Layer,
-    profile: Profile,
-    name: &'static str,
 }
 
 // Key names and a count, never the values: an override layer is exactly
@@ -394,19 +370,6 @@ impl std::fmt::Debug for Layer {
             .field("keys", &entries.keys().collect::<Vec<_>>())
             .field("len", &entries.len())
             .finish_non_exhaustive()
-    }
-}
-
-impl Provider for LayerProvider<'_> {
-    fn metadata(&self) -> Metadata {
-        Metadata::named(self.name)
-    }
-
-    fn data(&self) -> figment::Result<Map<Profile, Dict>> {
-        let mut map = Map::new();
-        map.insert(self.profile.clone(), self.layer.dict());
-
-        Ok(map)
     }
 }
 
@@ -425,7 +388,7 @@ mod tests {
         layer.set("port", 1u16).unwrap();
         layer.set("port", 2u16).unwrap();
 
-        let dict = layer.dict();
+        let dict = layer.tree();
         assert_eq!(dict.get("port"), Some(&Value::from(2u16)));
     }
 
@@ -434,8 +397,8 @@ mod tests {
         let layer = Layer::new();
         layer.set("pool.max_size", 32u16).unwrap();
 
-        let dict = layer.dict();
-        let Some(Value::Dict(_, pool)) = dict.get("pool") else {
+        let dict = layer.tree();
+        let Some(Value::Table(pool)) = dict.get("pool") else {
             panic!("expected a nested dict, got {dict:?}");
         };
 
@@ -448,8 +411,8 @@ mod tests {
         layer.set("pool.max_size", 32u16).unwrap();
         layer.set("pool.min_size", 4u16).unwrap();
 
-        let dict = layer.dict();
-        let Some(Value::Dict(_, pool)) = dict.get("pool") else {
+        let dict = layer.tree();
+        let Some(Value::Table(pool)) = dict.get("pool") else {
             panic!("expected a nested dict");
         };
 
@@ -462,8 +425,8 @@ mod tests {
         layer.set("pool", 1u16).unwrap();
         layer.set("pool.max_size", 32u16).unwrap();
 
-        let dict = layer.dict();
-        assert!(matches!(dict.get("pool"), Some(Value::Dict(..))));
+        let dict = layer.tree();
+        assert!(matches!(dict.get("pool"), Some(Value::Table(_))));
     }
 
     #[test]
@@ -487,11 +450,36 @@ mod tests {
         layer.set_text("enabled", "true").unwrap();
         layer.set_text("host", "localhost").unwrap();
 
-        let dict = layer.dict();
+        let dict = layer.tree();
 
-        assert_eq!(dict.get("port"), Some(&Value::from(8080u64)));
-        assert_eq!(dict.get("enabled"), Some(&Value::from(true)));
-        assert_eq!(dict.get("host"), Some(&Value::from("localhost")));
+        // Compared through the crate's own erasure: which integer width
+        // carried 8080 is not a reading, and `values_equal` says so
+        // everywhere else too.
+        let read = |key: &str| dict.get(key).cloned();
+
+        assert_eq!(read("port"), Some(Value::Integer(8080)));
+        assert_eq!(read("enabled"), Some(Value::Bool(true)));
+        assert_eq!(read("host"), Some(Value::String("localhost".to_owned())));
+    }
+
+    /// A `--set` value that used to take the process down.
+    ///
+    /// The reading was delegated to a parser that indexed a byte range with
+    /// a character position while resolving escapes, so any quoted string
+    /// holding a non-ASCII character before an escape aborted the load
+    /// rather than returning a value.
+    #[test]
+    fn a_quoted_escape_after_a_non_ascii_character_is_read_not_fatal() {
+        let layer = Layer::new();
+
+        layer
+            .set_text("greeting", "\"é\\nthere\"")
+            .expect("the value is read");
+
+        assert_eq!(
+            layer.tree().get("greeting").cloned(),
+            Some(Value::String("é\nthere".to_owned()))
+        );
     }
 
     #[test]
@@ -501,13 +489,15 @@ mod tests {
             .set_assignments(["db.host=post=gres", "db.port=5432"])
             .unwrap();
 
-        let dict = layer.dict();
-        let Some(Value::Dict(_, db)) = dict.get("db") else {
+        let dict = layer.tree();
+        let Some(Value::Table(db)) = dict.get("db") else {
             panic!("expected a nested dict");
         };
 
-        assert_eq!(db.get("host"), Some(&Value::from("post=gres")));
-        assert_eq!(db.get("port"), Some(&Value::from(5432u64)));
+        let read = |key: &str| db.get(key).cloned();
+
+        assert_eq!(read("host"), Some(Value::String("post=gres".to_owned())));
+        assert_eq!(read("port"), Some(Value::Integer(5432)));
     }
 
     #[test]
@@ -536,8 +526,8 @@ mod tests {
         let layer = Layer::new();
         layer.set("pool", Pool { max_size: 7 }).unwrap();
 
-        let dict = layer.dict();
-        let Some(Value::Dict(_, pool)) = dict.get("pool") else {
+        let dict = layer.tree();
+        let Some(Value::Table(pool)) = dict.get("pool") else {
             panic!("expected a nested dict");
         };
 
