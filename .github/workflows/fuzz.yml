@@ -32,7 +32,29 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The manifest is the list of targets, and this reads it.
+  #
+  # A hand-written matrix here went stale exactly the way a hand-written
+  # list does: five targets were registered in `fuzz/Cargo.toml` and never
+  # named here, so nothing ever ran them — which is worse than a target
+  # nobody wrote, because a target that exists reads as coverage.
+  targets:
+    name: which targets exist
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: list
+        run: |
+          list=$(grep -A1 '^\[\[bin\]\]' fuzz/Cargo.toml \
+            | grep '^name = ' | cut -d'"' -f2 | jq -R . | jq -sc .)
+          echo "list=${list}" >> "$GITHUB_OUTPUT"
+          echo "fuzzing: ${list}"
+
   fuzz:
+    needs: targets
     name: ${{ matrix.target }}
     runs-on: ubuntu-latest
     # Each target is bounded by `-max_total_time`; this is the backstop for
@@ -41,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [units, redaction, value_paths, dotenv, sections]
+        target: ${{ fromJson(needs.targets.outputs.list) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # cargo-fuzz needs nightly: libFuzzer arrives through `-Z sanitizer`.

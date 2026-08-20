@@ -1,11 +1,10 @@
-//! The section and profile machinery, structure-aware: a file name and a
-//! profile, not bytes.
+//! The profile machinery, structure-aware: a file name and a profile, not
+//! bytes.
 //!
-//! Two surfaces, both reached from outside the process. A *section* is a
-//! top-level key in a configuration document, turned into the figment profile
-//! the loader files it under. A *profile* is a word out of an environment
-//! variable, interpolated into a file name — `config.toml` plus `production`
-//! becomes `config.production.toml`, which the loader then reads.
+//! A *profile* is a word out of an environment variable, interpolated into a
+//! file name — `config.toml` plus `production` becomes
+//! `config.production.toml`, which the loader then reads. It arrives from
+//! outside the process, which is what makes it worth fuzzing.
 //!
 //! The second one is where the 0.4 traversal bug lived: `APP_ENV=../../etc`
 //! walked the loader out of the configuration directory and merged whatever
@@ -23,18 +22,13 @@
 //! * The variant has the same number of components as its base, which is the
 //!   same claim from the other side: no component was added or dropped.
 //!
-//! And for sections:
-//!
-//! * a section profile is never one of figment's own reserved profiles. This
-//!   is the other 0.4 bug: an unprefixed mapping handed `global` and
-//!   `default` — which figment treats as merge-into-everything and
-//!   fall-back-for-everything — to any document with an innocently named
-//!   table.
-//! * Two section keys land on one profile only if they differ by ASCII case
-//!   alone. Anything more than that is two tables silently merging into one.
-//!   Case itself is excluded because figment compares profiles case-
-//!   insensitively; `db` and `DB` naming one section is a figment property,
-//!   not a defect here.
+//! **Sections used to be fuzzed here too**, when a section *was* a profile:
+//! a top-level key was mapped into the backend's profile namespace, and the
+//! property was that it never landed on a reserved one. A section is now the
+//! subtree under its key and there is no namespace to collide with, so the
+//! property is structural rather than generated — `tests/section_named_global.rs`
+//! loads sections called `global` and `default` and reads back what they
+//! hold.
 //!
 //! Names are generated as *shapes* — directories, a stem, a stack of
 //! extensions — because the branch worth reaching is the encrypted one, where
@@ -96,9 +90,6 @@ impl Name {
 struct Input {
     path: Name,
     profile: String,
-    /// A section key, and a second one to check the two against each other.
-    key: String,
-    other: String,
 }
 
 fuzz_target!(|input: Input| {
@@ -138,38 +129,5 @@ fuzz_target!(|input: Input| {
                 "profile {profile:?} is not in the name of {variant:?}"
             );
         }
-    }
-
-    let section = dynamic_config::__fuzz::section_profile(&input.key);
-
-    // figment merges `global` into every profile and falls back to `default`,
-    // so a section landing on either is a document silently reconfiguring
-    // every other section. The prefix is what keeps them apart; comparison is
-    // case-insensitive because figment's own is.
-    for reserved in ["global", "default"] {
-        assert!(
-            !section.eq_ignore_ascii_case(reserved),
-            "section {:?} became figment's reserved {reserved:?} profile",
-            input.key
-        );
-    }
-
-    assert!(
-        section.contains(input.key.as_str()),
-        "section {:?} is not recoverable from the profile {section:?}",
-        input.key
-    );
-
-    // Distinct sections stay distinct. Two keys sharing a profile would merge
-    // their tables into one, which no document asked for.
-    let other = dynamic_config::__fuzz::section_profile(&input.other);
-
-    if section.eq_ignore_ascii_case(&other) {
-        assert!(
-            input.key.eq_ignore_ascii_case(&input.other),
-            "sections {:?} and {:?} share the profile {section:?}",
-            input.key,
-            input.other
-        );
     }
 });
