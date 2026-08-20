@@ -411,6 +411,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # A README is the first thing anyone reads and the last thing anyone
       # tests. A dead anchor in it is a small bug that is very easy to ship.
+      #
+      # The exclusions are hosts, not links. Our own GitHub, docs.rs and
+      # Pages URLs point at things a release creates, so they 404 until it
+      # has. Scorecard's site and badge endpoint are the other kind: they
+      # refuse connections from runners often enough to fail this job on a
+      # link that is live — 200 from an ordinary network, and GitHub renders
+      # the badge from that host on every page view. A gate that fails for
+      # somebody else's firewall stops being read.
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: >-
@@ -421,6 +429,7 @@ jobs:
             --exclude '^https://github\.com/dynamic-config-rs/'
             --exclude '^https://docs\.rs/dynamic-config'
             --exclude '^https://dynamic-config-rs\.github\.io'
+            --exclude '^https://(api\.)?scorecard\.dev'
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
             AGENTS.md CHANGELOG.md CREDITS.md docs/*.md scripts/README.md
             dynamic-config*/README.md dynamic-config*/CHANGELOG.md
