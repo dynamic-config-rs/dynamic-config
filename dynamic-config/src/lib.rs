@@ -703,11 +703,15 @@ pub mod __fuzz {
             })
             .collect();
 
+<<<<<<< HEAD
         // `Always`: this door exists to drive the *engine*, and `compose`
         // answers a single layer itself. A corpus case with one layer would
         // otherwise compare two answers no engine produced.
         let (tree, provenance) =
             crate::resolve::compose_with(engine, contributions, crate::resolve::Fold::Always)?;
+=======
+        let (tree, provenance) = crate::resolve::compose(engine, contributions)?;
+>>>>>>> origin/main
 
         Ok((
             crate::Value::Table(tree),
