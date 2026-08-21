@@ -150,8 +150,9 @@ tab is worth acting on.
 
 ## Dependencies
 
-The core crate's non-optional dependency list is deliberately short — `serde`
-and `arc-swap` — and every network client, format parser and crypto stack
+The core crate's non-optional dependency list is deliberately short —
+`serde`, `arc-swap` and the `config` crate, which carries the fold this
+crate has none of its own — and every network client, format parser and crypto stack
 is behind a feature or in a companion crate, so a build carries only what it
 asked for. A `dynamic-config` with default features pulls in no cryptography, no
 HTTP client and no runtime.
