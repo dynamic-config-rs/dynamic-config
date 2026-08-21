@@ -13,6 +13,7 @@ whether or not a job catches it.
 | read under concurrent reload | scales with readers, no writer starvation | `benches/engine.rs` (read-under-fire), `benches/matrix.rs` (1→128 readers) |
 | merge cost | linear in layers | `benches/matrix.rs` (2→16 layers) |
 | reload end-to-end | dominated by parse+deserialize, not the swap | `benches/engine.rs` |
+| a load, a reload, an `explain` | no worse than the release before, in instructions | `benches/instructions.rs`, whose header carries both releases' numbers |
 | a million reloads | RSS bounded, FDs flat, no thread growth | the nightly `leak` job (`soak/`) |
 | a five-hour fault schedule | every exit invariant holds | the nightly `soak` job; the 24-hour claim is a committed local run |
 | compile time and binary size | monitored, not gated | the dependency-weight table in [MSRV & Features](msrv-features.md) |

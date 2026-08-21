@@ -173,6 +173,27 @@ pub(crate) fn compose(
     engine: &dyn crate::engine::Engine,
     contributions: Vec<Contribution>,
 ) -> Result<Resolved, crate::Error> {
+    compose_with(engine, contributions, Fold::ShortCircuitOne)
+}
+
+/// Whether a single layer may skip the engine.
+///
+/// The shortcut is right for a load and wrong for the tests that *compare*
+/// engines: with it, a one-layer case would compare two answers neither
+/// engine produced. The corpora ask for [`Fold::Always`] so the comparison
+/// stays a comparison.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Fold {
+    ShortCircuitOne,
+    Always,
+}
+
+/// [`compose`], with the shortcut a choice rather than a rule.
+pub(crate) fn compose_with(
+    engine: &dyn crate::engine::Engine,
+    contributions: Vec<Contribution>,
+    fold: Fold,
+) -> Result<Resolved, crate::Error> {
     // The engine is handed trees and tags and nothing else, so the origins
     // stay here: a tag is this crate's index into them, and an engine that
     // reports one is naming a layer it was actually given.
@@ -180,6 +201,37 @@ pub(crate) fn compose(
         .into_iter()
         .map(|contribution| (contribution.origin, Value::Table(contribution.values)))
         .unzip();
+
+    // **One layer folds to itself.** A fold merges layers and says who won
+    // each leaf; with a single layer there is nothing to merge and the
+    // winner of every leaf is that layer — an answer this crate can write
+    // down without a backend, and the same answer any engine has to give,
+    // which `tests/engines.rs` asserts over the whole corpus.
+    //
+    // Worth the branch because it is the common shape, not a corner: one
+    // file and no environment, one document from a store, a test with an
+    // inline source. It skips a conversion into the backend's tree, its
+    // merge, and a conversion back — measured at just under half a load.
+    if trees.len() == 1 && fold == Fold::ShortCircuitOne {
+        let Some(Value::Table(values)) = trees.into_iter().next() else {
+            return Err(not_a_table());
+        };
+
+        let mut provenance = BTreeMap::new();
+
+        // Walked per top-level key rather than from the root, because the
+        // root is not a leaf: `record` files an *empty* table as one, which
+        // is right for `{"a": {}}` and would file an empty document under
+        // the empty path. The engines walk it the same way, and the
+        // property test beside this said so before this comment did.
+        for (key, value) in &values {
+            let mut path = vec![key.clone()];
+
+            record(value, &origins[0], &mut path, &mut provenance);
+        }
+
+        return Ok((values, provenance));
+    }
 
     let layers: Vec<crate::engine::Layer<'_>> = trees
         .iter()
@@ -190,10 +242,7 @@ pub(crate) fn compose(
     let folded = engine.fold(&layers)?;
 
     let Value::Table(values) = folded.values else {
-        return Err(crate::Error::new(
-            crate::ErrorKind::Backend,
-            "the resolution engine answered with something that is not a table",
-        ));
+        return Err(not_a_table());
     };
 
     let mut provenance: BTreeMap<String, Origin> = folded
@@ -309,6 +358,14 @@ pub(crate) fn assign(
     crate::layer::insert_path(tree, path, value);
 }
 
+/// What an engine answering with something other than a table is told.
+fn not_a_table() -> crate::Error {
+    crate::Error::new(
+        crate::ErrorKind::Backend,
+        "the resolution engine answered with something that is not a table",
+    )
+}
+
 /// Records `origin` for every leaf inside `value`, at `path` and below.
 fn record(
     value: &Value,
@@ -350,7 +407,7 @@ fn forget(path: &[String], provenance: &mut BTreeMap<String, Origin>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{compose, Contribution};
+    use super::{compose, compose_with, Contribution};
     use crate::error::Origin;
     use crate::value::Value;
     use proptest::prelude::*;
@@ -407,6 +464,47 @@ mod tests {
     }
 
     proptest! {
+        /// **What the one-layer shortcut owes.** `compose` answers a single
+        /// layer itself rather than folding it, because a fold with nothing
+        /// to merge is the layer and the winner of every leaf is the layer
+        /// that supplied it. That is an *equivalence*, so it is asserted:
+        /// the shortcut and every engine must agree on the tree and on the
+        /// provenance, or the fast path means something the slow one does
+        /// not.
+        #[test]
+        fn one_layer_answers_the_same_with_the_shortcut_and_with_an_engine(
+            values in trees()
+        ) {
+            let table = match values {
+                Value::Table(table) => table,
+                other => super::Table::from([("a".to_owned(), other)]),
+            };
+
+            let short = compose_in_test(vec![Contribution::new(
+                "test",
+                origin("only"),
+                table.clone(),
+            )]);
+
+            for engine in crate::engine::all() {
+                let folded = compose_with(
+                    engine,
+                    vec![Contribution::new("test", origin("only"), table.clone())],
+                    super::Fold::Always,
+                )
+                .expect("the layer folds");
+
+                prop_assert_eq!(
+                    &short.0, &folded.0,
+                    "the shortcut and {} disagree on the tree", engine.name()
+                );
+                prop_assert_eq!(
+                    &short.1, &folded.1,
+                    "the shortcut and {} disagree on who won", engine.name()
+                );
+            }
+        }
+
         /// **The property the engine seam rests on.** Same layers, same
         /// order, every engine: the tree *and* the winner of every leaf must
         /// come out the same, or which engine is installed is a question
@@ -426,7 +524,8 @@ mod tests {
 
                 answers.push((
                     engine.name(),
-                    compose(engine, contributions).expect("the layers fold"),
+                    compose_with(engine, contributions, super::Fold::Always)
+                        .expect("the layers fold"),
                 ));
             }
 
