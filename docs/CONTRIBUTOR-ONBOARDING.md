@@ -37,9 +37,10 @@ into a build that never asked for them — so the core keeps *no* network
 dependency, only the traits. And a store's client library moving is not a
 reason to re-cut the engine, which is why they release apart.
 
-**Why `embedded` shares nothing.** figment is `std`. There is no common subset
-to factor out, so trying would produce an abstraction that fits neither. It
-keeps the *shape* and none of the code.
+**Why `embedded` shares nothing.** The core reads files, allocates a value
+tree and folds layers; a microcontroller has none of that. There is no common
+subset to factor out, so trying would produce an abstraction that fits
+neither. It keeps the *shape* and none of the code.
 
 ### Getting a working checkout
 
@@ -73,11 +74,11 @@ Builder                            builder/ — files, env, discovery, cache, va
         ↓                          chosen at runtime; funnels into one `LoadSpec`
 LoadSpec                           source.rs — which sources, which section, which prefix
         ↓
-loader::build()                    assembles figment providers in precedence order
+loader::contributions()            one tree per layer, in precedence order
         ↓
-figment                            merges them
+resolve::compose()                 folds them, recording who won each leaf
         ↓
-loader::load::<T>()                deserializes the selected section
+loader::load::<T>()                reads the resolved section into the type
         ↓
 ConfigCell::store()                cell.rs — an atomic swap, then hooks and wakers
         ↓
@@ -123,9 +124,9 @@ the running configuration.
 
 #### `source.rs` — what to read
 
-`Format` (JSON, TOML, YAML), `Source` (a file, an encrypted file, inline text,
-or a foreign figment provider), and `LoadSpec` — the struct that names
-everything a load needs.
+`Format` (JSON, TOML, YAML, INI, properties), `Source` (a file, an encrypted
+file, inline text, or a foreign figment provider), and `LoadSpec` — the struct
+that names everything a load needs.
 
 `LoadSpec` is built with `with_*` methods rather than a struct literal, so a new
 knob does not break every call site at once. That is why the generated code
@@ -136,27 +137,57 @@ chains builders.
 #### `loader/` — the heart
 
 The one module worth reading in full. `mod.rs` is the API surface and the
-precedence order; `sections.rs` maps keys to sections and merges files,
-`environment.rs` the env layers, `aliases_pass.rs` the alias gap-fill,
-`recover.rs` the cache path, `origin.rs` the error translation. It:
+precedence order; `sections.rs` narrows a document to the section being
+loaded, `environment.rs` the env layers, `secrets.rs` a mounted directory,
+`aliases_pass.rs` the alias gap-fill, `recover.rs` the cache path,
+`origin.rs` what an origin says. It:
 
-- Assembles providers in precedence order (`build`).
-- Maps top-level keys to sections (`Sections`) — reimplementing figment's
-  `nested()` so that `$schema` can be exempt and a non-table key gets an error
-  that names itself.
-- Decrypts encrypted files (`merge_encrypted_file`).
-- Merges `.env` files (`merge_env_files`).
-- Fills gaps from aliases (`apply_aliases`) — queried *after* everything else,
-  because that is the only point at which "nothing supplies this" can be
-  answered.
-- Translates figment errors (`convert`, `message`, `kind_of`) — and drops the
-  offending *value*, which is where a secret in a numeric field would otherwise
-  leak.
-- Answers "where did this come from" (`origin_of`), by recognising each layer's
-  metadata name.
+- Collects one contribution per layer in precedence order (`contributions`),
+  each a tree of what that layer says about this section plus the origin to
+  record for it.
+- Narrows a parsed document to its section (`section_of`) — so that `$schema`
+  is exempt and a non-table top-level key gets an error that names itself —
+  and keeps the *sibling* sections, because a cross-section alias reads them.
+- Decrypts encrypted files (`collect_encrypted_file`).
+- Reads `.env` files (`collect_env_files`).
+- Fills gaps from aliases (`apply_aliases`) — run *after* the fold, because
+  that is the only point at which "nothing supplies this" can be answered.
+- Narrows an environment origin from the prefix to the exact variable
+  (`refine_env`), and only when that variable really exists.
 
-**The precedence order lives in `loader/mod.rs` and nowhere else.** If you
-add a layer, that is the file, and the position needs an argument in a
+`resolve.rs` is the seam around the fold: `Contribution`, `Collected`, and
+`compose`, which hands the layers to the chosen `Engine`, maps its tags back
+to origins and fills in the leaves it did not answer for.
+
+#### `engine.rs`, `reader.rs`, `backend/` — the two pluggable steps
+
+Two steps of a load are a choice: which parser reads a document
+(`Reader`), and which fold turns the layers into one configuration
+(`Engine`). Each file holds its trait, this crate's own implementation of
+it, and the registry a load picks from — `all()`, which is the one list
+the agreement tests walk.
+
+The backends live one directory each:
+
+```text
+backend/
+  config_rs/   value ─ reader ─ engine
+  figment/     value ─ reader ─ engine ─ error ─ source
+```
+
+**Grouped by backend rather than by seam.** That is the axis they change
+on: a major release of one, or a decision to stop carrying it, touches one
+directory. Outside `backend/`, nothing in the crate names a backend type
+except `Source::provider` — the one door where a figment type is part of
+this crate's API — and the tests that compare against a backend on
+purpose.
+`engine::all()` is the one list of them; the book's
+[Engines](../book/src/engines.md) page has the contract an implementation
+owes, the four traps every adapter here fell into, and the checklist for
+shipping a new one behind its own feature.
+
+**The precedence order lives in `loader::contributions` and nowhere else.** If
+you add a layer, that is the function, and the position needs an argument in a
 comment.
 
 #### `cell.rs` — where a snapshot lives
@@ -180,13 +211,14 @@ nothing. `benches/read_path.rs` is the measurement.
 
 `Layer`: a path-to-value map behind a mutex, used by `set_default`,
 `set_override`, `set_flag` and `bind_clap`. `insert_path` expands `pool.max` into
-the nested shape figment wants; `check_path` rejects paths that name nothing.
+the nested shape a layer contributes; `check_path` rejects paths that name
+nothing.
 
 #### `bindings.rs` — variables that are not yours to name
 
-`EnvBindings`, behind `bind_env("port", "PORT")`. One provider *per binding*,
-because figment attaches metadata per provider and naming the variable is the
-useful half of a diagnostic.
+`EnvBindings`, behind `bind_env("port", "PORT")`. One contribution *per
+binding*, because an origin is recorded per contribution and naming the
+variable is the useful half of a diagnostic.
 
 #### `aliases.rs` — old paths after a rename
 
@@ -264,10 +296,12 @@ type. `log` routes diagnostics to `tracing` or stderr.
 | `decrypt` | `zeroize` | — |
 | `age` | `age` | 1.85 |
 | `dotenv` | nothing | — |
-| `figment` | nothing (re-export) | — |
+| `figment` | `figment` (an engine, and interop) | — |
 | `tracing` | `tracing` | — |
 
-Three mandatory dependencies and no more: `figment`, `serde`, `arc-swap`.
+Three mandatory dependencies and no more: `serde`, `arc-swap`, and
+`config` — which carries the fold, since this crate has none of its own.
+`--no-default-features` takes away the JSON parser and nothing else.
 
 **MSRV is measured, not declared.** `age` says 1.74 and needs 1.85, because its
 translation machinery reaches `sha2 0.11`. Every floor has a CI row against a
@@ -416,12 +450,15 @@ bless`, and must report paths and types rather than values.
 Changing any of these is allowed. Arguing for it is the price.
 
 - **Reading is lock-free.** `current()` is an atomic load and nothing more.
-- **figment does not appear in a signature** unless the `figment` feature is on.
+- **The resolution is this crate's own.** figment is out of the default graph
+  and appears in a signature only behind the `figment` feature — and stays a
+  permanent dev-dependency, because the port is proved against it.
 - **Secrets are paths and types, never values** — in diffs, reports,
   suggestions and error messages alike. `tests/security.rs` enforces it.
 - **Files this crate writes are created private**, never chmodded afterwards.
 - **A remote store is untrusted input.** Nothing it sends may panic the process.
-- **No mandatory dependency** beyond `figment`, `serde`, `arc-swap`.
+- **No mandatory dependency** beyond `serde`, `arc-swap` and the default
+  engine's crate.
 - **`#![forbid(unsafe_code)]`** everywhere, checked by CI.
 - **The core MSRV is 1.71**, and every feature that raises it says so.
 

@@ -61,6 +61,6 @@ method list.
 
 `LoadSpec` is the struct every load funnels through — the macro-generated
 surface and the builder alike. Assemble one by hand for an inline document,
-a foreign figment provider, or a test that wants no filesystem at all; the
+a foreign provider, or a test that wants no filesystem at all; the
 free functions `load`, `snapshot`, `source_of`, `is_set` and `explain` all
 take one.

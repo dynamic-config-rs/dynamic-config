@@ -42,13 +42,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use figment::value::{Dict, Value};
-use figment::{Metadata, Profile, Provider};
-
 use crate::error::{Error, ErrorKind, Origin};
-
-/// How a value from a `.env` file names itself in a diagnostic.
-pub(crate) const PREFIX: &str = "the file ";
 
 /// Reads `path` into `KEY` → `value` pairs.
 ///
@@ -130,80 +124,40 @@ fn unquote(value: &str) -> &str {
     value
 }
 
-/// The variables from one `.env` file, as the environment layer sees them.
-pub(crate) struct DotenvProvider {
-    entries: BTreeMap<String, String>,
-    named: String,
-    prefix: String,
-    key: String,
-    nest: String,
+/// The entries a `.env` file supplies, as one layer's tree.
+pub(crate) fn tree(
+    entries: &std::collections::BTreeMap<String, String>,
+    prefix: &str,
+    nest: &str,
     allow_empty: bool,
-}
+) -> std::collections::BTreeMap<String, crate::Value> {
+    let mut values = std::collections::BTreeMap::new();
 
-impl DotenvProvider {
-    pub(crate) fn new(
-        entries: BTreeMap<String, String>,
-        path: &Path,
-        prefix: &str,
-        key: &str,
-        nest: &str,
-        allow_empty: bool,
-    ) -> Self {
-        Self {
-            entries,
-            named: format!("{PREFIX}{}", path.display()),
-            prefix: prefix.to_owned(),
-            key: key.to_owned(),
-            nest: nest.to_owned(),
-            allow_empty,
-        }
-    }
-}
+    for (name, text) in entries {
+        // Case-insensitively, because environment variables are written in
+        // upper case and the prefix is given in whichever case suits.
+        let Some(rest) = strip_prefix_ignoring_case(name, prefix) else {
+            continue;
+        };
 
-impl Provider for DotenvProvider {
-    fn metadata(&self) -> Metadata {
-        Metadata::named(self.named.clone())
-    }
-
-    fn data(&self) -> figment::Result<figment::value::Map<Profile, Dict>> {
-        let mut values = Dict::new();
-
-        for (name, text) in &self.entries {
-            // Case-insensitively, because environment variables are written in
-            // upper case and the prefix is given in whichever case suits.
-            let Some(rest) = strip_prefix_ignoring_case(name, &self.prefix) else {
-                continue;
-            };
-
-            // The same rule the real environment layer follows: `FOO=` — or
-            // `FOO="  "`, whitespace being how a template renders "nothing"
-            // just as often — is unset unless asked otherwise. One rule for
-            // all three env-shaped layers; the loader documents it once.
-            if text.trim().is_empty() && !self.allow_empty {
-                continue;
-            }
-
-            let path = rest.to_ascii_lowercase().replace(&self.nest, ".");
-
-            if path.is_empty() || path.split('.').any(str::is_empty) {
-                continue;
-            }
-
-            let value = text
-                .parse::<Value>()
-                .unwrap_or_else(|_| Value::from(text.clone()));
-
-            crate::layer::insert_path(&mut values, &path, value);
+        // The same rule the real environment layer follows: `FOO=` — or
+        // `FOO="  "`, whitespace being how a template renders "nothing" just
+        // as often — is unset unless asked otherwise. One rule for all three
+        // env-shaped layers; the loader documents it once.
+        if text.trim().is_empty() && !allow_empty {
+            continue;
         }
 
-        let mut map = figment::value::Map::new();
-        map.insert(
-            Profile::from(crate::loader::section_profile(&self.key)),
-            values,
-        );
+        let path = rest.to_ascii_lowercase().replace(nest, ".");
 
-        Ok(map)
+        if path.is_empty() || path.split('.').any(str::is_empty) {
+            continue;
+        }
+
+        crate::layer::insert_path(&mut values, &path, crate::text_value::from_text(text));
     }
+
+    values
 }
 
 fn strip_prefix_ignoring_case<'a>(name: &'a str, prefix: &str) -> Option<&'a str> {

@@ -489,3 +489,50 @@ fn an_uppercase_secret_stays_out_of_the_redacted_cache() {
     );
     assert!(written.contains("localhost"), "{written}");
 }
+
+/// Recovery must keep the runtime layers too, not just the environment ones.
+///
+/// An override is the strongest thing a caller can say — it beats every file
+/// and every variable — so a recovery that drops it hands the application a
+/// configuration nobody asked for at exactly the moment somebody is steering
+/// by hand. The inversion this pins filed the flag and override layers under
+/// the raw key while the recovery selected the section, so both vanished.
+#[test]
+fn recovery_keeps_the_override_above_the_cache() {
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Steered {
+        host: String,
+    }
+
+    let builder = Steered::builder("db")
+        .file("tests/scratch/cache-override.json")
+        .cache(
+            "tests/scratch/cache-override-cache.json",
+            CacheMode::Redacted,
+        );
+
+    std::fs::create_dir_all("tests/scratch").unwrap();
+    std::fs::write(
+        "tests/scratch/cache-override.json",
+        r#"{"db": {"host": "from-the-file"}}"#,
+    )
+    .unwrap();
+
+    // A clean start writes the cache, which now holds the file's value.
+    builder.init().expect("the first load succeeds");
+
+    // The file breaks and the operator steers by hand.
+    std::fs::write("tests/scratch/cache-override.json", "{ not json").unwrap();
+    Steered::set_override("host", "from-the-override").expect("the override is set");
+
+    builder.init().expect("the cache recovers");
+
+    assert_eq!(
+        Steered::current().host,
+        "from-the-override",
+        "the override outranks the cache during recovery, as it does during a load"
+    );
+}

@@ -174,17 +174,6 @@ proptest! {
             variant
         );
     }
-
-    /// Whatever a document calls its top-level key, the profile it is filed
-    /// under is never one of the two figment reserves — the bug 0.4 fixed by
-    /// adding the prefix, restated as something a generator can attack.
-    #[test]
-    fn a_section_profile_is_never_one_figment_reserves(key in "(?s).{0,32}") {
-        let profile = dynamic_config::__fuzz::section_profile(&key);
-
-        prop_assert_ne!(profile.as_str(), "default");
-        prop_assert_ne!(profile.as_str(), "global");
-    }
 }
 
 /// The `.env` grammar, reached through the seam rather than through a

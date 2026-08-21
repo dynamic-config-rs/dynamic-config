@@ -27,11 +27,15 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use figment::value::{Dict, Value};
 use serde::Serialize;
+
+use crate::value::Value;
 
 use crate::error::{Error, ErrorKind, Origin};
 use crate::source::Format;
+
+/// A document, or one section of one: keys to values, in this crate's tree.
+type Table = std::collections::BTreeMap<String, Value>;
 
 /// Writes `value` to `path` as the `key` section of a `format` document.
 ///
@@ -58,13 +62,13 @@ pub fn save<T: Serialize>(
 /// The cache holds a resolved tree rather than a struct, so it arrives here
 /// shaped already.
 pub(crate) fn save_dict(
-    section: &Dict,
+    section: &Table,
     path: &Path,
     format: Format,
     key: &str,
 ) -> Result<(), Error> {
-    let mut document = Dict::new();
-    document.insert(key.to_owned(), Value::from(section.clone()));
+    let mut document = Table::new();
+    document.insert(key.to_owned(), Value::Table(section.clone()));
 
     let rendered = render(&document, format)?;
 
@@ -75,14 +79,14 @@ pub(crate) fn save_dict(
 /// encrypted last-known-good cache writes with.
 #[cfg(feature = "decrypt")]
 pub(crate) fn save_dict_encrypted(
-    section: &Dict,
+    section: &Table,
     path: &Path,
     format: Format,
     key: &str,
     encryptor: &dyn crate::Encryptor,
 ) -> Result<(), Error> {
-    let mut document = Dict::new();
-    document.insert(key.to_owned(), Value::from(section.clone()));
+    let mut document = Table::new();
+    document.insert(key.to_owned(), Value::Table(section.clone()));
 
     let mut rendered = render(&document, format)?;
     let encrypted = encryptor
@@ -106,7 +110,7 @@ pub(crate) fn save_dict_encrypted(
 /// [`Value::render`](crate::Value::render) is this, reached from outside — and a
 /// second serializer written next to it would be a second set of edge cases for
 /// nulls and integer widths.
-pub(crate) fn render(document: &Dict, format: Format) -> Result<String, Error> {
+pub(crate) fn render(document: &Table, format: Format) -> Result<String, Error> {
     // With no format feature on, every arm below is compiled out.
     #[cfg(not(any(feature = "json", feature = "toml", feature = "yaml")))]
     let _ = document;
@@ -132,10 +136,16 @@ pub(crate) fn render(document: &Dict, format: Format) -> Result<String, Error> {
         // the way in (`port = 8080` reads as an integer), so a round trip
         // cannot promise the document it started with. A tool that wants
         // to *emit* these formats flattens with its own rules and says so.
-        Format::Ini | Format::Properties => Err(Error::new(
+        // RON and JSON5 join them for a different reason: nothing here
+        // writes them, and nothing in either backend does either. The `_`
+        // arm below would have blamed a missing feature — untrue when the
+        // feature is on, and misleading when it is off, since turning it on
+        // would not produce a writer.
+        Format::Ini | Format::Properties | Format::Ron | Format::Json5 => Err(Error::new(
             ErrorKind::Backend,
             format!(
-                "{format:?} cannot be written: it has no types, so what was                  written could not be read back as the same document. Save as                  json, toml or yaml instead"
+                "{format:?} cannot be written: nothing here has a writer for it. \
+                 Save as json, toml or yaml instead"
             ),
         )),
 
@@ -246,40 +256,30 @@ pub fn save_encrypted<T: Serialize>(
 }
 
 /// The serialized value, nested under its section key.
-fn document_of<T: Serialize>(value: &T, key: &str) -> Result<Dict, Error> {
-    let section =
-        Value::serialize(value).map_err(|error| Error::new(ErrorKind::Type, error.to_string()))?;
+///
+/// The refusal names the shape and never the value: a configuration type
+/// that serializes to a bare string — a newtype over a token is the easy way
+/// to have one — would otherwise put that string in the message, and this is
+/// a *write* path, so the string is as likely to be a credential as anything
+/// in the crate ever is.
+fn document_of<T: Serialize>(value: &T, key: &str) -> Result<Table, Error> {
+    let section = crate::ser::to_value(value)
+        .map_err(|error| Error::new(ErrorKind::Type, error.to_string()))?;
 
-    let Value::Dict(_, section) = section else {
+    let Value::Table(section) = section else {
         return Err(Error::new(
             ErrorKind::Type,
             format!(
                 "a configuration section must be a table, not {}",
-                shape(&section)
+                section.kind()
             ),
         ));
     };
 
-    let mut document = Dict::new();
-    document.insert(key.to_owned(), Value::from(section));
+    let mut document = Table::new();
+    document.insert(key.to_owned(), Value::Table(section));
 
     Ok(document)
-}
-
-/// Names what a value is without saying what it holds.
-///
-/// `{value:?}` here rendered the value itself: a configuration type that
-/// serializes to a bare string — a newtype over a token is the easy way to
-/// have one — put that string in the error, and this is a *write* path, so
-/// the string is as likely to be a credential as anything in the crate ever
-/// is. The shape is the whole of what the message needs.
-fn shape(value: &Value) -> &'static str {
-    match value {
-        Value::Dict(..) => "a table",
-        Value::Array(..) => "a list",
-        Value::Empty(..) => "nothing",
-        _ => "a single value",
-    }
 }
 
 /// Writes through a temporary file in the same directory, then renames.
@@ -531,8 +531,8 @@ mod permissions {
     #[test]
     fn the_file_is_created_private_rather_than_made_private() {
         let path = scratch("mode").join("config.json");
-        let mut section = Dict::new();
-        section.insert("password".to_owned(), Value::from("hunter2"));
+        let mut section = Table::new();
+        section.insert("password".to_owned(), Value::String("hunter2".to_owned()));
 
         save_dict(&section, &path, Format::Json, "db").unwrap();
 
@@ -557,8 +557,8 @@ mod permissions {
         // the attacker's file is not the one that gets the secrets.
         std::os::unix::fs::symlink(&elsewhere, directory.join(".config.json.link")).unwrap();
 
-        let mut section = Dict::new();
-        section.insert("password".to_owned(), Value::from("hunter2"));
+        let mut section = Table::new();
+        section.insert("password".to_owned(), Value::String("hunter2".to_owned()));
 
         save_dict(&section, &path, Format::Json, "db").unwrap();
 
@@ -609,8 +609,8 @@ mod permissions {
         // AlreadyExists.
         std::os::unix::fs::symlink(&path, &path).unwrap();
 
-        let mut section = Dict::new();
-        section.insert("host".to_owned(), Value::from("localhost"));
+        let mut section = Table::new();
+        section.insert("host".to_owned(), Value::String("localhost".to_owned()));
 
         assert!(save_new(&BTree(section), &path, Format::Json, "db").is_err());
 
@@ -620,8 +620,8 @@ mod permissions {
         );
     }
 
-    /// `save_new` takes a `Serialize`; the permission tests work in `Dict`s.
-    struct BTree(Dict);
+    /// `save_new` takes a `Serialize`; the permission tests work in tables.
+    struct BTree(Table);
 
     impl serde::Serialize for BTree {
         fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -644,8 +644,8 @@ mod permissions {
         // fails, and the question is whether anything is left over.
         let path = directory.join("missing").join("config.json");
 
-        let mut section = Dict::new();
-        section.insert("host".to_owned(), Value::from("localhost"));
+        let mut section = Table::new();
+        section.insert("host".to_owned(), Value::String("localhost".to_owned()));
 
         assert!(save_dict(&section, &path, Format::Json, "db").is_err());
 

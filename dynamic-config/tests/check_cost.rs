@@ -72,3 +72,95 @@ fn a_report_costs_a_constant_number_of_builds() {
          it must build once, not once per key"
     );
 }
+
+/// A provider that says where its values came from, the way
+/// `Source::provider`'s documentation tells one to.
+struct Described(std::path::PathBuf);
+
+impl Provider for Described {
+    fn metadata(&self) -> Metadata {
+        // Both halves: the name reaches messages, the *source* reaches
+        // provenance. The documentation for `Source::provider` spends a
+        // paragraph on exactly this distinction.
+        Metadata::from("INI file", self.0.as_path())
+    }
+
+    fn data(
+        &self,
+    ) -> Result<dynamic_config::figment::value::Map<Profile, Dict>, dynamic_config::figment::Error>
+    {
+        let mut section = Dict::new();
+        section.insert("a".to_owned(), Value::from(1_u8));
+
+        let mut map = dynamic_config::figment::value::Map::new();
+        map.insert(Profile::from("db"), section);
+
+        Ok(map)
+    }
+}
+
+/// **A provider's metadata source is its values' provenance.**
+///
+/// Every foreign provider used to answer `Origin::Inline`, however
+/// carefully it described itself — so a provider doing exactly what the
+/// documentation asks got a diagnostic pointing at nothing. The name is
+/// still only a name: `Metadata::named(..)` alone leaves the origin
+/// unknown, which is what the same paragraph promises.
+#[test]
+fn a_provider_that_names_its_file_is_traced_back_to_it() {
+    #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
+    struct One {
+        a: u8,
+    }
+
+    let path = std::path::PathBuf::from("/etc/myapp/db.ini");
+    let described = Described(path.clone());
+    let sources = [Source::provider(&described)];
+
+    let report = check::<One>(&LoadSpec::new("db", &sources), &["a"]).expect("it resolves");
+    let origin = report
+        .resolved
+        .iter()
+        .find(|entry| entry.path == "a")
+        .map(|entry| entry.origin.clone())
+        .expect("`a` is reported");
+
+    assert_eq!(
+        origin,
+        dynamic_config::Origin::File(path),
+        "the provider's own metadata says where the value lives"
+    );
+
+    // Named but not sourced: unknown, rather than a file nobody named.
+    struct NamedOnly;
+
+    impl Provider for NamedOnly {
+        fn metadata(&self) -> Metadata {
+            Metadata::named("an INI file somewhere")
+        }
+
+        fn data(
+            &self,
+        ) -> Result<
+            dynamic_config::figment::value::Map<Profile, Dict>,
+            dynamic_config::figment::Error,
+        > {
+            Described(std::path::PathBuf::new()).data()
+        }
+    }
+
+    let anonymous = NamedOnly;
+    let sources = [Source::provider(&anonymous)];
+    let report = check::<One>(&LoadSpec::new("db", &sources), &["a"]).expect("it resolves");
+
+    assert_eq!(
+        report
+            .resolved
+            .iter()
+            .find(|entry| entry.path == "a")
+            .map(|entry| entry.origin.clone()),
+        Some(dynamic_config::Origin::Unknown),
+        "a name is not a source"
+    );
+}

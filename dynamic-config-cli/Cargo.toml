@@ -30,9 +30,10 @@ dynamic-config = { workspace = true, features = [
     "properties",
     "dotenv",
 ] }
-# clap at the same *requirement* floor the core declares (`^4.4`), not a
-# statement about this crate's rust-version: a `^4.5` here would unify the
-# whole workspace's clap to 4.5, whose MSRV breaks the core's 1.71 row.
+# clap at the same *requirement* floor the core declares (`^4.4`), which is
+# a statement about how old a clap a user may already have, not about this
+# crate's rust-version: a `^4.5` here would unify the whole workspace's
+# clap to 4.5 and take that compatibility away from the library too.
 clap = { version = "4.4", features = ["derive"] }
 # Completions and the man page: clap renders both from the same command
 # definition, one call each.

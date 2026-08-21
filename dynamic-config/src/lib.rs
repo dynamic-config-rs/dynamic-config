@@ -1,5 +1,4 @@
-//! Hot-reloadable, lock-free application configuration, built on
-//! [figment](https://docs.rs/figment).
+//! Hot-reloadable, lock-free application configuration.
 //!
 //! Declare a struct, configure it with the builder, and read it from
 //! anywhere:
@@ -114,7 +113,7 @@
 //! | `APP_DB_MAX_SIZE` | `max_size` |
 //! | `APP_DB_POOL__MAX_SIZE` | `pool.max_size` |
 //!
-//! Values are interpreted by figment, which reads them loosely: `8080` reaches
+//! Values are read loosely, because a variable is always text: `8080` reaches
 //! a `u16`, `true` reaches a `bool`, and `[a, b, c]` reaches a `Vec<String>`.
 //! A value that cannot become the field's type is an error naming the field.
 //!
@@ -260,30 +259,44 @@ pub mod age;
 mod aliases;
 #[cfg(feature = "async")]
 mod asynchronous;
+mod backend;
 mod bindings;
 mod builder;
 mod cache;
 mod cell;
 mod check;
+mod de;
 #[cfg(feature = "decrypt")]
 mod decrypt;
 mod discovery;
+mod document;
 #[cfg(feature = "dotenv")]
 mod dotenv;
 mod dynamic;
+pub mod engine;
+mod env_layer;
 mod error;
 mod explain;
 mod group;
 mod layer;
 mod loader;
 mod log;
+pub mod reader;
 mod redirects;
 mod registry;
 mod reload;
 mod remote;
+// The composition the loader moves onto next: the layers already build this
+// crate's trees, and what remains is handing them here in precedence order
+// instead of to the backend. Exercised meanwhile by its own differential
+// test, which composes the same layers both ways and compares the tree and
+// the winner of every leaf.
+#[allow(dead_code)]
+mod resolve;
 #[cfg(feature = "schema")]
 #[cfg_attr(docsrs, doc(cfg(feature = "schema")))]
 pub mod schema;
+mod ser;
 mod snapshot;
 mod source;
 pub(crate) mod sync;
@@ -295,6 +308,7 @@ pub mod telemetry;
 // surface to reach.
 #[cfg(all(feature = "tracing", not(feature = "telemetry")))]
 mod telemetry;
+mod text_value;
 mod units;
 mod value;
 mod write;
@@ -342,7 +356,10 @@ pub use reload::{ConfigStatus, FailureStatus, ReloadEvent, ReloadReason};
 #[cfg(feature = "async")]
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
-pub use remote::{Fetched, Remote, RemoteSink, RemoteSource, RemoteStatus, RemoteWatch, Watching};
+pub use remote::{
+    Fetched, Pace, Remote, RemoteSink, RemoteSource, RemoteStatus, RemoteWatch, WatchCapability,
+    Watching,
+};
 pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};
 pub use units::{bytes, duration};
@@ -592,6 +609,122 @@ where
 /// it stands.
 #[doc(hidden)]
 pub mod __fuzz {
+    /// One load, composed by every engine this build has.
+    ///
+    /// `(engine name, rendered tree)` per engine, in a fixed order — so a
+    /// test can assert that they all say the same thing, and name the one
+    /// that drifted when they do not. Rendered rather than returned as a
+    /// tree, so the harness needs no value type and a divergence shows up
+    /// as a changed string.
+    ///
+    /// This is the whole-stack differential: the engines fold the *same*
+    /// collected layers, which is the only way the comparison is about the
+    /// fold rather than about the walk in front of it.
+    #[must_use]
+    pub fn compositions(spec: &crate::LoadSpec<'_>) -> Vec<(String, String)> {
+        crate::engine::all()
+            .into_iter()
+            .map(|engine| {
+                let rendered = crate::loader::contributions(spec)
+                    .and_then(|mut collected| {
+                        crate::resolve::compose(engine, collected.take_layers())
+                    })
+                    .map_or_else(
+                        |error| format!("error: {error}"),
+                        |(tree, _)| format!("{:?}", crate::Value::Table(tree)),
+                    );
+
+                (engine.name().to_owned(), rendered)
+            })
+            .collect()
+    }
+
+    /// The same load, composed by every engine, with the winner of every
+    /// leaf as well as the value.
+    ///
+    /// The trees agreeing is half the contract; §4 is the other half, and a
+    /// provenance drift is invisible in a rendered tree.
+    #[must_use]
+    pub fn provenances(spec: &crate::LoadSpec<'_>) -> Vec<(String, String)> {
+        crate::engine::all()
+            .into_iter()
+            .map(|engine| {
+                let rendered = crate::loader::contributions(spec)
+                    .and_then(|mut collected| {
+                        crate::resolve::compose(engine, collected.take_layers())
+                    })
+                    .map_or_else(
+                        |error| format!("error: {error}"),
+                        |(_, provenance)| {
+                            provenance
+                                .iter()
+                                .map(|(path, origin)| format!("{path} = {origin}"))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        },
+                    );
+
+                (engine.name().to_owned(), rendered)
+            })
+            .collect()
+    }
+
+    /// A stack of layer trees, through one engine and the crate's own
+    /// provenance repair — the whole seam, without a filesystem.
+    ///
+    /// `(tree, leaf path → the index of the layer that supplied it)`. What
+    /// the engine-agreement tests drive: a fold reached this way is the fold
+    /// a load gets, repair included.
+    ///
+    /// # Errors
+    ///
+    /// If the engine refuses the layers.
+    pub fn fold_through(
+        engine: &'static dyn crate::engine::Engine,
+        layers: &[crate::Value],
+    ) -> Result<(crate::Value, std::collections::BTreeMap<String, String>), crate::Error> {
+        let contributions = layers
+            .iter()
+            .enumerate()
+            .map(|(index, values)| {
+                let table = match values {
+                    crate::Value::Table(table) => table.clone(),
+                    _ => std::collections::BTreeMap::new(),
+                };
+
+                // The index as the origin, so a disagreement about *which*
+                // layer won reads as a number rather than as a file name
+                // nobody chose.
+                crate::resolve::Contribution::new(
+                    "test",
+                    crate::Origin::Env(index.to_string()),
+                    table,
+                )
+            })
+            .collect();
+
+        let (tree, provenance) = crate::resolve::compose(engine, contributions)?;
+
+        Ok((
+            crate::Value::Table(tree),
+            provenance
+                .into_iter()
+                .map(|(path, origin)| (path, origin.to_string()))
+                .collect(),
+        ))
+    }
+
+    /// Configuration text read the way an environment variable is read.
+    ///
+    /// Total by contract: every input is a value, none is an error and none
+    /// is a panic. The rendered form rather than the tree, so the target
+    /// needs no value type — and so a reading that changes shows up as a
+    /// changed string rather than as nothing at all.
+    #[must_use]
+    pub fn text_value(text: &str) -> String {
+        format!("{:?}", crate::text_value::from_text(text))
+    }
+
     /// INI text through the real provider: the parsed table, or the error.
     ///
     /// Reads no file — the fuzzer supplies the bytes. What must hold: no
@@ -599,22 +732,22 @@ pub mod __fuzz {
     /// harness asserts that separately).
     #[cfg(feature = "ini")]
     pub fn ini_document(text: &str) -> Result<usize, String> {
-        use figment::Provider as _;
-
         crate::loader::__fuzz_ini(text)
-            .data()
-            .map(|map| map.len())
+            .map(|document| match document {
+                crate::Value::Table(table) => table.len(),
+                _ => 0,
+            })
             .map_err(|error| error.to_string())
     }
 
     /// Properties text through the real provider, same contract.
     #[cfg(feature = "properties")]
     pub fn properties_document(text: &str) -> Result<usize, String> {
-        use figment::Provider as _;
-
         crate::loader::__fuzz_properties(text)
-            .data()
-            .map(|map| map.len())
+            .map(|document| match document {
+                crate::Value::Table(table) => table.len(),
+                _ => 0,
+            })
             .map_err(|error| error.to_string())
     }
 
@@ -624,16 +757,6 @@ pub mod __fuzz {
     #[cfg(feature = "dotenv")]
     pub fn dotenv_entries(text: &str) -> Result<std::collections::BTreeMap<String, String>, usize> {
         crate::dotenv::parse(text)
-    }
-
-    /// A top-level key as the profile the loader files that section under.
-    ///
-    /// The 0.4 bug was here: an unprefixed mapping handed figment's reserved
-    /// `global` and `default` profiles to any document with an innocently named
-    /// table.
-    #[must_use]
-    pub fn section_profile(key: &str) -> String {
-        crate::loader::section_profile(key)
     }
 
     /// Whether a profile can only ever name a sibling of the file it applies to.

@@ -186,18 +186,25 @@ jobs:
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
         with:
           tool: cargo-hack
-      # Every combination has to compile, not just the ones we happen to test.
+      # Every combination has to compile *warning-free*, not just the ones we
+      # happen to test.
       #
       # `--depth 2` rather than the full powerset: the full set is thousands
       # of builds, and the pairs are where feature interactions actually live —
       # a `cfg` that is wrong is almost always wrong for one feature or for two
       # together.
-      - run: cargo hack check -p dynamic-config --feature-powerset --depth 2
+      #
+      # `clippy … -D warnings` rather than `check`: the lint job runs the two
+      # feature *extremes*, and a dead function or an unreachable statement in
+      # a build between them shows up here or nowhere. `--lib` because a
+      # combination's examples and tests are the `check` job's business, and
+      # `-D warnings` after `--` reaches this crate and not its dependencies.
+      - run: cargo hack clippy -p dynamic-config --feature-powerset --depth 2 --lib -- -D warnings
       # The two features that gate a *public API* rather than an internal path
-      # get their own check with everything else off, because that is the
+      # get their own run with everything else off, because that is the
       # combination a user reaching for one of them will have.
-      - run: cargo check -p dynamic-config --no-default-features --features figment
-      - run: cargo check -p dynamic-config --no-default-features --features decrypt
+      - run: cargo clippy -p dynamic-config --no-default-features --features figment --lib -- -D warnings
+      - run: cargo clippy -p dynamic-config --no-default-features --features decrypt --lib -- -D warnings
 
   loader:
     needs: [changes]
@@ -404,6 +411,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # A README is the first thing anyone reads and the last thing anyone
       # tests. A dead anchor in it is a small bug that is very easy to ship.
+      #
+      # The exclusions are hosts, not links. Our own GitHub, docs.rs and
+      # Pages URLs point at things a release creates, so they 404 until it
+      # has. Scorecard's site and badge endpoint are the other kind: they
+      # refuse connections from runners often enough to fail this job on a
+      # link that is live — 200 from an ordinary network, and GitHub renders
+      # the badge from that host on every page view. A gate that fails for
+      # somebody else's firewall stops being read.
       - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: >-
@@ -414,6 +429,7 @@ jobs:
             --exclude '^https://github\.com/dynamic-config-rs/'
             --exclude '^https://docs\.rs/dynamic-config'
             --exclude '^https://dynamic-config-rs\.github\.io'
+            --exclude '^https://(api\.)?scorecard\.dev'
             README.md ROADMAP.md CONTRIBUTING.md SECURITY.md RELEASING.md
             AGENTS.md CHANGELOG.md CREDITS.md docs/*.md scripts/README.md
             dynamic-config*/README.md dynamic-config*/CHANGELOG.md

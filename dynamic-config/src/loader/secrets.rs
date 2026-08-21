@@ -27,66 +27,40 @@
 
 use std::path::{Path, PathBuf};
 
-use figment::value::{Dict, Value};
-use figment::{Figment, Metadata, Profile, Provider};
-
 use crate::error::{Error, ErrorKind, Origin};
 use crate::source::LoadSpec;
 
-/// How one mounted secret names itself, before its path.
+/// One mounted secret.
 ///
-/// Distinct from the `.env` layer's `"the file "` so the two are told apart
-/// by name; the origin both resolve to is the same `Origin::File`, which for
-/// this layer comes from the metadata's *source* rather than from the name.
-const PREFIX: &str = "the secrets file ";
-
-/// Merges every regular file in the configured directory, one provider each.
-pub(super) fn merge_secrets_dir(
-    mut figment: Figment,
-    spec: &LoadSpec<'_>,
-) -> Result<Figment, Error> {
-    let Some(directory) = spec.secrets_dir else {
-        return Ok(figment);
-    };
-
-    for secret in read(Path::new(directory), spec)? {
-        figment = figment.merge(secret);
-    }
-
-    Ok(figment)
-}
-
-/// One mounted secret, as its own figment provider.
-///
-/// Per file rather than one provider for the whole directory: figment
-/// attaches metadata per *provider*, so a single provider would trace every
-/// key back to the directory and no further. Ten files is ten providers, and
-/// ten is the order of magnitude a mount actually has.
+/// Per file rather than one contribution for the whole directory: provenance
+/// is recorded per contribution, so a single one would trace every key back
+/// to the directory and no further. Ten files is ten contributions, and ten
+/// is the order of magnitude a mount actually has.
 struct Secret {
     path: PathBuf,
     /// Dotted key path within the section, from the filename.
     key: String,
     value: String,
-    section: String,
 }
 
-impl Provider for Secret {
-    fn metadata(&self) -> Metadata {
-        // The source is what `origin_of` reads: a value traced back here
-        // reports `Origin::File(the individual file)`, not the directory.
-        Metadata::named(format!("{PREFIX}{}", self.path.display()))
-            .source(figment::Source::File(self.path.clone()))
+/// Every secret file's contribution: one per file, so provenance names the
+/// file to edit rather than the directory it sits in.
+pub(super) fn collect(
+    into: &mut crate::resolve::Collected,
+    spec: &LoadSpec<'_>,
+) -> Result<(), Error> {
+    let Some(directory) = spec.secrets_dir else {
+        return Ok(());
+    };
+
+    for secret in read(Path::new(directory), spec)? {
+        let mut values = std::collections::BTreeMap::new();
+        crate::layer::insert_path(&mut values, &secret.key, crate::Value::String(secret.value));
+
+        into.layer("secrets", crate::Origin::File(secret.path), values);
     }
 
-    fn data(&self) -> figment::Result<figment::value::Map<Profile, Dict>> {
-        let mut values = Dict::new();
-        crate::layer::insert_path(&mut values, &self.key, Value::from(self.value.clone()));
-
-        let mut map = figment::value::Map::new();
-        map.insert(Profile::from(super::section_profile(&self.section)), values);
-
-        Ok(map)
-    }
+    Ok(())
 }
 
 /// Reads one directory level into one [`Secret`] per key file.
@@ -196,7 +170,6 @@ fn read(directory: &Path, spec: &LoadSpec<'_>) -> Result<Vec<Secret>, Error> {
             path,
             key,
             value: trim_one_newline(&text).to_owned(),
-            section: spec.key.to_owned(),
         });
     }
 

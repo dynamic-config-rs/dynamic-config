@@ -85,6 +85,94 @@ small and few, and a watcher that misses edits is the failure polling was
 chosen to escape. Choose the interval accordingly: two seconds over a
 network mount is a different bill from fifty milliseconds.
 
+## Watching a remote store
+
+A file watcher is one half. The other is a store: a change written to
+Consul, etcd, Vault or a config server should reach the process the same
+way an edited file does.
+
+```rust
+let sink = DbConfig::remote_sink();
+let handle = RemoteWatch::new();
+let watching = handle.watching();
+
+std::thread::spawn(move || {
+    store.watch(&watching, Duration::from_secs(30), |document| {
+        sink.apply(document)          // installs, reloads, wakes the readers
+    })
+});
+```
+
+Blocking, so it belongs on a thread of its own; the async twin is
+`watch_async` and cancelling it is dropping the future. Dropping the
+`RemoteWatch` stops the loop — `detach()` says *this one really should run
+forever*.
+
+**The sink is what makes a delivery a reload.** `RemoteSink::apply` is the
+piece that installs the document *and* runs the configuration's reload —
+validation, hooks, `changes()`, the last-known-good cache. Its twin
+`sink.failed(&error)` records an attempt that came back with nothing, so a
+watch whose store has been down for an hour stops reporting it as
+reachable.
+
+`Remote::watch` is the other half, and it does less on purpose: it keeps
+the *document* fresh in the remote slot, the way `refresh()` does, and
+reloads nothing. A `Remote` is a store handle, not a configuration — it
+has no type to deserialize into and no hooks to fire. Reach for it when
+something else decides when to reload; reach for the sink when a change
+in the store should reach `current()` on its own.
+
+**What the interval means depends on the store**, and the store says which:
+
+| capability | what a watch does | what the interval means |
+|---|---|---|
+| `Native` | the store's own mechanism — a blocking query, a stream, a subscription | a resync, because a stalled stream looks exactly like a store where nothing changed |
+| `Conditional` | asks whether it changed, and reads the document only when it did | how often to ask |
+| `Interval` | re-reads the whole document | how often to read |
+
+```rust
+match REMOTE.watch_capability() {
+    Some(WatchCapability::Native) => // changes arrive as they happen
+    Some(WatchCapability::Conditional) => // a cheap question on a timer
+    Some(WatchCapability::Interval) => // the whole document on a timer
+    None => // no store is installed
+}
+```
+
+A store with no watch of its own is still watched: the default polls, and
+**only a document that differs from the last one is installed**, so a
+process does not fire every reload hook it has once an interval.
+
+The waits are not flat. They are spread by up to a quarter in either
+direction — fifty replicas started by one rollout would otherwise hit the
+store simultaneously, every interval, forever — and they double after each
+failure up to a ceiling, so a store that is down is not hammered by
+everything that depends on it. `Pace` is that policy on its own, for a
+store crate writing its own loop:
+
+```rust
+let mut pace = Pace::new(Duration::from_secs(30));
+
+while watching.keep_going() {
+    match fetch() {
+        Ok(document) => pace.succeeded(),
+        Err(error) => pace.failed(),
+    }
+
+    pace.wait(&watching);
+}
+```
+
+A failing fetch does **not** end the watch. Outliving an outage is what a
+watch is for, so a failure is waited out and tried again.
+
+**Recording it is the caller's**, and worth wiring: the default watch backs
+off and says nothing, because a `RemoteSource` is handed a store and a
+callback and has no way to reach the status a `Remote` keeps. A loop built
+on the sink calls `sink.failed(&error)` — the store crates' `reporting_to`
+does it for you — and without that, `status().reachable()` goes on
+answering `true` for as long as the outage lasts.
+
 ## Reacting to a reload
 
 ```rust

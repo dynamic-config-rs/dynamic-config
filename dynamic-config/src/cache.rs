@@ -34,7 +34,6 @@
 //! caused it, because a malformed file fails to parse whatever sits underneath
 //! it.
 
-#[cfg(all(test, feature = "json"))]
 use std::collections::BTreeMap;
 use std::fmt;
 // `std::collections::hash_map::DefaultHasher` rather than `std::hash::`: the
@@ -44,11 +43,14 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 
-use figment::value::{Dict, Value};
+use crate::value::Value;
 
 use crate::error::{Error, ErrorKind, Origin};
 use crate::snapshot::Snapshot;
 use crate::source::Format;
+
+/// A cache file's contents: keys to values, in this crate's tree.
+type Document = BTreeMap<String, Value>;
 
 /// The key a cache document is written under, so it reads back like any file.
 const CACHED: &str = "cached";
@@ -163,22 +165,25 @@ pub(crate) fn write(
     let format = format_of(path)?;
 
     let mut document = match mode {
-        CacheMode::Full => snapshot.values().clone(),
-        CacheMode::Redacted => without(snapshot.values(), secrets),
+        CacheMode::Full => as_document(snapshot),
+        CacheMode::Redacted => without(&as_document(snapshot), secrets),
         CacheMode::Fingerprint => fingerprint_document(snapshot),
     };
 
-    let mut marker = Dict::new();
-    marker.insert("version".to_owned(), Value::from(1));
+    let mut marker = Document::new();
+    marker.insert("version".to_owned(), Value::Integer(1));
     marker.insert(
         "mode".to_owned(),
-        Value::from(match mode {
-            CacheMode::Full => "full",
-            CacheMode::Redacted => "redacted",
-            CacheMode::Fingerprint => "fingerprint",
-        }),
+        Value::String(
+            match mode {
+                CacheMode::Full => "full",
+                CacheMode::Redacted => "redacted",
+                CacheMode::Fingerprint => "fingerprint",
+            }
+            .to_owned(),
+        ),
     );
-    document.insert(MARKER.to_owned(), Value::from(marker));
+    document.insert(MARKER.to_owned(), Value::Table(marker));
 
     crate::write::save_dict(&document, path, format, CACHED)
 }
@@ -197,11 +202,11 @@ pub(crate) fn write_encrypted(
 ) -> Result<(), Error> {
     let format = encrypted_format_of(path)?;
 
-    let mut document = snapshot.values().clone();
-    let mut marker = Dict::new();
-    marker.insert("version".to_owned(), Value::from(1));
-    marker.insert("mode".to_owned(), Value::from("full"));
-    document.insert(MARKER.to_owned(), Value::from(marker));
+    let mut document = as_document(snapshot);
+    let mut marker = Document::new();
+    marker.insert("version".to_owned(), Value::Integer(1));
+    marker.insert("mode".to_owned(), Value::String("full".to_owned()));
+    document.insert(MARKER.to_owned(), Value::Table(marker));
 
     crate::write::save_dict_encrypted(&document, path, format, CACHED, encryptor)
 }
@@ -370,7 +375,7 @@ fn fingerprint_of(snapshot: &Snapshot) -> String {
 /// is what a language binding derives from a nested model. Both mean the
 /// same thing here: the value at that path does not reach the disk, and
 /// neither does anything under it.
-fn without(values: &Dict, secrets: &[&str]) -> Dict {
+fn without(values: &Document, secrets: &[&str]) -> Document {
     let mut document = values.clone();
 
     for secret in secrets {
@@ -381,31 +386,41 @@ fn without(values: &Dict, secrets: &[&str]) -> Dict {
 }
 
 /// Removes the value at a dotted `path`, if the path leads anywhere.
-fn remove_path(document: &mut Dict, path: &str) {
+fn remove_path(document: &mut Document, path: &str) {
     match path.split_once('.') {
         None => {
             document.remove(path);
         }
         Some((head, rest)) => {
-            if let Some(Value::Dict(_, nested)) = document.get_mut(head) {
+            if let Some(Value::Table(nested)) = document.get_mut(head) {
                 remove_path(nested, rest);
             }
         }
     }
 }
 
+/// The snapshot's tree, as a document.
+fn as_document(snapshot: &Snapshot) -> Document {
+    match snapshot.to_value() {
+        Value::Table(table) => table,
+        // A snapshot is a table by construction — it is the resolved section,
+        // and a section is keys.
+        _ => Document::new(),
+    }
+}
+
 /// A hash of the values, plus the key names — and no value anywhere.
-fn fingerprint_document(snapshot: &Snapshot) -> Dict {
+fn fingerprint_document(snapshot: &Snapshot) -> Document {
     let keys = snapshot.leaf_paths();
 
-    let mut document = Dict::new();
+    let mut document = Document::new();
     document.insert(
         FINGERPRINT.to_owned(),
-        Value::from(fingerprint_of(snapshot)),
+        Value::String(fingerprint_of(snapshot)),
     );
     document.insert(
         KEYS.to_owned(),
-        Value::from(keys.into_iter().map(Value::from).collect::<Vec<_>>()),
+        Value::Array(keys.into_iter().map(Value::String).collect()),
     );
 
     document
@@ -433,7 +448,7 @@ fn format_of(path: &Path) -> Result<Format, Error> {
 
 /// A map, for the tests below.
 #[cfg(all(test, feature = "json"))]
-fn dict_of(entries: &[(&str, Value)]) -> BTreeMap<String, Value> {
+fn dict_of(entries: &[(&str, crate::Value)]) -> BTreeMap<String, crate::Value> {
     entries
         .iter()
         .map(|(key, value)| ((*key).to_owned(), value.clone()))
@@ -443,6 +458,11 @@ fn dict_of(entries: &[(&str, Value)]) -> BTreeMap<String, Value> {
 #[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
+
+    // The tree these tests build is the resolved one, not the document the
+    // writers take — the explicit import shadows the glob's so `Value` means
+    // the same thing here as it does everywhere a snapshot is held.
+    use crate::Value;
 
     fn scratch(test: &str) -> std::path::PathBuf {
         let directory = std::env::temp_dir().join("dynamic-config-cache").join(test);

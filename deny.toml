@@ -7,10 +7,6 @@ yanked = "deny"
 # "ignore dev-dependencies": a vulnerability in something that runs on a
 # contributor's machine or in CI still matters.
 ignore = [
-    # `paste` is unmaintained rather than vulnerable — an informational
-    # advisory. It arrives through `actix-web`, which is a dev-dependency of
-    # one example, so it is in no build a user of this crate produces. Revisit
-    # if it ever becomes a vulnerability, or if actix drops it.
     # h2's 0.3 line has no patched release (the fix landed in 0.4.16 only)
     # and actix-http 3 — the newest there is — is built on 0.3. The same
     # actix example again: in no build a user of this crate produces.
@@ -82,6 +78,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 
 # `serde_yaml 0.9` is archived by its author (the version literally reads
-# `0.9.34+deprecated`). It stays for now: figment's own `yaml` feature pulls
-# it regardless, so switching our direct dependency would not remove it from
-# the tree — tracked as an issue until figment moves.
+# `0.9.34+deprecated`). It stays for now: it is behind the `yaml` feature, it
+# has no open advisory, and every candidate replacement is a fork of the same
+# archived code. Tracked in the roadmap as a choice to make rather than a
+# switch to flip.

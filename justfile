@@ -115,12 +115,16 @@ msrv:
     cargo +1.88 check -p dynamic-config-cli --locked
     cargo +1.88 check -p dynamic-config-embedded --locked --no-default-features --features json,async
 
-# Every pairwise feature combination compiles — CI's `features` job.
-# Needs cargo-hack (`cargo install cargo-hack`).
+# Every pairwise feature combination compiles, warning-free — CI's
+# `features` job. Needs cargo-hack (`cargo install cargo-hack`).
+#
+# Clippy rather than check: `just lint` runs the two feature extremes, so
+# anything that is dead or unreachable only in a build between them — which
+# is where `cfg`s go wrong — is caught here or not at all.
 hack:
-    cargo hack check -p dynamic-config --feature-powerset --depth 2
-    cargo check -p dynamic-config --no-default-features --features figment
-    cargo check -p dynamic-config --no-default-features --features decrypt
+    cargo hack clippy -p dynamic-config --feature-powerset --depth 2 --lib -- -D warnings
+    cargo clippy -p dynamic-config --no-default-features --features figment --lib -- -D warnings
+    cargo clippy -p dynamic-config --no-default-features --features decrypt --lib -- -D warnings
 
 # The declared minimum dependency versions actually resolve — CI's
 # `minimal-versions` job. Needs a nightly toolchain. The committed

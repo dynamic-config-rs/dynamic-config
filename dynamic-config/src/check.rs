@@ -158,17 +158,20 @@ pub fn check<T>(spec: &LoadSpec<'_>, fields: &[&str]) -> Result<Report, Error>
 where
     T: serde::de::DeserializeOwned,
 {
-    // One build serves every question below. The old shape called
-    // `source_of` per leaf key, and each call rebuilt the figment — re-reading
-    // and re-parsing every source once per key.
-    let (snapshot, figment) = crate::loader::resolved(spec)?;
+    // One walk serves every question below. The old shape called `source_of`
+    // per leaf key, and each call re-read and re-parsed every source once
+    // per key; the snapshot now carries the answer with it.
+    let snapshot = crate::loader::resolved(spec)?;
     let paths = snapshot.leaf_paths();
 
     let resolved = paths
         .iter()
         .map(|path| Resolved {
             path: path.clone(),
-            origin: crate::loader::origin_in(&figment, path, spec.nest),
+            origin: snapshot
+                .source_of(path)
+                .cloned()
+                .unwrap_or(crate::Origin::Unknown),
         })
         .collect();
 

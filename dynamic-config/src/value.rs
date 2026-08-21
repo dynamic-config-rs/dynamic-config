@@ -70,6 +70,23 @@ pub enum Value {
 }
 
 impl Value {
+    /// What kind of thing this is, in the words a diagnostic uses.
+    ///
+    /// The kind and never the value: a message is the one place a
+    /// configuration value has no business appearing, and "a string" is the
+    /// whole of what a reader needs to know about the thing that was in the
+    /// wrong place.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Value::Null => "nothing",
+            Value::Bool(_) => "a boolean",
+            Value::Integer(_) | Value::Float(_) => "a number",
+            Value::String(_) => "a string",
+            Value::Array(_) => "a list",
+            Value::Table(_) => "a table",
+        }
+    }
+
     /// The value at a dotted `path` below this one, if every step exists.
     ///
     /// Steps are table keys; anything else — an array, a leaf — ends the
@@ -129,11 +146,11 @@ impl Value {
             crate::Error::new(crate::ErrorKind::Missing, "no value at this path").prepend_key(path)
         })?;
 
-        // Through the crate's one translation, so a password typed into a
-        // numeric field does not come back inside ``found string "hunter2"``.
-        to_figment(value)
-            .deserialize()
-            .map_err(|error: figment::Error| crate::loader::translate(&error).prepend_key(path))
+        // Through the crate's one reader, so a password typed into a numeric
+        // field does not come back inside ``found string "hunter2"``: the
+        // message names the kind that was there and never what it held.
+        T::deserialize(crate::de::Reader(value))
+            .map_err(|error| crate::de::Error::into_error(error).prepend_key(path))
     }
 
     /// The boolean here, or `None` if this is anything else.
@@ -281,14 +298,7 @@ impl Value {
     /// same way every other backend failure here is — the key and the kind of
     /// thing that was there, never the value.
     pub fn parse(text: &str, format: crate::Format) -> Result<Self, crate::Error> {
-        crate::loader::parse_document(text, format).map(|document| {
-            Value::Table(
-                document
-                    .iter()
-                    .map(|(key, value)| (key.clone(), from_figment(value)))
-                    .collect(),
-            )
-        })
+        crate::document::parse(text, format)
     }
 
     /// Merges `other` over this value: later wins, tables deep.
@@ -356,13 +366,26 @@ impl Value {
             ));
         };
 
-        let document = table
-            .iter()
-            .map(|(key, value)| (key.clone(), to_figment(value)))
-            .collect();
-
-        crate::write::render(&document, format)
+        crate::write::render(table, format)
     }
+}
+
+/// Every leaf path in a table, without a `Value` to hold it.
+///
+/// [`Value::leaf_paths`] is the public door and takes a whole value; the
+/// fold has a bare table and would otherwise have to clone the resolved
+/// configuration to ask this question.
+pub(crate) fn leaf_paths_of(table: &BTreeMap<String, Value>) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut path = Vec::new();
+
+    for (key, value) in table {
+        path.push(key.clone());
+        leaves(value, &mut path, &mut paths);
+        path.pop();
+    }
+
+    paths
 }
 
 /// Records the dotted path of every leaf below `value`.
@@ -559,7 +582,12 @@ impl serde::Serialize for Value {
         use serde::ser::{SerializeMap, SerializeSeq};
 
         match self {
-            Value::Null => serializer.serialize_unit(),
+            // `None` rather than `Unit`, and the difference is the writers':
+            // a format with no unit type refuses `Unit` outright, where
+            // `None` is the absent key it is meant to be. Every format this
+            // crate reads back renders the two the same way, so nothing but
+            // TOML can tell the difference.
+            Value::Null => serializer.serialize_none(),
             Value::Bool(boolean) => serializer.serialize_bool(*boolean),
             Value::Integer(number) => match (i64::try_from(*number), u64::try_from(*number)) {
                 (Ok(signed), _) => serializer.serialize_i64(signed),
@@ -608,85 +636,80 @@ impl std::fmt::Debug for Value {
 }
 
 /// The walk from figment's tree, tags dropped, no serialization involved.
-pub(crate) fn from_figment(value: &figment::value::Value) -> Value {
-    use figment::value::{Empty, Num};
-
-    match value {
-        figment::value::Value::String(_, string) => Value::String(string.clone()),
-        figment::value::Value::Char(_, character) => Value::String(character.to_string()),
-        figment::value::Value::Bool(_, boolean) => Value::Bool(*boolean),
-        figment::value::Value::Num(_, number) => match number {
-            Num::U8(n) => Value::Integer(i128::from(*n)),
-            Num::U16(n) => Value::Integer(i128::from(*n)),
-            Num::U32(n) => Value::Integer(i128::from(*n)),
-            Num::U64(n) => Value::Integer(i128::from(*n)),
-            Num::USize(n) => Value::Integer(*n as i128),
-            Num::U128(n) => i128::try_from(*n)
-                .map(Value::Integer)
-                .unwrap_or(Value::Float(*n as f64)),
-            Num::I8(n) => Value::Integer(i128::from(*n)),
-            Num::I16(n) => Value::Integer(i128::from(*n)),
-            Num::I32(n) => Value::Integer(i128::from(*n)),
-            Num::I64(n) => Value::Integer(i128::from(*n)),
-            Num::ISize(n) => Value::Integer(*n as i128),
-            Num::I128(n) => Value::Integer(*n),
-            Num::F32(n) => Value::Float(f64::from(*n)),
-            Num::F64(n) => Value::Float(*n),
-        },
-        figment::value::Value::Empty(_, Empty::None | Empty::Unit) => Value::Null,
-        figment::value::Value::Dict(_, dict) => Value::Table(
-            dict.iter()
-                .map(|(key, value)| (key.clone(), from_figment(value)))
-                .collect(),
-        ),
-        figment::value::Value::Array(_, values) => {
-            Value::Array(values.iter().map(from_figment).collect())
+/// The obvious conversions, so a tree can be written down in code.
+///
+/// A configuration is usually read rather than built, but the places that
+/// build one — a test, a default, a binding handing values back — should not
+/// have to name the variant every time.
+macro_rules! from_integer {
+    ($($type:ty),* $(,)?) => {$(
+        impl From<$type> for Value {
+            fn from(number: $type) -> Self {
+                Value::Integer(i128::from(number))
+            }
         }
+    )*};
+}
+
+from_integer!(u8, u16, u32, u64, i8, i16, i32, i64, i128);
+
+impl From<bool> for Value {
+    fn from(boolean: bool) -> Self {
+        Value::Bool(boolean)
     }
 }
 
-/// The walk back, for [`Value::render`]: this crate's serializers all take
-/// figment's tree, and one of them is what [`crate::save`] already writes with.
-///
-/// Every value is tagged [`Tag::Default`](figment::value::Tag::Default) —
-/// a tag records which provider supplied a value, and a tree assembled by a
-/// caller was supplied by none of them.
-fn to_figment(value: &Value) -> figment::value::Value {
-    use figment::value::{Empty, Num, Tag};
+impl From<f64> for Value {
+    fn from(number: f64) -> Self {
+        Value::Float(number)
+    }
+}
 
-    match value {
-        Value::Null => figment::value::Value::Empty(Tag::Default, Empty::None),
-        Value::Bool(boolean) => figment::value::Value::Bool(Tag::Default, *boolean),
-        // Narrowed rather than emitted as `I128`: `Value` widens every integer
-        // on the way in so the boundary needs no sign decision, but a
-        // serializer does — `toml` refuses an `i128` outright, whatever the
-        // number in it is. Signed first, so a round trip through a format that
-        // has one integer type comes back the width it went in as.
-        Value::Integer(number) => figment::value::Value::Num(
-            Tag::Default,
-            i64::try_from(*number).map_or_else(
-                |_| u64::try_from(*number).map_or(Num::I128(*number), Num::U64),
-                Num::I64,
-            ),
-        ),
-        Value::Float(number) => figment::value::Value::Num(Tag::Default, Num::F64(*number)),
-        Value::String(text) => figment::value::Value::String(Tag::Default, text.clone()),
-        Value::Array(values) => {
-            figment::value::Value::Array(Tag::Default, values.iter().map(to_figment).collect())
-        }
-        Value::Table(table) => figment::value::Value::Dict(
-            Tag::Default,
+impl From<f32> for Value {
+    fn from(number: f32) -> Self {
+        Value::Float(f64::from(number))
+    }
+}
+
+impl From<&str> for Value {
+    fn from(text: &str) -> Self {
+        Value::String(text.to_owned())
+    }
+}
+
+impl From<String> for Value {
+    fn from(text: String) -> Self {
+        Value::String(text)
+    }
+}
+
+impl<T: Into<Value>> From<Vec<T>> for Value {
+    fn from(values: Vec<T>) -> Self {
+        Value::Array(values.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<T: Into<Value>> From<std::collections::BTreeMap<String, T>> for Value {
+    fn from(table: std::collections::BTreeMap<String, T>) -> Self {
+        Value::Table(
             table
-                .iter()
-                .map(|(key, value)| (key.clone(), to_figment(value)))
+                .into_iter()
+                .map(|(key, value)| (key, value.into()))
                 .collect(),
-        ),
+        )
+    }
+}
+
+impl<T: Into<Value>> From<Option<T>> for Value {
+    fn from(value: Option<T>) -> Self {
+        value.map_or(Value::Null, Into::into)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::figment::{from_figment, to_figment};
 
     #[test]
     fn the_walk_preserves_shape_and_numbers() {

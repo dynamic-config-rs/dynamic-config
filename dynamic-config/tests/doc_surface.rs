@@ -564,6 +564,7 @@ fn every_example_is_in_the_books_table() {
         28 => "twenty-eight",
         29 => "twenty-nine",
         30 => "thirty",
+        31 => "thirty-one",
         other => panic!("no word for {other} examples; add it, and check the prose"),
     };
 

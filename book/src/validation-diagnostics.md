@@ -164,9 +164,8 @@ the application declares, or the answer is about a different load.
 
 ## Errors
 
-One error type; `figment::Error` never reaches a signature, so a figment major
-version bump is not automatically a breaking change here. Every error carries
-the key path and the source that set the value:
+One error type, and no backend's error type reaches a signature. Every error
+carries the key path and the source that set the value:
 
 ```text
 pool.max_size: invalid type: found a string, expected u16 (from APP_DB_)

@@ -74,8 +74,8 @@ with your privileges.
 
 | Version | Supported |
 |---|---|
-| 0.8.x | ✅ the latest patch |
-| ≤ 0.7 | — end of life |
+| 0.9.x | ✅ the latest patch |
+| ≤ 0.8 | — end of life |
 
 Security fixes land on the **latest patch of the line above** and
 nothing is backported before 1.0: when a release ships, every prior
@@ -117,14 +117,41 @@ runs on every change:
 | No unmaintained or vulnerable dependency | `cargo deny`, on every push and weekly on a schedule |
 | No surprise dependency | `cargo deny` sources and licences, plus dependency review on pull requests |
 
+| Parsing survives arbitrary input | ten fuzz targets (`fuzz/`), run nightly |
+| A ledger entry still matches something | `cargo deny -D advisory-not-detected`, which fails the job when an exception no longer applies |
+
 Exceptions in `deny.toml` are listed one at a time with a reason. There is no
 blanket "ignore dev-dependencies": something that runs on a contributor's
-machine or in CI still matters.
+machine or in CI still matters. An exception that stops matching anything
+fails the job rather than lingering: the reason written beside it would
+otherwise become documentation of something untrue.
+
+### What the Scorecard badge will not say
+
+The [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/dynamic-config-rs/dynamic-config)
+badge in the README is honest, and three of its checks stay low for reasons
+no amount of work here changes. They are written down rather than chased:
+
+- **`Fuzzing` is a false negative.** Scorecard looks for OSS-Fuzz
+  membership; this repository fuzzes ten targets nightly out of `fuzz/`,
+  and one of them found the panic recorded in the 0.9.0 changelog. The
+  check cannot see a fuzzer it does not host.
+- **`Code-Review` cannot pass with one maintainer.** It counts pull
+  requests approved by somebody other than their author, and there is
+  nobody else. What stands in for it is stated rather than implied: `main`
+  requires the CI and Security gates, self-approval is not possible, and
+  every change goes through a pull request.
+- **`CII-Best-Practices`** is a badge application, not a property of the
+  code. It will be filed when the project has a second maintainer to
+  answer half of what it asks.
+
+`Maintained` resolves itself with repository age. Everything else on that
+tab is worth acting on.
 
 ## Dependencies
 
-The core crate's non-optional dependency list is deliberately short — `figment`,
-`serde`, `arc-swap` — and every network client, format parser and crypto stack
+The core crate's non-optional dependency list is deliberately short — `serde`
+and `arc-swap` — and every network client, format parser and crypto stack
 is behind a feature or in a companion crate, so a build carries only what it
 asked for. A `dynamic-config` with default features pulls in no cryptography, no
 HTTP client and no runtime.

@@ -200,9 +200,16 @@ fn neither_flat_format_can_be_written() {
     let document: BTreeMap<String, u32> = BTreeMap::new();
     let directory = tempfile::tempdir().expect("a directory");
 
+    // RON and JSON5 are here for the same reason and not the same one:
+    // nothing in this crate writes them and neither backend does either, so
+    // a refusal that blamed a missing feature was wrong when the feature was
+    // off (turning it on adds a reader, not a writer) and false when it was
+    // on.
     for (name, format) in [
         ("out.ini", Format::Ini),
         ("out.properties", Format::Properties),
+        ("out.ron", Format::Ron),
+        ("out.json5", Format::Json5),
     ] {
         let error = dynamic_config::save(&document, directory.path().join(name), format, "db")
             .expect_err("refused");
@@ -211,6 +218,11 @@ fn neither_flat_format_can_be_written() {
         assert!(
             text.contains("cannot be written"),
             "the refusal did not say why: {text}"
+        );
+
+        assert!(
+            !text.contains("feature"),
+            "the refusal blames a feature that would not help: {text}"
         );
     }
 }
