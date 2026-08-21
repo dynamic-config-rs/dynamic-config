@@ -173,7 +173,6 @@ pub(crate) fn compose(
     engine: &dyn crate::engine::Engine,
     contributions: Vec<Contribution>,
 ) -> Result<Resolved, crate::Error> {
-<<<<<<< HEAD
     compose_with(engine, contributions, Fold::ShortCircuitOne)
 }
 
@@ -195,8 +194,6 @@ pub(crate) fn compose_with(
     contributions: Vec<Contribution>,
     fold: Fold,
 ) -> Result<Resolved, crate::Error> {
-=======
->>>>>>> origin/main
     // The engine is handed trees and tags and nothing else, so the origins
     // stay here: a tag is this crate's index into them, and an engine that
     // reports one is naming a layer it was actually given.
@@ -205,7 +202,6 @@ pub(crate) fn compose_with(
         .map(|contribution| (contribution.origin, Value::Table(contribution.values)))
         .unzip();
 
-<<<<<<< HEAD
     // **One layer folds to itself.** A fold merges layers and says who won
     // each leaf; with a single layer there is nothing to merge and the
     // winner of every leaf is that layer — an answer this crate can write
@@ -237,8 +233,6 @@ pub(crate) fn compose_with(
         return Ok((values, provenance));
     }
 
-=======
->>>>>>> origin/main
     let layers: Vec<crate::engine::Layer<'_>> = trees
         .iter()
         .enumerate()
@@ -248,14 +242,7 @@ pub(crate) fn compose_with(
     let folded = engine.fold(&layers)?;
 
     let Value::Table(values) = folded.values else {
-<<<<<<< HEAD
         return Err(not_a_table());
-=======
-        return Err(crate::Error::new(
-            crate::ErrorKind::Backend,
-            "the resolution engine answered with something that is not a table",
-        ));
->>>>>>> origin/main
     };
 
     let mut provenance: BTreeMap<String, Origin> = folded
@@ -371,7 +358,6 @@ pub(crate) fn assign(
     crate::layer::insert_path(tree, path, value);
 }
 
-<<<<<<< HEAD
 /// What an engine answering with something other than a table is told.
 fn not_a_table() -> crate::Error {
     crate::Error::new(
@@ -380,8 +366,6 @@ fn not_a_table() -> crate::Error {
     )
 }
 
-=======
->>>>>>> origin/main
 /// Records `origin` for every leaf inside `value`, at `path` and below.
 fn record(
     value: &Value,
@@ -423,11 +407,7 @@ fn forget(path: &[String], provenance: &mut BTreeMap<String, Origin>) {
 
 #[cfg(test)]
 mod tests {
-<<<<<<< HEAD
     use super::{compose, compose_with, Contribution};
-=======
-    use super::{compose, Contribution};
->>>>>>> origin/main
     use crate::error::Origin;
     use crate::value::Value;
     use proptest::prelude::*;
@@ -484,7 +464,6 @@ mod tests {
     }
 
     proptest! {
-<<<<<<< HEAD
         /// **What the one-layer shortcut owes.** `compose` answers a single
         /// layer itself rather than folding it, because a fold with nothing
         /// to merge is the layer and the winner of every leaf is the layer
@@ -526,8 +505,6 @@ mod tests {
             }
         }
 
-=======
->>>>>>> origin/main
         /// **The property the engine seam rests on.** Same layers, same
         /// order, every engine: the tree *and* the winner of every leaf must
         /// come out the same, or which engine is installed is a question
@@ -547,12 +524,8 @@ mod tests {
 
                 answers.push((
                     engine.name(),
-<<<<<<< HEAD
                     compose_with(engine, contributions, super::Fold::Always)
                         .expect("the layers fold"),
-=======
-                    compose(engine, contributions).expect("the layers fold"),
->>>>>>> origin/main
                 ));
             }
 

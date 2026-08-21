@@ -154,11 +154,7 @@ impl config_rs::Source for Contribution {
 /// for nothing. `unpack` reads a tag at a leaf and at an *empty* table
 /// (which is a leaf here), and descends through every other table
 /// without looking.
-<<<<<<< HEAD
 fn pack(value: &Value, tag: &String) -> config_rs::Value {
-=======
-fn pack(value: &Value, tag: &str) -> config_rs::Value {
->>>>>>> origin/main
     let tagged = !matches!(value, Value::Table(table) if !table.is_empty());
     let kind = match value {
         Value::Null => config_rs::ValueKind::Nil,
@@ -189,15 +185,11 @@ fn pack(value: &Value, tag: &str) -> config_rs::Value {
     };
 
     if tagged {
-<<<<<<< HEAD
         // `&String` all the way down rather than `&str` plus a
         // `to_owned` here: the backend clones the origin into every value it
         // builds, so allocating one to hand it was a second allocation per
         // leaf, per layer, per fold.
         config_rs::Value::new(Some(tag), kind)
-=======
-        config_rs::Value::new(Some(&tag.to_owned()), kind)
->>>>>>> origin/main
     } else {
         config_rs::Value::new(None, kind)
     }
