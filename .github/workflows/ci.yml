@@ -521,10 +521,20 @@ jobs:
   # breaks the moment a matrix row is renamed; requiring this gate never
   # does. `if: always()` because a gate that is skipped when a dependency
   # fails would count as "not failed" and wave the merge through.
+  # Instruction counts, from callgrind. Defined in `instructions.yml` — which
+  # also runs on its own after a merge to produce the next baseline — and
+  # called here so a regression is caught on the pull request that carries
+  # it rather than on the release that ships it.
+  instructions:
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true'
+    uses: ./.github/workflows/instructions.yml
+
   ci-ok:
     name: CI is green
     needs:
       - changes
+      - instructions
       - fmt
       - clippy
       - test

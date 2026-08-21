@@ -118,6 +118,28 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
   floats, booleans, strings, `Vec`, `BTreeMap` and `Option`, so a tree
   can be written down in code without naming a variant every time.
 
+- **A load with one layer no longer folds it.** A fold merges layers and
+  says who won each leaf; with a single layer there is nothing to merge,
+  and the winner of every leaf is the layer that supplied it — an answer
+  this crate writes down without going through an engine at all. That is
+  the common shape rather than a corner: one file and no environment, one
+  document from a store, a test with an inline source.
+
+  It is the difference between this release costing more than the last
+  one and costing less. Resolution became a pipeline in 0.9 — parse into
+  this crate's tree, convert into the engine's, fold, convert back,
+  record provenance — and measured about twice a 0.8 load. With the
+  shortcut, a one-document load is **15,021 instructions against 0.8's
+  20,942**, a twenty-key reload 132,402 against 183,791, and `explain`
+  31,023 against 52,523. `current()` is unchanged at 85, as its budget
+  requires.
+
+  The shortcut owes an equivalence, so it is asserted rather than
+  assumed: a property test folds every generated single-layer tree both
+  ways and compares the tree *and* the provenance. It earned its keep
+  immediately — the first version filed an empty document's provenance
+  under the empty path, which no engine does.
+
 - **Three fewer crates in a TOML build, and two floors moved.** This
   crate's `toml` is declared at the requirement the engine crate
   declares, so the two share one parser instead of compiling a `0.9`

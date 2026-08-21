@@ -18,10 +18,26 @@ name: Instruction counts
 #   baseline     →  restore it, compare, and fail on a regression past the
 #                   limits `benches/instructions.rs` sets (exit code 3).
 #
-# Not in `ci-ok` and not on every push: valgrind adds minutes, and a job that
-# cannot fail until somebody performs a manual step must not be able to block
-# a merge in the meantime.
+# **It runs on the pull request, not after the merge.** Measuring `main`
+# after the fact tells you a release regressed; measuring the pull request
+# tells you *before* it is one, which is the whole reason the numbers are
+# instruction counts rather than seconds. `ci.yml` calls this workflow when
+# a pull request touches Rust, and `ci-ok` waits for it — so a regression
+# blocks the merge that would have shipped it.
+#
+# The push to `main` still runs on its own: that is the run whose artefact
+# becomes the next committed baseline, and the one that proves the merge
+# commit measures what the branch did.
+#
+# valgrind adds minutes, so it is not on every push: `ci.yml`'s paths filter
+# decides, and a documentation-only pull request skips it — which `ci-ok`
+# reads as fine, because a job that did not run has not failed. While no
+# baseline is committed the job measures without being able to fail, which
+# is announced rather than silent.
 on:
+  # Called by `ci.yml` on a pull request, so the numbers are part of "CI is
+  # green" rather than a second place to look. One definition, two callers.
+  workflow_call:
   push:
     branches: [main]
     paths:
@@ -33,6 +49,13 @@ on:
 
 permissions:
   contents: read
+
+# A pull request that is pushed to twice does not need the first run's
+# numbers: valgrind is minutes, and the older answer is about code nobody
+# will merge.
+concurrency:
+  group: instructions-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   instructions:
@@ -114,6 +137,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: iai-baseline
+          # Named after the run: a pull request's numbers are a proposal and
+          # `main`'s are the record, and a maintainer committing a baseline
+          # should not have to work out which one they downloaded.
+          name: iai-baseline-${{ github.event_name == 'push' && 'main' || format('pr-{0}', github.event.number) }}
           path: target/iai
           if-no-files-found: error

@@ -17,16 +17,29 @@
 //! ordinary gate only compiles this file (`cargo bench --no-run`), so a
 //! benchmark that stopped building is caught without either.
 //!
-//! First measured 2026-08-13 — rustc 1.97.1, valgrind 3.24.0, glibc 2.43,
-//! x86_64 — so the bands below rest on a number rather than on a guess:
+//! First measured 2026-08-13 and re-measured for 0.9.0 — rustc 1.97.1,
+//! valgrind 3.24.0, glibc 2.43, x86_64 — so the bands below rest on a number
+//! rather than on a guess:
 //!
 //! ```text
-//! current_once             85 Ir
-//! current_thousand     75,023 Ir   (75.0 per read)
-//! load_one_document    20,942 Ir
-//! reload_twenty_keys  183,791 Ir
-//! explain_one_key      52,523 Ir
+//!                        0.8.0      0.9.0
+//! current_once              85         85 Ir
+//! current_thousand      75,023     75,023 Ir   (75.0 per read)
+//! load_one_document     20,942     15,021 Ir
+//! reload_twenty_keys   183,791    132,402 Ir
+//! explain_one_key       52,523     31,023 Ir
 //! ```
+//!
+//! The load path moved twice in 0.9.0 and the second move is why the numbers
+//! fell. Resolution stopped being one pass inside a backend and became a
+//! pipeline — parse into this crate's tree, convert into the engine's,
+//! fold, convert back, record provenance — which cost about twice a 0.8
+//! load: 42,088 Ir through `config-rs` and 52,797 through figment, measured
+//! here before the second move. Then `compose` stopped calling an engine for
+//! a *single* layer, which is what a load with one file and no environment
+//! actually is: a fold with nothing to merge is the layer, and the winner of
+//! every leaf is the layer that supplied it. Both conversions and the merge
+//! go, and what is left is cheaper than 0.8 was.
 //!
 //! Those are one machine's counts, not a baseline: the committed baseline has
 //! to come off the CI image, because instruction counts differ by libc and
