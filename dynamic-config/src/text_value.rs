@@ -37,7 +37,11 @@ use crate::value::Value;
 /// Never fails: input the grammar cannot read becomes
 /// [`Value::String`] holding the original, untouched.
 pub(crate) fn from_text(text: &str) -> Value {
-    let mut reader = Reader { input: text, at: 0 };
+    let mut reader = Reader {
+        input: text,
+        at: 0,
+        depth: 0,
+    };
 
     match reader.value() {
         // The whole input, or nothing: a trailing `x` after `true` means the
@@ -52,7 +56,24 @@ pub(crate) fn from_text(text: &str) -> Value {
 struct Reader<'a> {
     input: &'a str,
     at: usize,
+    /// How many collections deep the cursor is.
+    ///
+    /// **A bound, because the input is somebody else's.** A value arrives
+    /// from an environment variable, a `--set` flag or a `.env` line, and a
+    /// Linux environment carries about 128 KiB — so `APP_X=[[[[[…` is one
+    /// recursive call per byte. Past a point that is not a deep value, it is
+    /// a stack overflow, and a stack overflow is an *abort*: no unwinding,
+    /// no error, no last-known-good. Beyond the limit the text is simply not
+    /// a collection, which is the same answer this reader gives to anything
+    /// else it cannot read — the string it always was.
+    depth: usize,
 }
+
+/// How deep a value may nest before it is read as a string instead.
+///
+/// Far past anything a configuration writes by hand — the deepest value in
+/// this crate's own corpora is three — and far short of what overflows.
+const NESTING_LIMIT: usize = 64;
 
 impl<'a> Reader<'a> {
     fn rest(&self) -> &'a str {
@@ -176,21 +197,36 @@ impl<'a> Reader<'a> {
     ) -> Option<Vec<T>> {
         self.eat(open)?;
 
+        // Counted here rather than in `array` and `dict` separately: this is
+        // the one place either of them descends, so one guard covers both
+        // and a third collection would inherit it.
+        if self.depth == NESTING_LIMIT {
+            return None;
+        }
+
+        self.depth += 1;
+
         let mut collected = Vec::new();
 
-        loop {
+        let read = loop {
             if self.eat(close).is_some() {
-                return Some(collected);
+                break Some(collected);
             }
 
-            collected.push(item(self)?);
+            let Some(next) = item(self) else {
+                break None;
+            };
+
+            collected.push(next);
 
             if self.eat(',').is_none() {
-                self.eat(close)?;
-
-                return Some(collected);
+                break self.eat(close).map(|()| collected);
             }
-        }
+        };
+
+        self.depth -= 1;
+
+        read
     }
 
     /// A quoted key, or a bare one spelled with identifier characters.
@@ -323,8 +359,38 @@ fn hex(characters: &mut std::str::Chars<'_>, width: usize) -> Option<char> {
 
 #[cfg(test)]
 mod tests {
-    use super::from_text;
+    use super::{from_text, NESTING_LIMIT};
     use crate::value::Value;
+
+    /// A value nested past the limit is a string, not an abort.
+    ///
+    /// The reader recursed once per opening bracket with nothing to stop
+    /// it, and its input is somebody else's: an environment variable holds
+    /// about 128 KiB on Linux, so `APP_X=[[[[[…` overflowed the stack. A
+    /// stack overflow is not a panic — nothing unwinds, no error is
+    /// returned, the last-known-good cache is never consulted, the process
+    /// is simply gone.
+    #[test]
+    fn a_value_nested_past_the_limit_is_read_as_a_string() {
+        let deep = "[".repeat(200_000);
+
+        assert_eq!(from_text(&deep), Value::String(deep.clone()));
+
+        // And the limit is where it says it is: one under still reads.
+        let inside = format!(
+            "{}1{}",
+            "[".repeat(NESTING_LIMIT),
+            "]".repeat(NESTING_LIMIT)
+        );
+        let outside = format!(
+            "{}1{}",
+            "[".repeat(NESTING_LIMIT + 1),
+            "]".repeat(NESTING_LIMIT + 1)
+        );
+
+        assert!(matches!(from_text(&inside), Value::Array(_)));
+        assert_eq!(from_text(&outside), Value::String(outside.clone()));
+    }
 
     /// What the original implementation answers, for the same input.
     ///

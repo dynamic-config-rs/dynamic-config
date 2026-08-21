@@ -92,11 +92,14 @@ Consul, etcd, Vault or a config server should reach the process the same
 way an edited file does.
 
 ```rust
+let sink = DbConfig::remote_sink();
 let handle = RemoteWatch::new();
 let watching = handle.watching();
 
 std::thread::spawn(move || {
-    REMOTE.watch(&watching, Duration::from_secs(30))
+    store.watch(&watching, Duration::from_secs(30), |document| {
+        sink.apply(document)          // installs, reloads, wakes the readers
+    })
 });
 ```
 
@@ -104,6 +107,20 @@ Blocking, so it belongs on a thread of its own; the async twin is
 `watch_async` and cancelling it is dropping the future. Dropping the
 `RemoteWatch` stops the loop — `detach()` says *this one really should run
 forever*.
+
+**The sink is what makes a delivery a reload.** `RemoteSink::apply` is the
+piece that installs the document *and* runs the configuration's reload —
+validation, hooks, `changes()`, the last-known-good cache. Its twin
+`sink.failed(&error)` records an attempt that came back with nothing, so a
+watch whose store has been down for an hour stops reporting it as
+reachable.
+
+`Remote::watch` is the other half, and it does less on purpose: it keeps
+the *document* fresh in the remote slot, the way `refresh()` does, and
+reloads nothing. A `Remote` is a store handle, not a configuration — it
+has no type to deserialize into and no hooks to fire. Reach for it when
+something else decides when to reload; reach for the sink when a change
+in the store should reach `current()` on its own.
 
 **What the interval means depends on the store**, and the store says which:
 
@@ -147,7 +164,14 @@ while watching.keep_going() {
 ```
 
 A failing fetch does **not** end the watch. Outliving an outage is what a
-watch is for, so a failure is recorded, waited out, and tried again.
+watch is for, so a failure is waited out and tried again.
+
+**Recording it is the caller's**, and worth wiring: the default watch backs
+off and says nothing, because a `RemoteSource` is handed a store and a
+callback and has no way to reach the status a `Remote` keeps. A loop built
+on the sink calls `sink.failed(&error)` — the store crates' `reporting_to`
+does it for you — and without that, `status().reachable()` goes on
+answering `true` for as long as the outage lasts.
 
 ## Reacting to a reload
 

@@ -136,10 +136,16 @@ pub(crate) fn render(document: &Table, format: Format) -> Result<String, Error> 
         // the way in (`port = 8080` reads as an integer), so a round trip
         // cannot promise the document it started with. A tool that wants
         // to *emit* these formats flattens with its own rules and says so.
-        Format::Ini | Format::Properties => Err(Error::new(
+        // RON and JSON5 join them for a different reason: nothing here
+        // writes them, and nothing in either backend does either. The `_`
+        // arm below would have blamed a missing feature — untrue when the
+        // feature is on, and misleading when it is off, since turning it on
+        // would not produce a writer.
+        Format::Ini | Format::Properties | Format::Ron | Format::Json5 => Err(Error::new(
             ErrorKind::Backend,
             format!(
-                "{format:?} cannot be written: it has no types, so what was                  written could not be read back as the same document. Save as                  json, toml or yaml instead"
+                "{format:?} cannot be written: nothing here has a writer for it. \
+                 Save as json, toml or yaml instead"
             ),
         )),
 

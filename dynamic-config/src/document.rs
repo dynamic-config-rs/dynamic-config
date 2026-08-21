@@ -37,17 +37,22 @@ pub(crate) fn parse_with(
     text: &str,
     format: Format,
 ) -> Result<Value, Error> {
-    // Nothing at all is an empty document rather than a failure: a file
-    // somebody has not written yet says nothing, and saying nothing is
-    // allowed — every layer is optional. Answered before a reader is
-    // asked, so it means the same thing whichever one is installed.
-    if text.trim().is_empty() {
-        return Ok(Value::Table(std::collections::BTreeMap::new()));
-    }
-
+    // Which reader answers is settled first, because "this build cannot
+    // read RON at all" and "this RON file is empty" are different answers
+    // and only one of them is about the document. An empty file otherwise
+    // read as fine in a build that would have refused every other file
+    // beside it.
     let Some(reader) = crate::reader::for_format(reader, format) else {
         return Err(crate::reader::unread(format));
     };
+
+    // Nothing at all is an empty document rather than a failure: a file
+    // somebody has not written yet says nothing, and saying nothing is
+    // allowed — every layer is optional. Answered before the reader runs,
+    // so it means the same thing whichever one is installed.
+    if text.trim().is_empty() {
+        return Ok(Value::Table(std::collections::BTreeMap::new()));
+    }
 
     let parsed = reader.parse(text, format)?;
 

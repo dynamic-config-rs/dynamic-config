@@ -80,7 +80,7 @@ pub(crate) fn resolved(spec: &LoadSpec<'_>) -> Result<Snapshot, Error> {
     let mut collected = contributions(spec)?;
     let (mut tree, mut provenance) = crate::resolve::compose(engine, collected.take_layers())?;
 
-    apply_aliases(&mut tree, &mut provenance, &collected, spec);
+    apply_aliases(&mut tree, &mut provenance, &collected, spec)?;
 
     // The environment layer names the prefix; a leaf it supplied can name the
     // variable, which is the answer somebody is actually looking for.
@@ -294,7 +294,13 @@ fn collect_remote(into: &mut crate::resolve::Collected, spec: &LoadSpec<'_>) -> 
     };
 
     let store = remote.describe().unwrap_or_else(|| "(unnamed)".to_owned());
-    let parsed = crate::document::parse_with(spec.reader(), &document.text, document.format)?;
+
+    // The origin is attached to the *failure* as well as to the values: a
+    // malformed document is the one case where an operator most needs to
+    // know which store served the bytes, and a bare parse error names only
+    // the line it stopped on — which is deliberately not quoted.
+    let parsed = crate::document::parse_with(spec.reader(), &document.text, document.format)
+        .map_err(|error| error.with_origin(Origin::Remote(store.clone())))?;
 
     let (section, siblings) = sections::section_of(
         sections::table_of(parsed),

@@ -281,6 +281,28 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ### Fixed
 
+- **A deeply nested value could take the process down too** (security).
+  The same reading, from the other end: the grammar recursed once per
+  opening bracket with nothing to stop it, so `APP_X=[[[[[…` — an
+  environment variable carries about 128 KiB on Linux — overflowed the
+  stack. A stack overflow is not a panic: nothing unwinds, no error is
+  returned, the last-known-good cache is never consulted. Nesting past
+  64 levels now reads as the string it always was, which is what this
+  grammar answers to everything else it cannot read.
+
+- **A variable whose name is not ASCII aborted every load that read the
+  environment.** The prefix test compared byte lengths and then sliced
+  at the prefix's length, so a name like `€€` passed the check and cut
+  through the middle of a character — a panic from a variable that was
+  never going to match the prefix.
+
+- **`save()` blamed a feature that would not have helped.** RON and
+  JSON5 fell through to "the `ron` feature is not enabled", which is
+  untrue when it *is* enabled and misleading when it is not: nothing
+  here writes them, and nothing in either backend does either. They now
+  refuse the way INI and `.properties` do, and that message has lost
+  the two runs of eighteen spaces a botched line-join left in it.
+
 - **A configuration value could take the process down** (security).
   The parser this crate delegated its text reading to indexes a byte
   range with a character position while resolving escapes, so any

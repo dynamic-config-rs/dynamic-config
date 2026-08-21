@@ -135,8 +135,17 @@ pub trait RemoteSource: Send + Sync + 'static {
     /// # Errors
     ///
     /// If `on_change` refuses a document. A *fetch* failing is not an error
-    /// here: a watch outlives an outage by design, and the failure is
-    /// recorded and backed off from rather than returned.
+    /// here: a watch outlives an outage by design, so it is backed off from
+    /// rather than returned.
+    ///
+    /// **Nothing here records it.** A source is handed a store and a
+    /// callback; the status a [`Remote`](crate::Remote) keeps is not
+    /// reachable from either, so a loop that wants
+    /// `status().reachable()` to tell the truth through an outage reports
+    /// failures itself — [`RemoteSink::failed`](crate::RemoteSink::failed)
+    /// is that call, and the store crates' `reporting_to` wires it. Said
+    /// here because the alternative reading is expensive: a watch that has
+    /// been failing for an hour while its status says the store is fine.
     fn watch(
         &self,
         watching: &Watching,

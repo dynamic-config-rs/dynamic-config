@@ -276,7 +276,10 @@ pub(super) fn collect_source(
     #[cfg(feature = "figment")]
     if let Some(provider) = source.foreign() {
         if let Some(values) = crate::backend::figment::section_of(provider, key)? {
-            into.layer(layer, Origin::Inline, values);
+            // What the provider says about itself, rather than `Inline` for
+            // everything: a provider that sets `Metadata::from(name, path)`
+            // is documented to trace back to that path, and did not.
+            into.layer(layer, crate::backend::figment::origin_of(provider), values);
         }
 
         return Ok(());

@@ -487,6 +487,15 @@ impl Remote {
     /// a document from a source that has since been replaced is discarded
     /// rather than installed.
     ///
+    /// **It keeps the document; it does not reload the configuration.** A
+    /// `Remote` is a store handle and has no configuration to reload: no
+    /// type to read into, no hooks to fire, no cache to write. A change
+    /// that should reach `current()` on its own goes through
+    /// [`RemoteSink::apply`](crate::RemoteSink::apply) instead — take a
+    /// sink from the generated `remote_sink()` and call the store's own
+    /// `watch` with it. This is the right call when something else decides
+    /// when to reload.
+    ///
     /// # Errors
     ///
     /// If no source is installed, if the installed one is async, or if the
@@ -518,12 +527,7 @@ impl Remote {
             }
         };
 
-        let mut deliver = |document| {
-            self.commit(document, fence);
-            self.record_fetch(None, fence.generation);
-
-            Ok(())
-        };
+        let mut deliver = |document| self.deliver(fence.generation, document);
 
         if source.watch_capability() != WatchCapability::Native {
             return source.watch(watching, interval, &mut deliver);
@@ -603,12 +607,7 @@ impl Remote {
             }
         };
 
-        let mut deliver = |document| {
-            self.commit(document, fence);
-            self.record_fetch(None, fence.generation);
-
-            Ok(())
-        };
+        let mut deliver = |document| self.deliver(fence.generation, document);
 
         source.watch(watching, interval, &mut deliver).await
     }
@@ -709,6 +708,32 @@ impl Remote {
 
         state.fetched = None;
         state.cleared = state.cleared.wrapping_add(1);
+    }
+
+    /// One document from a watch, stored and counted.
+    ///
+    /// **Fenced on the generation alone, unlike a fetch.** The two fences
+    /// answer different questions. A fetch was in flight *across* whatever
+    /// happened, so a `clear()` while it flew has to discard it — putting
+    /// the document back would undo the clear. A watch delivery happened
+    /// *after*: it is the store saying what it holds now, and
+    /// [`clear`](Self::clear) promises exactly that — "a watch loop
+    /// delivering from the same store keeps delivering, and its next push
+    /// installs normally".
+    ///
+    /// Sharing the fetch fence broke that promise silently: one `clear()`
+    /// bumped `cleared`, every later document was dropped, and
+    /// `record_fetch` — which fences on the generation — went on reporting
+    /// the store as healthy. A watch that has installed nothing for an hour
+    /// while its status says `reachable` is worse than one that stopped.
+    ///
+    /// # Errors
+    ///
+    /// If the source was replaced. The watch belongs to a store nobody is
+    /// asking about any more, so it ends rather than delivering into a slot
+    /// that moved on — the same answer [`RemoteSink::apply`] gives.
+    fn deliver(&self, generation: u64, document: Fetched) -> Result<(), Error> {
+        self.install_if(generation, document)
     }
 
     /// Stores a fetch result, unless the slot moved while it was in flight —

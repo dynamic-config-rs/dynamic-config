@@ -11,6 +11,33 @@ use std::collections::BTreeMap;
 use crate::error::Error;
 use crate::value::Value;
 
+/// Where a foreign provider says its values come from.
+///
+/// **The metadata's *source*, not its name** — which is what
+/// [`Source::provider`](crate::Source::provider) documents, and what was
+/// being thrown away: every provider answered `Inline`, however carefully
+/// it described itself. A name reaches error messages; a source reaches
+/// `source_of` and `explain`, and those are what tell somebody which file
+/// to go and edit.
+pub(crate) fn origin_of(provider: &(dyn figment::Provider + Send + Sync)) -> crate::Origin {
+    match provider.metadata().source {
+        // The documented case: `Metadata::from("INI file", path)`, and the
+        // value traces back to the file exactly as one from `.file(..)`.
+        Some(figment::Source::File(path)) => crate::Origin::File(path),
+        // Values written in code are what `Inline` already means here.
+        Some(figment::Source::Code(_)) => crate::Origin::Inline,
+        // A provider that describes its source in its own words: a store, a
+        // socket, a database. `Remote` is the variant that renders as
+        // "from {what}", which is what such a description is.
+        Some(figment::Source::Custom(what)) => crate::Origin::Remote(what),
+        // Described by name alone, or not at all. Honest beats invented —
+        // and the same answer covers a source kind this backend adds later:
+        // the enum is `#[non_exhaustive]`, so a new variant is a thing this
+        // crate has never seen rather than a thing it may guess at.
+        Some(_) | None => crate::Origin::Unknown,
+    }
+}
+
 /// A foreign provider's document, in this crate's tree.
 fn into_tree(dict: &figment::value::Dict) -> BTreeMap<String, Value> {
     dict.iter()

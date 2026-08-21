@@ -210,14 +210,15 @@ impl<'a> Source<'a> {
     /// # Two things it is on you to get right
     ///
     /// **Sections.** Every other source here goes through this crate's own
-    /// mapping of top-level keys to sections. A provider does not: what it
-    /// yields is merged as figment sees it, so it has to produce the section as
-    /// a profile — `.nested()` on a figment `Data` provider does exactly that.
-    /// The loader namespaces section profiles internally (so a section named
-    /// `global` cannot collide with figment's reserved profiles); the prefix
-    /// is applied *for* the provider on the way in, and `default` / `global`
-    /// pass through untouched — for a provider author they are figment's own
-    /// vocabulary, deliberately reachable through this one door.
+    /// mapping of top-level keys to sections. A provider does not: it files
+    /// values by *profile*, which is that backend's vocabulary, so it has to
+    /// produce the section as one — `.nested()` on a figment `Data`
+    /// provider does exactly that. Three are read and merged in the order
+    /// that backend merges them: the unnamed default, then this section's
+    /// own name over it, then `global` over both. Nothing is renamed on the
+    /// way in — a section here is a subtree of a document and no longer a
+    /// profile at all, so there is no namespace for a provider's profiles to
+    /// collide with.
     ///
     /// **Provenance comes from the metadata's *source*, not its name.**
     /// `Metadata::named("INI file")` alone leaves every value it supplies

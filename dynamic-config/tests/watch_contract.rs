@@ -16,6 +16,44 @@ use dynamic_config::{
     Error, Fetched, Format, Pace, Remote, RemoteSource, RemoteWatch, WatchCapability, Watching,
 };
 
+/// A store that pushes twice, dropping the document in between.
+///
+/// The second push is the one under test: it arrives *after* a
+/// `Remote::clear()`, which is the case `clear`'s own documentation
+/// promises still installs.
+struct ClearsBetweenPushes {
+    remote: &'static Remote,
+}
+
+impl RemoteSource for ClearsBetweenPushes {
+    fn fetch(&self) -> Result<Fetched, Error> {
+        Ok(Fetched::new(r#"{"db":{"port":1}}"#, Format::Json))
+    }
+
+    fn describe(&self) -> String {
+        "a store that pushes across a clear".to_owned()
+    }
+
+    fn watch_capability(&self) -> WatchCapability {
+        WatchCapability::Native
+    }
+
+    fn watch(
+        &self,
+        _watching: &Watching,
+        _interval: Duration,
+        on_change: &mut dyn FnMut(Fetched) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        on_change(Fetched::new(r#"{"db":{"port":1}}"#, Format::Json))?;
+
+        // Somebody drops the document — a reconfiguration, a test, an
+        // operator taking the store out of the picture for a moment.
+        self.remote.clear();
+
+        on_change(Fetched::new(r#"{"db":{"port":2}}"#, Format::Json))
+    }
+}
+
 /// A store with nothing but `fetch`: the default watch is what it gets.
 struct Polled {
     documents: Mutex<Vec<&'static str>>,
@@ -139,6 +177,43 @@ fn a_store_with_a_watch_has_its_own_watch_run() {
 /// The default watch delivers a change and nothing else: a document that
 /// has not moved must not be installed again, or every reload hook in the
 /// process fires on a timer.
+/// **A `clear()` mid-watch does not end the watch's usefulness.**
+///
+/// The delivery fence used to be the whole fetch fence — generation *and*
+/// the clear counter — captured once when the watch started. One
+/// `Remote::clear()` bumped the counter, and from then on every document
+/// the store pushed was silently discarded, while the status counters
+/// (fenced on the generation alone) went on reporting a healthy store.
+///
+/// `clear`'s own documentation is the contract: "a watch loop delivering
+/// from the same store keeps delivering, and its next push installs
+/// normally".
+#[test]
+fn a_document_pushed_after_a_clear_still_installs() {
+    static REMOTE: Remote = Remote::new();
+
+    REMOTE.set(ClearsBetweenPushes { remote: &REMOTE });
+
+    let handle = RemoteWatch::new();
+
+    REMOTE
+        .watch(&handle.watching(), Duration::from_millis(10))
+        .expect("the watch runs to the end of the store's own");
+
+    assert_eq!(
+        REMOTE.document().map(|document| document.text),
+        Some(r#"{"db":{"port":2}}"#.to_owned()),
+        "the push after the clear is the document that was kept"
+    );
+
+    let status = REMOTE.status();
+
+    assert_eq!(
+        status.fetches, 2,
+        "both pushes counted, and neither was counted without being kept"
+    );
+}
+
 #[test]
 fn the_default_watch_delivers_only_what_changed() {
     let polls = Arc::new(AtomicUsize::new(0));

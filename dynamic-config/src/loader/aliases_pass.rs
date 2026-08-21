@@ -11,14 +11,20 @@ use crate::source::LoadSpec;
 /// which "nothing supplies this" can be answered. An alias never overrides: a
 /// file that has been updated wins over one that has not, whatever order they
 /// merged in.
+///
+/// # Errors
+///
+/// If the engine refuses a *sibling* section's layers. A cross-section alias
+/// is the one thing here that folds anything, and a fold that fails is a load
+/// that failed — not a gap left unfilled.
 pub(super) fn apply_aliases(
     tree: &mut crate::resolve::Table,
     provenance: &mut BTreeMap<String, crate::Origin>,
     collected: &crate::resolve::Collected,
     spec: &LoadSpec<'_>,
-) {
+) -> Result<(), crate::Error> {
     let Some(aliases) = spec.aliases else {
-        return;
+        return Ok(());
     };
 
     let pairs = aliases.pairs();
@@ -78,9 +84,12 @@ pub(super) fn apply_aliases(
             let (section, from_path) = crate::aliases::split_section(from);
 
             let found = match section {
+                // `?`, not `.ok()`: an engine refusing the sibling's layers
+                // is a load failure, and reporting it as "the old path holds
+                // nothing" would answer a question nobody asked.
                 Some(section) => {
                     collected
-                        .sibling(spec.engine(), section)
+                        .sibling(spec.engine(), section)?
                         .and_then(|(values, origins)| {
                             crate::resolve::at(&values, from_path)
                                 .cloned()
@@ -112,4 +121,6 @@ pub(super) fn apply_aliases(
             progressed = true;
         }
     }
+
+    Ok(())
 }

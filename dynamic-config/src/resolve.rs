@@ -138,12 +138,24 @@ impl Collected {
 
     /// Another section, composed — what a cross-section alias reads from,
     /// with the provenance that says which file to go and edit.
+    ///
+    /// `Ok(None)` is "no such section"; an engine refusing the section's
+    /// layers is an error and says so. Swallowing it turned a backend
+    /// failure into a missing value, and the alias pass then filled a
+    /// default or reported a field nobody had failed to write — two
+    /// diagnostics away from what actually happened.
+    ///
+    /// # Errors
+    ///
+    /// If the engine refuses the sibling's layers.
     pub(crate) fn sibling(
         &self,
         engine: &dyn crate::engine::Engine,
         name: &str,
-    ) -> Option<Resolved> {
-        let contributions = self.siblings.get(name)?;
+    ) -> Result<Option<Resolved>, crate::Error> {
+        let Some(contributions) = self.siblings.get(name) else {
+            return Ok(None);
+        };
 
         compose(
             engine,
@@ -152,7 +164,7 @@ impl Collected {
                 .map(|c| Contribution::new(c.layer, c.origin.clone(), c.values.clone()))
                 .collect(),
         )
-        .ok()
+        .map(Some)
     }
 }
 

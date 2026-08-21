@@ -60,7 +60,17 @@ pub(crate) fn variables(prefix: &str, nest: &str) -> Vec<(Vec<String>, String)> 
 
         // Case-insensitively, because a shell is not consistent about it and
         // the prefix is a namespace rather than a spelling.
-        if name.len() < prefix.len() || !name[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        //
+        // `get`, not a slice: `len` counts bytes, and a name whose first
+        // characters are multi-byte — `€€` is six bytes against a prefix of
+        // four — passes a length check and then slices mid-codepoint. That
+        // is a panic on the load path of every program that reads the
+        // environment, from a variable it was never going to accept.
+        let Some(head) = name.get(..prefix.len()) else {
+            continue;
+        };
+
+        if !head.eq_ignore_ascii_case(prefix) {
             continue;
         }
 
@@ -176,6 +186,35 @@ mod tests {
         }
 
         assert_eq!(ours, theirs);
+    }
+
+    /// A variable whose name is not ASCII does not take the process down.
+    ///
+    /// The guard used to be `name.len() < prefix.len()` and then a *slice*
+    /// at `prefix.len()`. Both are byte counts, so a name like `€€` — six
+    /// bytes against a four-byte prefix — passed the check and sliced
+    /// through the middle of a character. That is a panic on the load path
+    /// of every program that reads the environment, triggered by a variable
+    /// that was never going to match the prefix in the first place.
+    #[test]
+    fn a_variable_whose_name_is_not_ascii_is_passed_by_rather_than_panicked_on() {
+        let prefix = "DCENVUTF8_";
+
+        for name in ["€€", "ü", "日本語", "€€€€€€€€€€"] {
+            std::env::set_var(name, "whatever");
+        }
+
+        std::env::set_var(format!("{prefix}HOST"), "db.internal");
+
+        let tree = tree(prefix, "__", false);
+
+        for name in ["€€", "ü", "日本語", "€€€€€€€€€€"] {
+            std::env::remove_var(name);
+        }
+
+        std::env::remove_var(format!("{prefix}HOST"));
+
+        assert!(matches!(tree, Value::Table(table) if table.contains_key("host")));
     }
 
     /// The one rule that is this crate's rather than the backend's.

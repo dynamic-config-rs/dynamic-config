@@ -27,6 +27,6 @@ pub(crate) use engine::Figment as Engine;
 #[cfg(feature = "figment")]
 pub(crate) use reader::Figment as Reader;
 #[cfg(feature = "figment")]
-pub(crate) use source::section_of;
+pub(crate) use source::{origin_of, section_of};
 
 pub(crate) use value::{from_figment, to_figment};

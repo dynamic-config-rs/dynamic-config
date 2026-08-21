@@ -41,7 +41,7 @@ pub(crate) fn recover<T: DeserializeOwned>(
     let (mut tree, mut provenance) =
         crate::resolve::compose(spec.engine(), collected.take_layers())?;
 
-    apply_aliases(&mut tree, &mut provenance, &collected, spec);
+    apply_aliases(&mut tree, &mut provenance, &collected, spec)?;
 
     let mut snapshot = Snapshot::new(tree);
     snapshot.attach_provenance(provenance);

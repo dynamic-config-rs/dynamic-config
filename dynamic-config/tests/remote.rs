@@ -575,3 +575,41 @@ mod reporting {
         );
     }
 }
+
+/// **A malformed remote document says which store served it.**
+///
+/// The origin was computed and then not attached: `parse_with(..)?`
+/// returned first, so the error reached the caller as a bare parse failure
+/// naming the line it stopped on — and the line is deliberately not quoted,
+/// so there was nothing in the message tying it to a store at all. An
+/// operator with three stores had no way to tell which one to look at.
+#[test]
+fn a_malformed_remote_document_names_the_store() {
+    db_config!(Malformed);
+
+    static MALFORMED_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    Malformed::set_remote(Counting {
+        document: r#"{"db": {"host": "x", "#,
+        calls: &MALFORMED_CALLS,
+    });
+
+    Malformed::refresh_remote().expect("fetching is fine; it is the bytes that are not");
+
+    let error = Malformed::sources()
+        .load()
+        .expect_err("a half-written document does not parse");
+
+    assert_eq!(
+        error.origin(),
+        &Origin::Remote("a counting store".to_owned()),
+        "the store that served the bytes is named: {error}"
+    );
+
+    assert!(
+        !error.to_string().contains("\"host\""),
+        "and the document is still not quoted back: {error}"
+    );
+
+    Malformed::clear_remote();
+}

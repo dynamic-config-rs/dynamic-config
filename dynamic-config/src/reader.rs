@@ -78,7 +78,12 @@ pub fn native() -> &'static dyn Reader {
     &Native
 }
 
-/// The [`config`](https://docs.rs/config) crate's parsers. The default.
+/// The [`config`](https://docs.rs/config) crate's parsers.
+///
+/// **Not the default** — [`native()`] is, and the module's own
+/// documentation says why. This is the engine's opposite: there the
+/// backend's fold is what runs unless a load says otherwise, because a
+/// fold can be proved interchangeable and a parser is a dialect.
 ///
 /// Reads two formats nothing else here does — RON and JSON5 — and reads
 /// YAML through `yaml-rust2`, which is maintained where this crate's own
