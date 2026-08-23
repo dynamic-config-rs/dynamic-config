@@ -52,16 +52,29 @@ const MASKED: &str = "\u{0}dynamic-config:secret\u{0}";
 /// Returns the hex digest without a prefix; callers that render it for
 /// humans add `sha256:`.
 pub(crate) fn of(values: &Document, secrets: &[&str]) -> String {
-    let mut masked = values.clone();
+    // **The clone is only for masking.** With nothing to mask there is
+    // nothing to modify, and cloning a tree to hash it unchanged is a copy
+    // of the whole resolved configuration on every load and every reload —
+    // which is what it was, and what the instruction budget caught: twenty
+    // keys reloading paid 12% for a copy nobody read.
+    //
+    // Hashing the original instead is byte-for-byte the same input, so the
+    // digest does not move. The conformance case that pins one value across
+    // three languages is the proof of that rather than a hope about it.
+    let digest = match secrets {
+        [] => digest_of(values),
+        secrets => {
+            let mut masked = values.clone();
 
-    for secret in secrets {
-        mask_path(&mut masked, secret);
-    }
+            for secret in secrets {
+                mask_path(&mut masked, secret);
+            }
 
-    let mut hasher = Sha256::new();
-    write_table(&mut hasher, &masked);
+            digest_of(&masked)
+        }
+    };
 
-    let digest = hasher.finalize();
+    let digest = digest.as_ref();
     let mut rendered = String::with_capacity(digest.len() * 2);
 
     for byte in digest {
@@ -73,6 +86,14 @@ pub(crate) fn of(values: &Document, secrets: &[&str]) -> String {
     }
 
     rendered
+}
+
+/// The digest bytes of a table, with nothing masked.
+fn digest_of(values: &Document) -> impl AsRef<[u8]> {
+    let mut hasher = Sha256::new();
+    write_table(&mut hasher, values);
+
+    hasher.finalize()
 }
 
 /// [`of`], rendered the way it is meant to be read and logged.
