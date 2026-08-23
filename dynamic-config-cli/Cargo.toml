@@ -20,6 +20,19 @@ readme = "README.md"
 [[bin]]
 name = "dynamic-config"
 path = "src/main.rs"
+# **Not documented, and this is a correctness fix rather than a
+# preference.** A binary named `dynamic-config` and the engine's library
+# `dynamic_config` produce the same rustdoc output directory, so
+# `cargo doc --workspace` ran two units into `target/doc/dynamic_config/`
+# at once. Which one won was a race: locally the library did, and in CI the
+# binary did — and rustdoc then failed on files the other had already
+# written, with an I/O error that named neither cause.
+#
+# Nothing is lost by turning it off. A binary's rustdoc is its private
+# items and nobody's API; what a reader wants from this crate is `--help`,
+# which the README carries, and the library's own documentation, which the
+# collision was destroying.
+doc = false
 
 [dependencies]
 dynamic-config = { workspace = true, features = [
