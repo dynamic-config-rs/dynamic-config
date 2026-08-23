@@ -26,6 +26,8 @@ when.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-23
+
 ## [0.9.0] — 2026-08-20
 
 ## [0.7.1] — 2026-08-19
@@ -77,7 +79,8 @@ when.
   `--secret` to mask) and `diff` (path-only difference between two
   documents) from a shell, the load restated as flags.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...v0.9.0
 [0.7.1]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0

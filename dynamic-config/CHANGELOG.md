@@ -25,6 +25,8 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-23
+
 ### Added
 
 - **`fingerprint()`, a digest a fleet can compare instead of comparing
@@ -787,7 +789,8 @@ Initial release.
 - Diagnostics report paths and types, never values — enforced by its own
   test suite.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...v0.9.0
 [0.7.1]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0
