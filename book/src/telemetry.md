@@ -17,18 +17,40 @@ single crate in:
 |---|---|---|
 | `tracing` | a span and an event per reload, and the watcher diagnostics | `tracing` |
 | `telemetry` | `telemetry::Exposition` — a `ConfigStatus` as Prometheus text | nothing |
+| `otel` | `otel::Recorder` — the same metrics, into an OpenTelemetry meter | `opentelemetry` |
 
-Neither raises the MSRV, and with both off there is no code: the module
-is not compiled, and the read path is byte-for-byte what it was.
+None of them raises the MSRV, and with all three off there is no code: the
+modules are not compiled, and the read path is byte-for-byte what it was.
 
 The design is the same one the crate applies to runtimes and to formats.
 The library states facts; the binary chooses the machinery. An
-application already running a `metrics` recorder or an OpenTelemetry SDK
-reads [`status()`](reload-lifecycle.md) in its own exporter and never
-touches the `telemetry` module. One that wants a `/metrics` handler and
-nothing else uses `Exposition` and pulls in no exporter at all. Spans
-reach OpenTelemetry the way every other crate's do — through
-`tracing-opentelemetry`, which is the application's dependency.
+application already running a `metrics` recorder reads
+[`status()`](reload-lifecycle.md) in its own exporter and never touches
+either module. One that wants a `/metrics` handler and nothing else uses
+`Exposition` and pulls in no exporter at all.
+
+### What `otel` does, and what it refuses to do
+
+It records into the meter **the application already configured**, through
+`opentelemetry` — the API crate. It does not pull the SDK or an OTLP
+exporter, does not build a pipeline, does not choose a runtime and does not
+install a shutdown hook. Those own a process's lifetime, and a library that
+takes them over is a library that has to be fought.
+
+With no meter provider installed, every instrument is inert and costs an
+atomic load. That is what makes it safe to compile in.
+
+It emits no spans. The `tracing` feature already produces
+`dynamic_config.reload` and `dynamic_config.fetch`, and
+`tracing-opentelemetry` in the application turns those into OTel spans
+alongside everything else the program traces — emitting them again from
+here would give the same work two parents.
+
+The instrument names are the constants in `telemetry`, so a dashboard built
+on the scrape and a dashboard built on OTLP read the same series. The
+cardinality rule does not bend either: attributes carry a reload reason, an
+error kind, a masked fingerprint and a configuration name, and never a key
+path, a value, or a store's description.
 
 ## What a reload emits
 
@@ -218,12 +240,12 @@ because a configuration type has one `Remote`:
 
 | | per scrape | over a process's life |
 |---|---|---|
-| a `ConfigStatus` | `6 × C` | `(4 + 5 + 10) × C = 19 × C` |
-| a `RemoteStatus` | `6 × R` | `(5 + 10) × R = 15 × R` |
+| a `ConfigStatus` | `6 × C` | `(4 + 5 + 11) × C = 20 × C` |
+| a `RemoteStatus` | `6 × R` | `(5 + 11) × R = 16 × R` |
 
-so **at most `6 × C + 6 × R ≤ 12 × C` series in a scrape**, and `34 × C`
+so **at most `6 × C + 6 × R ≤ 12 × C` series in a scrape**, and `36 × C`
 distinct series over the life of a process. The labelled families draw
-from fixed enums — five `ReloadReason`s and ten `ErrorKind`s — and `C` is
+from fixed enums — five `ReloadReason`s and eleven `ErrorKind`s — and `C` is
 the number of configurations a process has, which is a handful.
 
 A per-*store* series multiplies by a bounded number, which is why it

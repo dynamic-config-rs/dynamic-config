@@ -17,6 +17,23 @@ pub(super) fn remote_methods(path: &TokenStream, name: &Ident) -> TokenStream {
             Self::dynamic_config_remote().set(source);
         }
 
+        /// Changes how large a document this type will accept from its
+        /// store.
+        ///
+        /// [`MAX_DOCUMENT_BYTES`](::dynamic_config::MAX_DOCUMENT_BYTES)
+        /// unless this is called. The ceiling guards against the accident —
+        /// a key pointed at the wrong object, a prefix read that matched
+        /// more than it meant to — rather than against a document somebody
+        /// intended, so raising it for one that is genuinely large is the
+        /// expected use.
+        ///
+        /// Survives [`set_remote`](Self::set_remote): it describes what
+        /// this configuration can hold, not what any one store tends to
+        /// send.
+        pub fn set_remote_max_document_bytes(limit: usize) {
+            Self::dynamic_config_remote().set_max_document_bytes(limit);
+        }
+
         /// Reads the remote store, and keeps what came back.
         ///
         /// Takes effect on the next reload. Nothing here touches the

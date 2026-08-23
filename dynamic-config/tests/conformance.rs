@@ -39,6 +39,15 @@ struct Args {
     whole_document: bool,
     #[serde(default)]
     extra_missing_file: Option<String>,
+    /// The dotted paths a fingerprinting case declares secret.
+    #[serde(default)]
+    secrets: Vec<String>,
+    /// Present only in a case that pins a digest. It is pinned here rather
+    /// than in a suite of its own because a fingerprint is a property *of*
+    /// the resolution: the three languages have to agree on the digest of
+    /// the tree they already agree on.
+    #[serde(default)]
+    expected_fingerprint: Option<String>,
 }
 
 fn layer_of(value: &serde_json::Value) -> Layer {
@@ -123,20 +132,26 @@ fn run_case(case: &Path) -> Result<(), String> {
         std::env::remove_var(key);
     }
 
-    let resolved = outcome?;
+    let (resolved, fingerprint) = outcome?;
 
-    if resolved == expected {
-        Ok(())
-    } else {
-        Err(format!(
+    if resolved != expected {
+        return Err(format!(
             "resolved {} but expected {}",
             serde_json::to_string(&resolved).unwrap(),
             serde_json::to_string(&expected).unwrap(),
-        ))
+        ));
+    }
+
+    match (&args.expected_fingerprint, &fingerprint) {
+        (Some(expected), Some(actual)) if actual != expected => {
+            Err(format!("fingerprinted {actual} but expected {expected}"))
+        }
+        _ => Ok(()),
     }
 }
 
-fn resolve(case: &Path, args: &Args) -> Result<serde_json::Value, String> {
+/// The resolved section, and the digest of it when the case pins one.
+fn resolve(case: &Path, args: &Args) -> Result<(serde_json::Value, Option<String>), String> {
     let config = case.join("config.toml");
     let config = config.to_str().ok_or("a UTF-8 path")?;
 
@@ -217,5 +232,23 @@ fn resolve(case: &Path, args: &Args) -> Result<serde_json::Value, String> {
 
     spec = spec.with_whole_document(args.whole_document);
 
-    load::<serde_json::Value>(&spec).map_err(|error| format!("load refused: {error}"))
+    let resolved =
+        load::<serde_json::Value>(&spec).map_err(|error| format!("load refused: {error}"))?;
+
+    // Through the public `snapshot` door rather than a builder, so the
+    // digest is over the same tree the comparison above just made — and so
+    // this runner stays the ~50 lines of glue the other two are.
+    let fingerprint = if args.expected_fingerprint.is_some() {
+        let secrets: Vec<&str> = args.secrets.iter().map(String::as_str).collect();
+
+        Some(
+            dynamic_config::snapshot(&spec)
+                .map_err(|error| format!("snapshot refused: {error}"))?
+                .fingerprint(&secrets),
+        )
+    } else {
+        None
+    };
+
+    Ok((resolved, fingerprint))
 }

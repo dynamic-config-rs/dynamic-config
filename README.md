@@ -24,7 +24,7 @@ they change, served to every thread as one atomic load.
 
 ```toml
 [dependencies]
-dynamic-config = { version = "0.9.0", features = ["toml", "watch"] }
+dynamic-config = { version = "0.10.0", features = ["toml", "watch"] }
 ```
 
 ```rust
@@ -81,6 +81,13 @@ runtime data, and it lives in runtime code.
   trip; `load()` never does. Eight store crates ship from
   [dynamic-config-remote](https://github.com/dynamic-config-rs/dynamic-config-remote),
   each watching the way its protocol allows — seven over a network, and git.
+  A store that has a revision reports one, so a slow read of an old version
+  cannot land on top of a fast read of a new one; a store that issues leases
+  can renew and revoke them.
+- **Two processes can compare configurations without comparing documents.**
+  `fingerprint()` is a `sha256:…` of the resolved tree, safe to log: declared
+  secrets are masked by position, so it moves when a secret appears or
+  disappears and stays put when one rotates.
 
 The full story — precedence, profiles, discovery, hot reload, encryption,
 schema export, units, the last-known-good cache, testing patterns — lives in

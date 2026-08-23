@@ -47,11 +47,56 @@ update — delivered as a `..data` symlink swap — visible at all.
 
 A reload that fails is logged and the previous snapshot is kept.
 
-## `debounce`
+## `debounce`, and the two numbers beside it
 
 The `Duration` handed to `watch`. One editor save typically emits several
 filesystem events; waiting out a quiet period collapses them into one reload.
 250 milliseconds is a reasonable place to start.
+
+Two more numbers govern the same wait, and both used to be unreachable —
+one written into the loop, the other a process-wide setter. `WatchOptions`
+names all three, and a bare `Duration` still converts, so the one-argument
+form is unchanged:
+
+```rust
+use dynamic_config::WatchOptions;
+
+let handle = Config::builder("svc").watch(
+    WatchOptions::new(Duration::from_millis(100))
+        // How long the quiet period may keep restarting before the reload
+        // happens regardless. Four debounces unless it is set: without a
+        // bound, a sustained storm of writes starves the reload forever.
+        .ceiling(Duration::from_secs(2))
+        // The pause between the window closing and the files being read.
+        // An atomic save renames a temporary file into place, and the
+        // rename can be observed a hair before the new inode is visible.
+        .atomic_save_grace(Duration::from_millis(50)),
+)?;
+```
+
+The grace still defaults to the process-wide `set_atomic_save_grace`, and
+that is the right default: it compensates for the *filesystem*, which every
+watcher in the process shares. Naming it per watch is for the program
+watching a local disk and a network mount at once.
+
+## Ending a watch when the process does
+
+`stop()` and `detach()` are the two ends of the range: stop now, or run
+forever. `run_until` is the one a server actually wants —
+
+```rust
+Config::builder("svc")
+    .watch(Duration::from_millis(100))?
+    .run_until(shutdown_signal())
+    .await;
+```
+
+— because a watch is not something to remember to stop, it is something
+that ends when the process is winding down. No runtime is imposed: the
+future is driven by whichever executor is already running the caller, and
+this adds no second cancellation mechanism — it ends the watch exactly the
+way dropping the handle does. `RemoteWatch` has the same method for the
+same reason.
 
 ## Polling instead of notification
 
@@ -143,12 +188,28 @@ A store with no watch of its own is still watched: the default polls, and
 **only a document that differs from the last one is installed**, so a
 process does not fire every reload hook it has once an interval.
 
-The waits are not flat. They are spread by up to a quarter in either
-direction — fifty replicas started by one rollout would otherwise hit the
-store simultaneously, every interval, forever — and they double after each
-failure up to a ceiling, so a store that is down is not hammered by
-everything that depends on it. `Pace` is that policy on its own, for a
-store crate writing its own loop:
+The waits are not flat, and they are not jittered the same way twice —
+because the two waits are solving different problems.
+
+A **healthy** wait is spread by up to a quarter in either direction. Fifty
+replicas started by one rollout would otherwise hit the store
+simultaneously, every interval, forever. The interval is a promise about
+how often a store is read, and a band is enough to break the lockstep
+without changing what was promised.
+
+A wait **after a failure** is drawn from the whole range instead — anywhere
+between nothing and the full backoff, which doubles up to a ceiling. That
+is the shape that actually decorrelates a fleet, and a recovering store is
+the one moment it matters: a thousand agents that failed at the same
+instant have been counting the same doubling ever since, and a band a
+quarter wide would land them back on the store in a clump.
+
+The two are not interchangeable. Drawing a *healthy* wait from the whole
+range would halve its mean, which is not a jitter policy — it is a
+different interval, and it doubles the read rate of every store in the
+fleet.
+
+`Pace` is that policy on its own, for a store crate writing its own loop:
 
 ```rust
 let mut pace = Pace::new(Duration::from_secs(30));
@@ -172,6 +233,65 @@ callback and has no way to reach the status a `Remote` keeps. A loop built
 on the sink calls `sink.failed(&error)` — the store crates' `reporting_to`
 does it for you — and without that, `status().reachable()` goes on
 answering `true` for as long as the outage lasts.
+
+## What a store may say about a document
+
+A `Fetched` is the bytes and the format, and two things a store may know
+about them.
+
+**A revision**, where the store has one. `Revision::Counter` for a number
+that grows — a Vault KV version, a Consul index, an etcd revision —
+and `Revision::Opaque` for one that only ever equals or differs, like an
+ETag or an object hash:
+
+```rust
+Fetched::new(text, Format::Json).with_revision(Revision::Counter(version))
+```
+
+The two are compared differently, and the difference is in the type rather
+than in a convention: `supersedes` orders a `Counter` and can only report
+*changed* about an `Opaque`, because an ETag carries no order.
+
+This is what makes the install fence about *recency* rather than identity.
+Two fetches can be in flight at once — a watch delivery and a resync, say —
+and the one that finishes second is not necessarily the one that read
+later. A `Counter` that is not greater than the installed revision is now
+refused, and an identical `Opaque` installs nothing.
+
+**A lease**, where the store mints the document rather than storing it:
+
+```rust
+pub trait RenewableSource: RemoteSource {
+    fn renew(&self, lease: &Lease) -> Result<Lease, Error>;
+    fn revoke(&self, lease: &Lease) -> Result<(), Error>;
+}
+```
+
+`Lease { id, ttl, renewable }` rides on the `Fetched`, and the trait is how
+a caller extends or hands back what the store issued. Blocking rather than
+async, because the stores that issue leases are blocking clients whose
+callers already run them off the reactor. `Lease` redacts its own `Debug`:
+a lease id is capability-shaped and sits beside generated credentials.
+
+Both fields are additive — `Fetched::new` still means "no revision, no
+lease" — and `Fetched` is `#[non_exhaustive]`, so the next thing a store
+learns to report will not be a breaking change.
+
+## Three things a slot does on the caller's behalf
+
+- **A refresh is single-flight.** N callers arriving at once make one round
+  trip; the rest wake, find the newer revision already installed, and
+  return. Watch, resync and an explicit `refresh()` all reach the same
+  document, so they no longer race each other to fetch it.
+- **A document has a ceiling.** `MAX_DOCUMENT_BYTES` is 8 MiB, enforced
+  where the bytes are read so the allocation never happens, and settable
+  per slot with `set_max_document_bytes`. The refusal names the limit and
+  the store, never the content.
+- **"Not there" is its own answer.** A document that has been deleted
+  fails with `ErrorKind::Absent` rather than the category a watch loop
+  waits out. Waiting cures an outage; it does not bring back a key, and a
+  caller that cannot tell the two apart serves a deleted secret forever
+  with every health check reporting fine.
 
 ## Reacting to a reload
 

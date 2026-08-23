@@ -36,6 +36,19 @@ pub enum ErrorKind {
     ///
     /// The credential itself is never part of the message.
     Auth,
+    /// The store answered, and the document is not there.
+    ///
+    /// Distinct from [`Remote`](Self::Remote) — which is the store being
+    /// unreachable — and from [`Missing`](Self::Missing), which is a key
+    /// absent from a document that *was* read. This one is the document
+    /// itself: a key deleted, a path that never existed, a bucket object
+    /// removed.
+    ///
+    /// The difference matters because the three deserve different answers.
+    /// Waiting fixes an unreachable store. Waiting does not bring back a
+    /// deleted secret, and treating it as an outage is how a stale document
+    /// gets served for a week with every health check reporting fine.
+    Absent,
     /// An encrypted file could not be decrypted.
     Decrypt,
     /// The active backend failed for a reason of its own.
@@ -55,6 +68,7 @@ impl ErrorKind {
             Self::Invalid => "invalid",
             Self::Remote => "remote",
             Self::Auth => "auth",
+            Self::Absent => "absent",
             Self::Decrypt => "decrypt",
             Self::Backend => "backend",
         }
@@ -150,6 +164,26 @@ impl Error {
     /// failure is categorised the same way whichever store it came from.
     pub fn remote<E: fmt::Display>(error: E) -> Self {
         Self::new(ErrorKind::Remote, error.to_string())
+    }
+
+    /// A document a remote store does not have.
+    ///
+    /// Also for [`RemoteSource`](crate::RemoteSource) implementors, and the
+    /// third line in the same family: [`remote`](Self::remote) is *the store
+    /// did not answer*, [`auth`](Self::auth) is *the store refused you*, and
+    /// this is *the store answered, and there is nothing at that path*.
+    ///
+    /// Worth telling apart because the three deserve different reactions. An
+    /// unreachable store is waited out. A refused credential stops the loop.
+    /// A deleted document does neither: waiting will not bring it back, and
+    /// stopping loses the configuration that is still serving — so a caller
+    /// has a policy to apply, and cannot apply one it was never told about.
+    ///
+    /// A 404 belongs here only where the store means one thing by it. Where
+    /// a 404 is also how a store spells "you may not read that", prefer
+    /// [`auth`](Self::auth) and say so — the config server does exactly that.
+    pub fn absent<E: fmt::Display>(error: E) -> Self {
+        Self::new(ErrorKind::Absent, error.to_string())
     }
 
     /// A credential a remote store refused, or one that could not be obtained.

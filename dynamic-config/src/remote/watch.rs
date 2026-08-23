@@ -87,6 +87,35 @@ impl RemoteWatch {
     pub fn detach(self) {
         std::mem::forget(self);
     }
+
+    /// Watches until `shutdown` completes, then stops.
+    ///
+    /// The shape a server wants: a watch is not something to remember to
+    /// stop, it is something that ends when the process is winding down.
+    ///
+    /// ```no_run
+    /// # async fn shutdown_signal() {}
+    /// # async fn run(watch: dynamic_config::RemoteWatch) {
+    /// watch.run_until(shutdown_signal()).await;
+    /// # }
+    /// ```
+    ///
+    /// No runtime is imposed: the future is driven by whichever executor is
+    /// already running the caller, and this adds no second cancellation
+    /// mechanism — it sets the same flag [`stop`](Self::stop) does, which is
+    /// what every loop already checks. The same caveat therefore applies: a
+    /// loop parked in a blocking query returns when the store answers or the
+    /// wait expires, so the store's wait time is the worst-case delay.
+    ///
+    /// Takes `self` so the handle cannot outlive the watch it was ending.
+    pub async fn run_until(self, shutdown: impl core::future::Future<Output = ()>) {
+        shutdown.await;
+
+        // Through `drop` rather than `stop` — they do the same thing, and
+        // going through the destructor keeps one path for "this watch is
+        // over" instead of two that could drift.
+        drop(self);
+    }
 }
 
 impl Default for RemoteWatch {
@@ -240,23 +269,44 @@ impl Pace {
     ///
     /// The interval while things work; doubling from it after each failure,
     /// up to the ceiling.
+    ///
+    /// # Two kinds of jitter, for two different problems
+    ///
+    /// A **healthy** wait is spread by a quarter either way. The interval is
+    /// a promise about how often a store is read, and a fleet only needs its
+    /// members nudged out of lockstep to stop arriving together.
+    ///
+    /// A wait **after a failure** is drawn from the whole range instead —
+    /// anywhere between nothing and the full backoff. That is the shape that
+    /// actually decorrelates a fleet, and a recovering store is the one
+    /// moment it matters: a thousand agents that failed at the same instant
+    /// have been counting the same doubling ever since, and a band a quarter
+    /// wide would land them back on the store in a clump.
+    ///
+    /// The two are not interchangeable. Drawing a healthy wait from the
+    /// whole range would halve its mean, which is not a jitter policy — it
+    /// is a different interval, and it doubles the read rate of every store
+    /// in the fleet.
     #[must_use]
     pub fn next_wait(&mut self) -> Duration {
-        let base = if self.failures == 0 {
-            self.interval
-        } else {
-            // Doubling, but never past the ceiling and never past what a
-            // `Duration` can hold — a loop that has failed for a week must
-            // not overflow its way back down to no wait at all.
-            let factor = 1u32.checked_shl(self.failures.min(16)).unwrap_or(u32::MAX);
+        if self.failures == 0 {
+            let interval = self.interval;
 
-            self.interval
-                .checked_mul(factor)
-                .unwrap_or(self.ceiling)
-                .min(self.ceiling)
-        };
+            return self.spread(interval);
+        }
 
-        self.spread(base)
+        // Doubling, but never past the ceiling and never past what a
+        // `Duration` can hold — a loop that has failed for a week must
+        // not overflow its way back down to no wait at all.
+        let factor = 1u32.checked_shl(self.failures.min(16)).unwrap_or(u32::MAX);
+
+        let backoff = self
+            .interval
+            .checked_mul(factor)
+            .unwrap_or(self.ceiling)
+            .min(self.ceiling);
+
+        self.up_to(backoff)
     }
 
     /// Waits for [`next_wait`](Self::next_wait), waking early if the watch
@@ -273,25 +323,49 @@ impl Pace {
     /// clock at construction, so two processes do not share a phase.
     #[must_use]
     pub fn spread(&mut self, base: Duration) -> Duration {
-        // An LCG rather than a dependency: the numbers only have to be
-        // uncorrelated between processes, which is a far weaker ask than
-        // anything a random number generator is built for.
+        let draw = self.draw();
+
+        let quarter = base / 4;
+        let offset = quarter
+            .checked_mul(u32::try_from(draw >> 33 & 0xFF).unwrap_or(0))
+            .unwrap_or(quarter)
+            / 255;
+
+        if draw & 1 == 0 {
+            base.saturating_add(offset)
+        } else {
+            base.saturating_sub(offset)
+        }
+    }
+
+    /// Anywhere from nothing up to `base` — full jitter.
+    ///
+    /// The backoff's own shape. Two processes that failed together stop
+    /// being correlated after one draw, rather than staying a quarter-width
+    /// band apart for as long as the outage lasts.
+    fn up_to(&mut self, base: Duration) -> Duration {
+        let draw = self.draw();
+
+        // Eight bits of the word, scaled across the range. The same
+        // arithmetic `spread` uses, so the two cannot drift apart in how
+        // they handle a `Duration` too large to multiply.
+        base.checked_mul(u32::try_from(draw >> 33 & 0xFF).unwrap_or(0))
+            .unwrap_or(base)
+            / 255
+    }
+
+    /// One step of the generator, and the only place it advances.
+    ///
+    /// An LCG rather than a dependency: the numbers only have to be
+    /// uncorrelated between processes, which is a far weaker ask than
+    /// anything a random number generator is built for.
+    fn draw(&mut self) -> u64 {
         self.entropy = self
             .entropy
             .wrapping_mul(6_364_136_223_846_793_005)
             .wrapping_add(1_442_695_040_888_963_407);
 
-        let quarter = base / 4;
-        let offset = quarter
-            .checked_mul(u32::try_from(self.entropy >> 33 & 0xFF).unwrap_or(0))
-            .unwrap_or(quarter)
-            / 255;
-
-        if self.entropy & 1 == 0 {
-            base.saturating_add(offset)
-        } else {
-            base.saturating_sub(offset)
-        }
+        self.entropy
     }
 }
 

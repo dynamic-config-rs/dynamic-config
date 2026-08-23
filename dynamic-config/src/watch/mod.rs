@@ -10,12 +10,14 @@
 
 mod debounce;
 mod handle;
+mod options;
 mod relevance;
 #[cfg(test)]
 mod tests;
 
 pub use debounce::set_atomic_save_grace;
 pub use handle::{spawn, spawn_with, WatchHandle, WatchKey};
+pub use options::WatchOptions;
 
 use std::path::PathBuf;
 use std::time::Duration;

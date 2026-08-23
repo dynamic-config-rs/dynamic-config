@@ -70,6 +70,22 @@ age = ["decrypt", "dep:age"]
 # dependency at all** — the text format is a wire encoding, not a crate — so
 # this crate still picks no metrics ecosystem for its users.
 telemetry = []
+# Records into an OpenTelemetry meter the *application* configured.
+#
+# Pulls `opentelemetry`, the API crate — and deliberately not the SDK or an
+# OTLP exporter, which own a runtime and a shutdown and belong to whoever
+# wrote `main`. With no provider installed every instrument is inert, so a
+# binary that compiles this in and never configures OTel pays an atomic load.
+#
+# Off by default: a library must not conscript its users into a telemetry
+# ecosystem. Traces are not emitted here — the `tracing` feature's spans reach
+# OTel through `tracing-opentelemetry` in the application, and emitting them
+# twice would give the same work two parents.
+#
+# Not in `full`: `full` turns on formats and capabilities, and picking a
+# telemetry ecosystem is a decision a convenience feature should not make on
+# somebody's behalf. Ask for it by name.
+otel = ["telemetry", "dep:opentelemetry"]
 full = [
     "json",
     "toml",
@@ -91,6 +107,15 @@ full = [
 ]
 
 [dependencies]
+# The fingerprint's hash. A digest that appears in a metric label and a
+# `kubectl describe` is an API, and `DefaultHasher` — which this replaced —
+# carries no guarantee of staying the same across a Rust release.
+sha2 = { version = "0.10", default-features = false }
+# The OpenTelemetry *API*, behind the `otel` feature. Not the SDK, not an
+# exporter: see the feature's own comment.
+opentelemetry = { version = "0.32", optional = true, default-features = false, features = [
+    "metrics",
+] }
 dynamic-config-macros = { workspace = true }
 # `1.9`: `gix-odb` requires it, and the Python remote wheel puts the git
 # store in this crate's graph. Nothing here needs 1.9 for itself — the floor

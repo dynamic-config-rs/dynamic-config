@@ -210,6 +210,17 @@ pub const LAST_RELOAD_INFO: &str = "dynamic_config_last_reload_info";
 #[cfg(feature = "telemetry")]
 pub const LAST_FAILURE_INFO: &str = "dynamic_config_last_failure_info";
 
+/// Reloads that installed nothing, as a counter.
+///
+/// Emitted by the [`otel`](crate::otel) recorder rather than by
+/// [`Exposition`]: the Prometheus half answers the *health* question with
+/// [`CONSECUTIVE_FAILURES`], which is the number an alert fires on, and a
+/// scrape can derive a rate from a gauge no better than from nothing. An
+/// OTel counter is the right shape for the same fact, so both exist and
+/// neither is a rename of the other.
+#[cfg(feature = "telemetry")]
+pub const RELOAD_FAILURES_TOTAL: &str = "dynamic_config_reload_failures_total";
+
 /// Every metric family this crate emits, in the order [`Exposition`] writes
 /// them.
 ///

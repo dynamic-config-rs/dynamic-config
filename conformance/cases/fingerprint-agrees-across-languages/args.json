@@ -1,0 +1,8 @@
+{
+  "key": "app",
+  "env_prefix": "C21_",
+  "secrets": [
+    "db.password"
+  ],
+  "expected_fingerprint": "sha256:520138d3f2b1c72248ccba6b61dbc238aecb92ce889bce3409581ae8acf6119e"
+}

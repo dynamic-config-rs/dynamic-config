@@ -28,9 +28,9 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
     /// with no installer, which has nothing to reload *into*.
     pub fn watch(
         &self,
-        debounce: core::time::Duration,
+        options: impl Into<crate::watch::WatchOptions>,
     ) -> std::io::Result<crate::watch::WatchHandle> {
-        self.watch_with(debounce, crate::watch::WatchMode::Native)
+        self.watch_with(options, crate::watch::WatchMode::Native)
     }
 
     /// [`watch`](Self::watch) with the detection strategy chosen explicitly
@@ -41,13 +41,13 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
     /// As [`watch`](Self::watch).
     pub fn watch_with(
         &self,
-        debounce: core::time::Duration,
+        options: impl Into<crate::watch::WatchOptions>,
         mode: crate::watch::WatchMode,
     ) -> std::io::Result<crate::watch::WatchHandle> {
         let handle = self.watch_as(
             crate::watch::WatchKey::Type(std::any::TypeId::of::<T>()),
             watch_name::<T>(&self.key),
-            debounce,
+            options.into(),
             mode,
         )?;
 
@@ -66,7 +66,7 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
         &self,
         key: crate::watch::WatchKey,
         name: &'static str,
-        debounce: core::time::Duration,
+        options: crate::watch::WatchOptions,
         mode: crate::watch::WatchMode,
     ) -> std::io::Result<crate::watch::WatchHandle> {
         let Some(install) = self.install.clone() else {
@@ -87,7 +87,7 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Builder<T> {
 
         let reloader = self.clone();
 
-        crate::watch::spawn_with(key, name, watched, debounce, mode, move |trigger| {
+        crate::watch::spawn_with(key, name, watched, options, mode, move |trigger| {
             // `load` already validates, so a refused configuration keeps
             // the previous snapshot exactly like a parse failure — and the
             // cell is told, so `status()` can count the failures a watcher

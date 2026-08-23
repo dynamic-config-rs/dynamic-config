@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use notify::{Event, RecursiveMode, Watcher};
 
@@ -85,6 +84,39 @@ impl WatchHandle {
     /// Stops watching. The same as dropping it, spelled out.
     pub fn stop(self) {}
 
+    /// Watches until `shutdown` completes, then stops.
+    ///
+    /// The shape a server wants: a watch is not something to remember to
+    /// stop, it is something that ends when the process is winding down.
+    ///
+    /// ```no_run
+    /// # #[cfg(all(feature = "watch", feature = "json"))] {
+    /// # use core::time::Duration;
+    /// # use serde::Deserialize;
+    /// # #[dynamic_config::dynamic_config]
+    /// # #[derive(Debug, Deserialize)]
+    /// # struct Config { host: String }
+    /// # async fn shutdown_signal() {}
+    /// # async fn run() -> std::io::Result<()> {
+    /// Config::builder("svc")
+    ///     .watch(Duration::from_millis(100))?
+    ///     .run_until(shutdown_signal())
+    ///     .await;
+    /// # Ok(()) }
+    /// # }
+    /// ```
+    ///
+    /// Takes `self` because that is what stopping *is* here: the handle owns
+    /// the notification backend, and dropping it closes the channel the
+    /// background thread is reading. There is no flag to poll and no wake-up
+    /// latency — and no runtime is imposed, because the future is driven by
+    /// whichever executor is already running the caller.
+    pub async fn run_until(self, shutdown: impl core::future::Future<Output = ()>) {
+        shutdown.await;
+
+        drop(self);
+    }
+
     /// The type name this watcher was started for.
     #[must_use]
     pub fn name(&self) -> &'static str {
@@ -157,10 +189,10 @@ pub fn spawn(
     key: WatchKey,
     name: &'static str,
     watched: Watched,
-    debounce: Duration,
+    options: impl Into<super::WatchOptions>,
     reload: impl Fn(&Path) -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
-    spawn_with(key, name, watched, debounce, WatchMode::default(), reload)
+    spawn_with(key, name, watched, options, WatchMode::default(), reload)
 }
 
 /// [`spawn`], with the detection strategy chosen explicitly.
@@ -173,10 +205,11 @@ pub fn spawn_with(
     key: WatchKey,
     name: &'static str,
     watched: Watched,
-    debounce: Duration,
+    options: impl Into<super::WatchOptions>,
     mode: WatchMode,
     reload: impl Fn(&Path) -> Result<Option<String>, Error> + Send + 'static,
 ) -> std::io::Result<WatchHandle> {
+    let options = options.into();
     // An error, not a quiet no-op handle. The old behaviour returned
     // `Ok(handle-that-owns-nothing)`, which read as "I started watching" and
     // was undetectable at runtime — the worst kind of success.
@@ -244,7 +277,7 @@ pub fn spawn_with(
 
     thread::Builder::new()
         .name(format!("config-watch-{name}"))
-        .spawn(move || run(name, &watched, debounce, reload, &receiver))?;
+        .spawn(move || run(name, &watched, options, reload, &receiver))?;
 
     // Everything that could fail has succeeded; from here the *handle* owns
     // the registration and frees it on drop.

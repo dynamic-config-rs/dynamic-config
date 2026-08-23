@@ -185,6 +185,7 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
                     .with_installer(
                         Self::dynamic_config_install,
                         Self::dynamic_config_record_failure,
+                        Self::dynamic_config_record_fingerprint,
                     )
                     .with_secrets(&[#(#secret_names),*])
                     .with_fields(Self::DYNAMIC_CONFIG_FIELDS)
@@ -284,6 +285,28 @@ pub(crate) fn expand(mut input: ItemStruct) -> Result<TokenStream> {
             /// is still a fact about this type, and `status()` reports it.
             fn dynamic_config_record_failure(error: &#path::Error) {
                 Self::dynamic_config_cell().record_failure(error);
+            }
+
+            #[doc(hidden)]
+            fn dynamic_config_record_fingerprint(fingerprint: ::std::string::String) {
+                Self::dynamic_config_cell().set_fingerprint(fingerprint);
+            }
+
+            /// A stable digest of the configuration currently installed.
+            ///
+            /// `sha256:…`, or `None` before the first install. **Safe to
+            /// log**: every `#[config(secret)]` field is masked by position
+            /// before hashing, so the digest moves when a secret appears or
+            /// disappears and stays put when one merely rotates.
+            ///
+            /// For comparing two processes without comparing two documents:
+            /// two pods print a string each, and either they match or one of
+            /// them is running a configuration nobody meant to ship.
+            /// `generation()` counts one process's installs and cannot
+            /// answer that.
+            #[must_use]
+            pub fn fingerprint() -> ::core::option::Option<::std::sync::Arc<::std::string::String>> {
+                Self::dynamic_config_cell().fingerprint()
             }
 
             /// What is true of this configuration right now: which

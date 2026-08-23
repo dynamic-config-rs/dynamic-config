@@ -36,11 +36,6 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
-// `std::collections::hash_map::DefaultHasher` rather than `std::hash::`: the
-// latter is the same type re-exported, but only since 1.76, and the core
-// crate's floor is 1.71.
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use crate::value::Value;
@@ -354,11 +349,14 @@ fn drift(cached: &Snapshot, current: Option<&Snapshot>) -> Option<Vec<String>> {
 /// fingerprints the same however it was assembled. It used to hash the
 /// figment tree's `Debug` rendering, which put the identity of every cache
 /// file on disk at the mercy of an upstream crate's formatting.
+///
+/// **No secrets are masked here**, and that is deliberate: this hash exists
+/// to notice that the live configuration has drifted from the cached one,
+/// and a rotated password is exactly the drift worth noticing. The public
+/// [`fingerprint`](crate::Dynamic::fingerprint) masks them, because its job
+/// is the opposite one — being safe to print.
 fn fingerprint_of(snapshot: &Snapshot) -> String {
-    let mut hasher = DefaultHasher::new();
-    snapshot.to_value().hash(&mut hasher);
-
-    format!("{:016x}", hasher.finish())
+    crate::fingerprint::of(&as_document(snapshot), &[])
 }
 
 /// The whole tree minus the top-level keys named in `secrets`.
@@ -571,12 +569,20 @@ mod tests {
     /// cache on disk stops being recognised — the conservative direction,
     /// but not one to discover from a support ticket. If this fails, the
     /// fingerprint moved: decide whether that was intended, say so in the
-    /// changelog under Changed, and write the new number down. `std`'s
-    /// hasher changing under us would land here too, which is the point —
-    /// it invalidates caches exactly the same way a change here does.
+    /// changelog under Changed, and write the new number down.
+    ///
+    /// It moved once, in 0.10, and this is what it caught. The hash was
+    /// `std`'s `DefaultHasher`, whose implementation carries no guarantee
+    /// of staying the same across a Rust release — so the identity of every
+    /// cache file on disk was one toolchain upgrade away from changing for
+    /// nobody's reason. It is SHA-256 over a written-out encoding now, and
+    /// the only thing that can move it is a decision made here.
     #[test]
     fn the_fingerprint_of_a_known_document_is_this_one() {
-        assert_eq!(fingerprint_of(&known_document()), "67d38230cb74f238");
+        assert_eq!(
+            fingerprint_of(&known_document()),
+            "9f6aba580a7e821ad7afe62b3e7d355ad066401ed1115a6a95981ad961f5fbf0"
+        );
     }
 
     #[test]

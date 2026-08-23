@@ -25,6 +25,80 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-23
+
+### Added
+
+- **`fingerprint()`, a digest a fleet can compare instead of comparing
+  documents.** On `Dynamic<T>`, on a generated type, and on `Snapshot`:
+  `sha256:…` over the *resolved tree*, so the same configuration fingerprints
+  the same whether it arrived as TOML on one host and YAML on another, and
+  whichever order its keys were written in. Safe to log — every
+  `#[config(secret)]` field is masked **by position** before hashing, so the
+  digest moves when a secret appears or disappears and stays put when one
+  merely rotates. A digest that moved on rotation would be an oracle for the
+  value that moved it.
+- **`Fetched` carries what the store said about the document.** A
+  `revision: Option<Revision>` — `Counter` for etcd revisions, Consul indices
+  and Vault KV versions, `Opaque` for ETags and hashes — and a
+  `lease: Option<Lease>` for stores that issue dynamic credentials. Built with
+  `Fetched::with_revision` and `Fetched::with_lease`; `Fetched::new` still
+  means "no revision, no lease".
+- **`RenewableSource`**, for a store whose *documents* are leased: `renew` and
+  `revoke` beside `RemoteSource`. Deliberately separate from the credential
+  the client authenticates with, which the store crates' `Cached` already
+  manages — two lifetimes, and conflating them is the mistake this trait
+  exists to avoid.
+- **`run_until(shutdown)`**, on both watch handles. A watch is not something
+  to remember to stop; it is something that ends when the process is winding
+  down. No runtime is imposed — the future is driven by whichever executor is
+  already running the caller — and no second cancellation mechanism is
+  introduced: it ends the watch exactly the way dropping the handle does.
+- **`WatchOptions`, naming the three numbers a file watch already ran on.**
+  The debounce was an argument, the ceiling was `debounce × 4` written into
+  the loop, and the atomic-save grace was a process-wide setter — the right
+  default for something that compensates for the *filesystem*, and the wrong
+  granularity for a program watching a local disk and a network mount at
+  once. `watch(Duration)` still works: a bare `Duration` converts.
+- **An `otel` feature**, off by default. Records the metrics that already had
+  Prometheus names into an OpenTelemetry meter the *application* configured —
+  through `opentelemetry`, the API crate, and deliberately not the SDK or an
+  OTLP exporter, which own a runtime and a shutdown and belong to whoever
+  wrote `main`. With no provider installed every instrument is inert. No spans
+  are emitted: `tracing` already produces them and `tracing-opentelemetry`
+  carries them, and emitting them twice would give the same work two parents.
+- **A ceiling on how large a document may be.** `MAX_DOCUMENT_BYTES` (8 MiB)
+  unless `set_remote_max_document_bytes` says otherwise. A guard against a key
+  pointed at the wrong object, not against a document somebody meant to be
+  large: the refusal names both numbers and never the content.
+
+### Changed
+
+- **An older document can no longer overwrite a newer one.** The install fence
+  proved only that a document came from the source still installed; two
+  fetches of one source can be in flight at once — a resync beside the store's
+  own watch — and whichever finished last won, which could be the older one.
+  A document whose `Revision` does not supersede the installed one is now
+  skipped rather than installed. A store that names no revision is unaffected:
+  ordering is a property a store opts into.
+- **Concurrent refreshes make one round trip.** `refresh()` released its lock
+  before the network call, so N callers wanting the same document each paid
+  for it. Whoever arrives second now waits and finds the first one's result
+  installed. `refresh_async` is unchanged — a future cannot hold a blocking
+  mutex across an await, and this crate picks no runtime to borrow an async
+  one from.
+- **Backoff waits use full jitter; healthy waits keep the band.** A wait after
+  a failure is drawn from the whole range rather than a quarter either way,
+  which is what actually decorrelates a fleet that failed together. The
+  healthy interval keeps its ±25% band deliberately: drawing it from the whole
+  range would halve its mean, which is not a jitter policy but a different
+  interval, and it would double every store's read rate.
+- **The cache fingerprint is SHA-256.** It was `std`'s `DefaultHasher`, whose
+  implementation carries no guarantee of staying the same across a Rust
+  release — so the identity of every cache file on disk was one toolchain
+  upgrade away from changing for nobody's reason. Existing caches miss once
+  and are rewritten, which is the behaviour a missing cache already had.
+
 ## [0.9.0] — 2026-08-20
 
 ## [0.7.1] — 2026-08-19
@@ -715,7 +789,8 @@ Initial release.
 - Diagnostics report paths and types, never values — enforced by its own
   test suite.
 
-[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.1...v0.9.0
 [0.7.1]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dynamic-config-rs/dynamic-config/compare/v0.6.3...v0.7.0

@@ -46,19 +46,19 @@ pub fn set_atomic_save_grace(grace: Duration) {
     );
 }
 
-fn atomic_save_grace() -> Duration {
+pub(super) fn atomic_save_grace() -> Duration {
     Duration::from_millis(ATOMIC_SAVE_GRACE_MS.load(core::sync::atomic::Ordering::Relaxed))
 }
 
 pub(super) fn run(
     name: &'static str,
     watched: &Watched,
-    debounce: Duration,
+    options: super::WatchOptions,
     reload: impl Fn(&Path) -> Result<Option<String>, Error>,
     receiver: &mpsc::Receiver<notify::Result<Event>>,
 ) {
     loop {
-        let trigger = match collect_relevant(receiver, name, debounce, watched) {
+        let trigger = match collect_relevant(receiver, name, options, watched) {
             Collected::Dirty(path) => path,
             Collected::Disconnected => {
                 // The watcher was dropped, so no further events can arrive.
@@ -66,7 +66,7 @@ pub(super) fn run(
             }
         };
 
-        thread::sleep(atomic_save_grace());
+        thread::sleep(options.grace_of());
 
         // Under `tracing`, the reload is a span with its outcome and
         // duration as fields — enough to alert on "has not reloaded
@@ -148,9 +148,10 @@ enum Collected {
 fn collect_relevant(
     receiver: &mpsc::Receiver<notify::Result<Event>>,
     name: &'static str,
-    debounce: Duration,
+    options: super::WatchOptions,
     watched: &Watched,
 ) -> Collected {
+    let debounce = options.debounce_of();
     // Phase 1: sleep until something we care about happens.
     let trigger = loop {
         match receiver.recv() {
@@ -165,7 +166,7 @@ fn collect_relevant(
     };
 
     // Phase 2: wait out the flurry an editor save produces, but not forever.
-    let deadline = std::time::Instant::now() + debounce.saturating_mul(4);
+    let deadline = std::time::Instant::now() + options.ceiling_of();
     let mut quiet_until = std::time::Instant::now() + debounce;
 
     loop {
