@@ -139,6 +139,14 @@ pub struct ConfigCell<T> {
     /// precisely so reading it allocates nothing.
     last_reason: ArcSwapOption<ReloadReason>,
 
+    /// The fingerprint of the tree the installed value came from.
+    ///
+    /// Recorded by the install rather than computed on demand, because the
+    /// resolved tree exists only during a load — asking afterwards would
+    /// mean re-reading every source to answer a question about a snapshot
+    /// that is already here.
+    fingerprint: ArcSwapOption<String>,
+
     /// The last reload that installed nothing, and how many have failed
     /// since one did. Outside the snapshot because a failed reload has no
     /// snapshot to hang off — that is what makes it a failure.
@@ -168,6 +176,7 @@ impl<T> ConfigCell<T> {
             next_token: std::sync::atomic::AtomicU64::new(0),
             meta: ArcSwapOption::const_empty(),
             last_reason: ArcSwapOption::const_empty(),
+            fingerprint: ArcSwapOption::const_empty(),
             last_failure: ArcSwapOption::const_empty(),
             consecutive_failures: AtomicU32::new(0),
             refusals: std::sync::atomic::AtomicU64::new(0),
@@ -186,6 +195,7 @@ impl<T> ConfigCell<T> {
             next_token: std::sync::atomic::AtomicU64::new(0),
             meta: ArcSwapOption::const_empty(),
             last_reason: ArcSwapOption::const_empty(),
+            fingerprint: ArcSwapOption::const_empty(),
             last_failure: ArcSwapOption::const_empty(),
             consecutive_failures: AtomicU32::new(0),
             refusals: std::sync::atomic::AtomicU64::new(0),
@@ -459,6 +469,26 @@ impl<T> ConfigCell<T> {
     /// blocked would then block reloads.
     pub fn on_reload(&self, hook: impl Fn(&Arc<T>, &Arc<T>) + Send + Sync + 'static) {
         let _ = self.register(Callback::Pair(Arc::new(hook)));
+    }
+
+    /// Records the fingerprint of the tree an install came from.
+    ///
+    /// Called by the builder, which is the only place the resolved tree and
+    /// the installed value exist at the same moment. `pub` because the
+    /// generated code reaches it from the config type's own crate, and
+    /// `#[doc(hidden)]` because it is not a door anybody else should use —
+    /// a fingerprint nobody computed from a snapshot is a lie about one.
+    #[doc(hidden)]
+    pub fn set_fingerprint(&self, fingerprint: String) {
+        self.fingerprint
+            .store(Some(std::sync::Arc::new(fingerprint)));
+    }
+
+    /// The fingerprint of the configuration currently installed, if one has
+    /// been installed at all.
+    #[must_use]
+    pub fn fingerprint(&self) -> Option<std::sync::Arc<String>> {
+        self.fingerprint.load_full()
     }
 
     /// [`on_reload`](Self::on_reload), told *why*.

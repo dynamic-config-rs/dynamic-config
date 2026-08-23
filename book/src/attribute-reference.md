@@ -62,6 +62,7 @@ argument to opt in with; an unused method costs nothing.
 | `current() -> Arc<Self>` | | The current snapshot, one atomic load. Panics before anything installed one. |
 | `try_current() -> Option<Arc<Self>>` | | The current snapshot, or `None`. |
 | `generation() -> u64` | | How many snapshots have been installed; zero before the first. Monotonic, and the total order a hook should read rather than infer — the order callbacks are *called* in is not defined across concurrent reloads. |
+| `fingerprint() -> Option<Arc<String>>` | | A `sha256:…` digest of the configuration installed, or `None` before the first install. Safe to log: `#[config(secret)]` fields are masked by position, so it moves when a secret appears or disappears and stays put when one rotates. Two processes comparing strings is the question `generation()` cannot answer. |
 | `meta() -> Option<SnapshotMeta>` | | That generation and when it was installed. For operators rather than for correctness: it is a second load, so it can be one install away from a `current()` taken beside it, and nothing on the read path consults it. |
 | `status() -> ConfigStatus` | | Generation, when it landed, why, and how the reloads since have gone — a handful of atomic loads, no I/O, safe to call per scrape. See [Operating a configuration](reload-lifecycle.md#operating-a-configuration). |
 | `replace(config)` | | Atomically swap in a new snapshot. Readers holding an `Arc` keep their own generation. |
@@ -83,6 +84,7 @@ argument to opt in with; an unused method costs nothing.
 | `check() -> Result<Report, Error>` | | What the configuration resolves to, and whether it would load — works when the load fails, which is when it is worth running. |
 | `explain(path) -> Result<Explanation, Error>` | | Every layer's answer for one path, values included — secret fields come back already `***`. |
 | `set_remote(source)` / `refresh_remote()` / `remote_sink()` / `clear_remote()` | | Install a remote store, fetch from it explicitly, take the fenced sink a watch loop pushes through, drop what it gave. |
+| `set_remote_max_document_bytes(limit)` | | Raise or lower the ceiling a fetched document has to fit under. Eight mebibytes unless it is called — a guard against a key pointed at the wrong object, not against a document somebody meant to be large. |
 | `remote_status() -> RemoteStatus` | | How the fetches have gone: how many, when the last one landed, how long it took, the last failure's kind, and whether the store is reachable. The fetch half of what `status()` starts, and no I/O either. |
 | `bind_clap(matches, bindings)` | `clap` | Copy named clap arguments into the flags layer — only ones that really came from the command line. |
 | `load_async()` / `init_async()` | `async` | The remembered builder's load and init, off the async executor. |

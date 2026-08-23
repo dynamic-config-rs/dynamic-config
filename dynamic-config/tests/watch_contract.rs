@@ -299,27 +299,58 @@ fn the_waits_are_spread_and_grow_after_a_failure() {
         "sixteen identical waits is a fleet polling in lockstep"
     );
 
-    // Growth is measured where jitter cannot hide it. A quarter either way
-    // is a *band*, and two consecutive bands overlap — 2× the interval
-    // jittered up can exceed 4× jittered down, and near the ceiling it
-    // routinely does. So the bands are compared rather than two samples.
+    // After a failure the draw is *full* jitter — anywhere from nothing up
+    // to the doubled interval — so a single sample has no lower bound to
+    // assert. What grows is the range, and that is what gets measured:
+    // sixteen draws at one failure cannot reach where sixteen draws at four
+    // failures routinely do.
+    let ceiling_of = |failures: u32| {
+        let mut pace = Pace::new(Duration::from_secs(1));
+
+        for _ in 0..failures {
+            pace.failed();
+        }
+
+        (0..16).map(|_| pace.next_wait()).max().unwrap_or_default()
+    };
+
+    let after_one = ceiling_of(1);
+    let after_four = ceiling_of(4);
+
+    assert!(
+        after_one <= Duration::from_secs(2),
+        "one failure draws from twice the interval at most: {after_one:?}"
+    );
+    assert!(
+        after_four > after_one,
+        "the backoff has to grow: {after_four:?} after four, {after_one:?} after one"
+    );
+    assert!(
+        after_four <= Duration::from_secs(16),
+        "four failures draw from sixteen times the interval at most: {after_four:?}"
+    );
+
+    // The property the band cannot give: the low half of the range is
+    // reachable. This is what decorrelates a fleet that all failed at the
+    // same instant, and a ±25% band would make it impossible.
+    let mut failing = Pace::new(Duration::from_secs(100));
+    failing.failed();
+
+    let draws: Vec<Duration> = (0..64).map(|_| failing.next_wait()).collect();
+
+    assert!(
+        draws.iter().any(|wait| *wait < Duration::from_secs(100)),
+        "a failed wait must be able to fall below the interval, or the \
+         backoff is a band and not full jitter"
+    );
+    assert!(
+        draws.iter().all(|wait| *wait <= Duration::from_secs(200)),
+        "and it must never exceed the backoff it was drawn from"
+    );
+
     let mut growing = Pace::new(Duration::from_secs(1));
 
-    growing.failed();
-    let first = growing.next_wait();
-    growing.failed();
-    let second = growing.next_wait();
-
-    assert!(
-        first <= Duration::from_millis(2_500),
-        "one failure waits about twice the interval: {first:?}"
-    );
-    assert!(
-        second >= Duration::from_secs(3),
-        "two failures wait about four times it: {second:?}"
-    );
-
-    for _ in 0..40 {
+    for _ in 0..42 {
         growing.failed();
     }
 
@@ -333,6 +364,11 @@ fn the_waits_are_spread_and_grow_after_a_failure() {
     assert!(
         growing.next_wait() <= Duration::from_millis(1_250),
         "a round that works puts the wait back to the interval"
+    );
+    assert!(
+        growing.next_wait() >= Duration::from_millis(750),
+        "and back to the *band*: a healthy interval is a promise about how \
+         often a store is read, not a range to draw from"
     );
 }
 
@@ -411,4 +447,47 @@ fn a_native_watch_is_resynced_on_the_interval() {
         Some(r#"{"db":{"port":1}}"#.to_owned()),
         "the resync found a newer document than the stream ever pushed"
     );
+}
+
+/// A watch that ends when the process is winding down, rather than one the
+/// caller has to remember to stop.
+///
+/// Driven here by a plain future on this crate's own tiny executor — no
+/// runtime is imposed by `run_until`, which is the property being pinned:
+/// the shutdown future is driven by whoever is already driving the caller.
+#[test]
+fn a_remote_watch_runs_until_the_shutdown_future_completes() {
+    use dynamic_config::RemoteWatch;
+
+    let watch = RemoteWatch::new();
+    let watching = watch.watching();
+
+    assert!(watching.keep_going());
+
+    // A future that is already complete: the point is the sequencing, not
+    // the waiting.
+    block_on(watch.run_until(std::future::ready(())));
+
+    assert!(
+        !watching.keep_going(),
+        "the loop must be told to stop once the shutdown future completes"
+    );
+}
+
+/// The smallest executor that can drive a future to completion, so this test
+/// pins "no runtime is imposed" rather than assuming one.
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    use std::task::{Context, Poll, Waker};
+
+    let waker = Waker::noop();
+    let mut context = Context::from_waker(waker);
+    let mut future = Box::pin(future);
+
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
+            return output;
+        }
+
+        std::thread::yield_now();
+    }
 }

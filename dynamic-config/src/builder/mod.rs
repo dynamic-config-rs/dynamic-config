@@ -77,6 +77,8 @@ pub(crate) enum Installer<T> {
         install: fn(T, crate::ReloadReason) -> std::sync::Arc<T>,
         /// Records a reload that installed nothing.
         record_failure: fn(&Error),
+        /// Records the fingerprint of the tree the install came from.
+        record_fingerprint: fn(String),
     },
     /// The instance path: this builder installs into a shared cell.
     Cell(std::sync::Arc<crate::cell::ConfigCell<T>>),
@@ -96,6 +98,15 @@ impl<T> Installer<T> {
             Self::Cell(cell) => cell.record_failure(error),
         }
     }
+
+    pub(super) fn record_fingerprint(&self, fingerprint: String) {
+        match self {
+            Self::Static {
+                record_fingerprint, ..
+            } => record_fingerprint(fingerprint),
+            Self::Cell(cell) => cell.set_fingerprint(fingerprint),
+        }
+    }
 }
 
 impl<T> Clone for Installer<T> {
@@ -104,9 +115,11 @@ impl<T> Clone for Installer<T> {
             Self::Static {
                 install,
                 record_failure,
+                record_fingerprint,
             } => Self::Static {
                 install: *install,
                 record_failure: *record_failure,
+                record_fingerprint: *record_fingerprint,
             },
             Self::Cell(cell) => Self::Cell(std::sync::Arc::clone(cell)),
         }
@@ -246,10 +259,12 @@ impl<T: DeserializeOwned> Builder<T> {
         mut self,
         install: fn(T, crate::ReloadReason) -> std::sync::Arc<T>,
         record_failure: fn(&Error),
+        record_fingerprint: fn(String),
     ) -> Self {
         self.install = Some(Installer::Static {
             install,
             record_failure,
+            record_fingerprint,
         });
         self
     }

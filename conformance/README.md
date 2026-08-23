@@ -13,6 +13,14 @@ cases/<name>/
   expected.json   the resolved document, exactly
 ```
 
+Two optional keys in `args.json` pin the **fingerprint** as well as the
+document: `secrets`, the dotted paths to mask, and `expected_fingerprint`,
+the `sha256:…` all three languages must produce. They live in an ordinary
+case rather than a suite of their own because a fingerprint is a property
+*of* the resolution — the three have to agree on the digest of the tree
+they already agree on. A case without `expected_fingerprint` checks the
+document alone, as every case did before.
+
 Runners: the engine's `tests/conformance.rs`; the Python and Node
 repositories each carry a ~50-line runner that fetches this directory
 as a tarball pinned to an engine ref in their CI. A disagreement names

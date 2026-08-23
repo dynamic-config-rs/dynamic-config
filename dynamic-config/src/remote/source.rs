@@ -47,13 +47,100 @@ impl std::fmt::Display for WatchCapability {
     }
 }
 
-/// A document a remote store handed back.
+/// Which version of a document a store handed back.
+///
+/// Two shapes, because stores answer this question in two genuinely
+/// different ways and flattening them would be a lie:
+///
+/// ```text
+/// Counter  etcd revisions, Consul indices, Vault KV versions   ordered
+/// Opaque   ETags, object hashes, commit ids                    equal or not
+/// ```
+///
+/// A `Counter` can be compared — a lower one is older, and installing it
+/// over a higher one moves a configuration backwards. An `Opaque` can only
+/// be compared for equality: an ETag carries no order at all, and
+/// pretending it does would invent a fact the store never stated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Revision {
+    /// A number the store increments. Higher is newer.
+    Counter(u64),
+    /// A token that only ever means "the same" or "not the same".
+    Opaque(String),
+}
+
+impl Revision {
+    /// Whether this is a version the caller is not already serving.
+    ///
+    /// `installed` is what is being served now. A `Counter` supersedes a
+    /// lower one; an `Opaque` supersedes anything it does not equal; and a
+    /// pair of different shapes supersedes, because a store that changed
+    /// how it answers is telling you its new answer.
+    #[must_use]
+    pub fn supersedes(&self, installed: Option<&Self>) -> bool {
+        match (self, installed) {
+            (_, None) => true,
+            (Self::Counter(fresh), Some(Self::Counter(installed))) => fresh > installed,
+            (Self::Opaque(fresh), Some(Self::Opaque(installed))) => fresh != installed,
+            _ => true,
+        }
+    }
+}
+
+impl std::fmt::Display for Revision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Counter(number) => write!(f, "{number}"),
+            Self::Opaque(token) => f.write_str(token),
+        }
+    }
+}
+
+/// The lease a *document* was issued under.
+///
+/// Not the credential the client authenticated with — that is the store
+/// crates' `Cached`, and the two lifetimes are separate on purpose. This
+/// one belongs to a dynamic secret: a database credential issued for an
+/// hour, renewable, revocable, and held by exactly one reader.
 #[derive(Clone, PartialEq, Eq)]
+pub struct Lease {
+    /// What the store calls this lease when renewing or revoking it.
+    pub id: String,
+    /// How long from issue until it expires.
+    pub ttl: Duration,
+    /// Whether renewing is possible at all, or a new one has to be issued.
+    pub renewable: bool,
+}
+
+// A lease id is a capability: it names a credential precisely enough to
+// renew or revoke it, and it arrives in the same response as the generated
+// username and password. It gets the treatment the document gets.
+impl std::fmt::Debug for Lease {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Lease")
+            .field("ttl", &self.ttl)
+            .field("renewable", &self.renewable)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A document a remote store handed back.
+///
+/// Built with [`Fetched::new`] and widened by [`Fetched::with_revision`] and
+/// [`Fetched::with_lease`]. `#[non_exhaustive]` so a later release can
+/// describe something else a store said without breaking every store that
+/// already compiles.
+#[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Fetched {
     /// The document text, in `format`.
     pub text: String,
     /// How to parse it.
     pub format: Format,
+    /// Which version this is, when the store names one.
+    pub revision: Option<Revision>,
+    /// The lease it was issued under, for a store that issues them.
+    pub lease: Option<Lease>,
 }
 
 impl Fetched {
@@ -63,7 +150,26 @@ impl Fetched {
         Self {
             text: text.into(),
             format,
+            revision: None,
+            lease: None,
         }
+    }
+
+    /// The same document, with the version the store named for it.
+    ///
+    /// Worth supplying wherever a store has one: it is what lets a sink
+    /// refuse a document older than the one it is already serving.
+    #[must_use]
+    pub fn with_revision(mut self, revision: Revision) -> Self {
+        self.revision = Some(revision);
+        self
+    }
+
+    /// The same document, with the lease it was issued under.
+    #[must_use]
+    pub fn with_lease(mut self, lease: Lease) -> Self {
+        self.lease = Some(lease);
+        self
     }
 }
 
@@ -76,6 +182,10 @@ impl std::fmt::Debug for Fetched {
         f.debug_struct("Fetched")
             .field("format", &self.format)
             .field("bytes", &self.text.len())
+            // A revision names a version, not a value — it is the field
+            // somebody reading a log is actually looking for.
+            .field("revision", &self.revision)
+            .field("lease", &self.lease)
             .finish()
     }
 }
@@ -176,6 +286,53 @@ pub trait RemoteSource: Send + Sync + 'static {
 
         Ok(())
     }
+}
+
+/// A store whose documents are issued under a lease that can be extended
+/// or handed back.
+///
+/// Implemented by a store that issues *dynamic* credentials — Vault's
+/// `database/creds`, `pki/issue`, `aws/creds` — where the document is not a
+/// value somebody wrote but a credential the store minted for this reader
+/// alone, with an expiry.
+///
+/// Two lifetimes are in play and conflating them is the mistake this trait
+/// exists to avoid. The credential the *client* authenticates with is
+/// already handled by the store crates' `Cached`, refreshed before it
+/// expires and re-obtained when it is refused. The lease *the document was
+/// issued under* is this one: a caller renews it on a timer whether or not
+/// anybody reads, and hands it back when it stops needing it.
+///
+/// Blocking, with no async twin, because the stores that issue leases are
+/// the blocking ones — a caller with a runtime already drives them through
+/// its own blocking pool. If an async store ever grows leases, that is the
+/// moment to add the twin, and not before.
+pub trait RenewableSource: RemoteSource {
+    /// Extends a lease, answering with what the store granted.
+    ///
+    /// A store may grant less than was asked for, and the answer is
+    /// authoritative: schedule the next renewal from what came back, never
+    /// from what was requested.
+    ///
+    /// # Errors
+    ///
+    /// If the store refuses or cannot be reached. A refusal is terminal for
+    /// *this* lease — the credential has to be fetched afresh — while an
+    /// unreachable store is worth retrying inside the remaining life.
+    fn renew(&self, lease: &Lease) -> Result<Lease, Error>;
+
+    /// Hands a lease back, so the credential stops working now rather than
+    /// at expiry.
+    ///
+    /// Best-effort by nature: a caller doing this on the way out has
+    /// somewhere else to be, and an unreachable store must not keep a
+    /// process alive. The lease expires on its own regardless; revoking
+    /// only shortens the window.
+    ///
+    /// # Errors
+    ///
+    /// If the store refuses or cannot be reached.
+    fn revoke(&self, lease: &Lease) -> Result<(), Error>;
 }
 
 /// A remote store that is read asynchronously.

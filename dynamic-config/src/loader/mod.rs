@@ -50,10 +50,30 @@ pub(crate) use recover::recover;
 pub(crate) fn load<T: DeserializeOwned>(spec: &LoadSpec<'_>) -> Result<T, Error> {
     let snapshot = resolved(spec)?;
 
-    // A snapshot on its own reports the path and not the source, because it
-    // has been handed around without them. Here the sources are still in
-    // reach, so the leaf that failed is looked up and the error says which
-    // file or variable to go and fix.
+    extract(&snapshot)
+}
+
+/// [`load`], keeping the snapshot it deserialized from.
+///
+/// For the install path, which wants both: the value to store, and the
+/// resolved tree to fingerprint. Resolving twice to get the second would
+/// re-read and re-parse every source on every reload.
+pub(crate) fn load_with_snapshot<T: DeserializeOwned>(
+    spec: &LoadSpec<'_>,
+) -> Result<(T, Snapshot), Error> {
+    let snapshot = resolved(spec)?;
+    let value = extract(&snapshot)?;
+
+    Ok((value, snapshot))
+}
+
+/// The deserialization half, with the origin of the leaf that refused.
+///
+/// A snapshot on its own reports the path and not the source, because it
+/// has been handed around without them. Here the sources are still in
+/// reach, so the leaf that failed is looked up and the error says which
+/// file or variable to go and fix.
+fn extract<T: DeserializeOwned>(snapshot: &Snapshot) -> Result<T, Error> {
     snapshot.extract().map_err(|error| {
         let path = error.path();
 

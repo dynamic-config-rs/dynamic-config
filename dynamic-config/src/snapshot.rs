@@ -238,6 +238,30 @@ impl Snapshot {
         Some(current)
     }
 
+    /// A stable digest of these values, with `secrets` masked.
+    ///
+    /// Rendered as `sha256:…`, and **safe to log**: every path named in
+    /// `secrets` is masked by position before hashing, so the digest moves
+    /// when a secret appears or disappears and stays put when one merely
+    /// rotates. A digest that moved on rotation would be an oracle for the
+    /// value that moved it.
+    ///
+    /// Computed over the resolved tree rather than any rendering of it, so
+    /// the same configuration fingerprints the same whether it arrived as
+    /// TOML on one host and YAML on another, and whichever order its keys
+    /// were written in.
+    #[must_use]
+    pub fn fingerprint(&self, secrets: &[&str]) -> String {
+        let document = match self.to_value() {
+            crate::Value::Table(table) => table,
+            // A snapshot is a table by construction: it is the resolved
+            // section, and a section is keys.
+            _ => std::collections::BTreeMap::new(),
+        };
+
+        crate::fingerprint::rendered(&document, secrets)
+    }
+
     /// The dotted path of every leaf, in order.
     #[must_use]
     pub fn leaf_paths(&self) -> Vec<String> {

@@ -111,7 +111,7 @@ mod watch;
 pub use sink::RemoteSink;
 #[cfg(feature = "async")]
 pub use source::AsyncRemoteSource;
-pub use source::{Fetched, RemoteSource, WatchCapability};
+pub use source::{Fetched, Lease, RemoteSource, RenewableSource, Revision, WatchCapability};
 pub use status::RemoteStatus;
 pub use watch::{Pace, RemoteWatch, Watching};
 
@@ -144,12 +144,27 @@ pub struct Remote {
     /// had installed a new one: new source, old store's document. The
     /// generation counter is the fence that makes that impossible.
     state: Mutex<State>,
+    /// Held across a *blocking* round trip, and across nothing else.
+    ///
+    /// Separate from `state` on purpose: `state` must stay free while a
+    /// fetch is out, or every `load()` would queue behind the network. This
+    /// one is only ever taken by [`refresh`](Remote::refresh), so the lock
+    /// order is `fetching` then `state`, never the reverse.
+    ///
+    /// The async path does not take it. A future cannot hold a blocking
+    /// mutex across an await without parking an executor thread, and this
+    /// crate picks no runtime it could borrow an async mutex from — so
+    /// `refresh_async` still spends a round trip per caller, and says so.
+    fetching: Mutex<()>,
 }
 
-#[derive(Default)]
 struct State {
     source: Option<Kind>,
     fetched: Option<Fetched>,
+    /// The ceiling a document has to fit under. Here rather than beside the
+    /// source, because it is the *slot's* tolerance: replacing the store
+    /// does not change how much this configuration is willing to hold.
+    limit: usize,
     /// Bumped on every source change. A fetch snapshots it before the network
     /// round trip and commits only if it has not moved — a result from a
     /// source that is no longer installed is discarded, never stored.
@@ -172,6 +187,21 @@ struct State {
     /// here, so a scrape cannot read a count that belongs to one source
     /// beside a document that belongs to another.
     status: RemoteStatus,
+}
+
+// Written out rather than derived: a derived `Default` would zero `limit`,
+// and a ceiling of zero refuses every document there is.
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            source: None,
+            fetched: None,
+            limit: MAX_DOCUMENT_BYTES,
+            generation: 0,
+            cleared: 0,
+            status: RemoteStatus::empty(),
+        }
+    }
 }
 
 /// The state a fetch started under, in the two numbers that can invalidate
@@ -216,10 +246,12 @@ impl Remote {
             state: Mutex::new(State {
                 source: None,
                 fetched: None,
+                limit: MAX_DOCUMENT_BYTES,
                 generation: 0,
                 cleared: 0,
                 status: RemoteStatus::empty(),
             }),
+            fetching: Mutex::new(()),
         }
     }
 
@@ -231,10 +263,12 @@ impl Remote {
             state: Mutex::new(State {
                 source: None,
                 fetched: None,
+                limit: MAX_DOCUMENT_BYTES,
                 generation: 0,
                 cleared: 0,
                 status: RemoteStatus::empty(),
             }),
+            fetching: Mutex::new(()),
         }
     }
 
@@ -255,6 +289,18 @@ impl Remote {
         state.fetched = None;
         state.status = RemoteStatus::empty();
         state.generation = state.generation.wrapping_add(1);
+    }
+
+    /// Changes how large a document this slot will accept.
+    ///
+    /// [`MAX_DOCUMENT_BYTES`] unless this is called. Raise it for a
+    /// configuration that genuinely is enormous; lower it where the
+    /// container is small and a surprise is worth refusing early.
+    ///
+    /// Survives a source change, because it describes what this
+    /// configuration can hold rather than what any one store tends to send.
+    pub fn set_max_document_bytes(&self, limit: usize) {
+        self.state().limit = limit;
     }
 
     /// Installs an async source, replacing any previous one.
@@ -281,8 +327,30 @@ impl Remote {
     /// If no source is installed, if the installed one is async — use
     /// [`refresh_async`](Self::refresh_async) — or if the fetch fails.
     pub fn refresh(&self) -> Result<(), Error> {
+        // One round trip for N callers who all want the same thing.
+        //
+        // A resync timer and a store's own watch loop routinely ask at the
+        // same moment, and before this they each paid a network call for an
+        // answer the other was already fetching. Whoever arrives second
+        // waits here, and then finds the first one's result already
+        // installed — so `refresh` still returns having genuinely refreshed,
+        // which is the promise a caller is owed.
+        let queued = self.state().status.fetches;
+        let _single_flight = self
+            .fetching
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
         let (source, fence) = {
             let state = self.state();
+
+            if state.status.fetches != queued {
+                // Somebody else's fetch landed while this one waited. Its
+                // answer is at least as new as ours would have been, and
+                // asking again would only spend a second round trip to
+                // learn the same thing.
+                return Ok(());
+            }
 
             match state.source.as_ref() {
                 Some(Kind::Blocking(source)) => (Arc::clone(source), Fence::of(&state)),
@@ -315,7 +383,19 @@ impl Remote {
             Ok(fetched) => {
                 let elapsed = started.elapsed();
 
-                self.commit(fetched, fence);
+                // A document too large to hold is a fetch that reached the
+                // store and came back unusable, so it is recorded the way
+                // every other unusable answer is: the store is up, this
+                // configuration is not.
+                if let Err(error) = self.commit(fetched, fence) {
+                    self.record_fetch_failure(&error, fence.generation);
+
+                    #[cfg(feature = "tracing")]
+                    crate::telemetry::fetch_failed(&span, &error);
+
+                    return Err(error);
+                }
+
                 self.record_fetch(Some(elapsed), fence.generation);
 
                 #[cfg(feature = "tracing")]
@@ -381,7 +461,19 @@ impl Remote {
             Ok(fetched) => {
                 let elapsed = started.elapsed();
 
-                self.commit(fetched, fence);
+                // A document too large to hold is a fetch that reached the
+                // store and came back unusable, so it is recorded the way
+                // every other unusable answer is: the store is up, this
+                // configuration is not.
+                if let Err(error) = self.commit(fetched, fence) {
+                    self.record_fetch_failure(&error, fence.generation);
+
+                    #[cfg(feature = "tracing")]
+                    crate::telemetry::fetch_failed(&span, &error);
+
+                    return Err(error);
+                }
+
                 self.record_fetch(Some(elapsed), fence.generation);
 
                 #[cfg(feature = "tracing")]
@@ -406,7 +498,8 @@ impl Remote {
     }
 
     /// Installs `document` if the source it came from is still the one
-    /// installed — the push-side twin of the fetch fence.
+    /// installed, and if it is not older than what is already here — the
+    /// push-side twin of the fetch fence.
     ///
     /// # Errors
     ///
@@ -425,16 +518,24 @@ impl Remote {
             ));
         }
 
-        state.fetched = Some(document);
-
         // A push is a fetch somebody else performed: the store answered, and
         // that is the whole question `RemoteStatus` reports on. Whether the
         // document then *installs* is `ConfigStatus`'s business, and
         // `RemoteSink::apply` records it there through the reload it runs.
+        // Counted before the recency test for exactly that reason — a store
+        // that answered is reachable whether or not it said anything new.
         state.status.fetches = state.status.fetches.saturating_add(1);
         state.status.last_fetch = Some(Instant::now());
         state.status.last_fetch_duration = None;
         state.status.consecutive_failures = 0;
+
+        if document.text.len() > state.limit {
+            return Err(too_large(document.text.len(), state.limit));
+        }
+
+        if superseded(&document, state.fetched.as_ref()) {
+            state.fetched = Some(document);
+        }
 
         Ok(())
     }
@@ -739,19 +840,78 @@ impl Remote {
     /// Stores a fetch result, unless the slot moved while it was in flight —
     /// the source was replaced, and the result belongs to a store nobody
     /// asked about any more, or the document was cleared and putting this
-    /// one back would undo that.
-    fn commit(&self, fetched: Fetched, fence: Fence) {
+    /// one back would undo that — or unless a newer document landed first.
+    fn commit(&self, fetched: Fetched, fence: Fence) -> Result<(), Error> {
         let mut state = self.state();
 
-        if Fence::of(&state) == fence {
+        if fetched.text.len() > state.limit {
+            return Err(too_large(fetched.text.len(), state.limit));
+        }
+
+        if Fence::of(&state) == fence && superseded(&fetched, state.fetched.as_ref()) {
             state.fetched = Some(fetched);
         }
+
+        Ok(())
     }
 
     fn state(&self) -> crate::sync::MutexGuard<'_, State> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// The largest document this crate will install, unless a caller says
+/// otherwise.
+///
+/// Eight mebibytes is far past any configuration anybody writes and far
+/// below what a container is given, which is the gap this number lives in.
+/// It is a guard against the accident — a bucket key pointed at a database
+/// dump, a prefix read that matched more than it meant to — not against a
+/// document somebody intended.
+///
+/// The ceiling is enforced here, at the door into the slot, so it holds for
+/// every store including one written outside this organisation. A store
+/// that can bound its read *before* allocating should also do that; this is
+/// the backstop, not the only line.
+pub const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
+
+/// The refusal, in the one shape every store gets.
+///
+/// Names the two numbers and the store, and nothing else: the document that
+/// tripped the limit is exactly the document least worth quoting.
+fn too_large(bytes: usize, limit: usize) -> Error {
+    Error::new(
+        ErrorKind::Remote,
+        format!(
+            "the store answered with {bytes} bytes, past the {limit}-byte \
+             ceiling this configuration allows; raise it with \
+             `set_max_document_bytes` if the document is meant to be this large"
+        ),
+    )
+}
+
+/// Whether `fresh` is worth installing over `installed`.
+///
+/// The fence above answers "is this from the source we are still using?".
+/// This answers the other question, which it never could: **is this the
+/// newest thing we have seen?**
+///
+/// It matters because two fetches of the same source can be in flight at
+/// once — a resync beside the store's own watch — and the one that finishes
+/// last is not necessarily the one that started last. Without this, a slow
+/// read of an old version overwrites a fast read of a new one, and the
+/// configuration moves backwards with nothing anywhere reporting it.
+///
+/// A document with **no** revision always installs. That is not a gap: a
+/// store that names no version has told us nothing to order by, and
+/// refusing on a guess would drop real updates. Ordering is a property a
+/// store opts into by answering [`Revision`](crate::Revision).
+fn superseded(fresh: &Fetched, installed: Option<&Fetched>) -> bool {
+    match (&fresh.revision, installed) {
+        (Some(fresh), Some(installed)) => fresh.supersedes(installed.revision.as_ref()),
+        _ => true,
     }
 }
 

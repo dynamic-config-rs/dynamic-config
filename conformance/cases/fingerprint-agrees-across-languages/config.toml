@@ -1,0 +1,10 @@
+[app]
+name = "checkout"
+port = 8080
+ratio = 0.5
+enabled = true
+hosts = ["eu-west", "eu-central"]
+
+[app.db]
+host = "db.internal"
+password = "not-a-real-credential"

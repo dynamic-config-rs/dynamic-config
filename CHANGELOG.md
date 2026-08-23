@@ -25,6 +25,104 @@ bumps the patch. A change to the minimum supported Rust version is breaking.
 
 ## [Unreleased]
 
+### Added
+
+- **A fetched document can say which version it is.** `Fetched` carries an
+  optional `Revision` — `Counter` for a number that grows (an etcd revision,
+  a Consul index, a Vault KV version) and `Opaque` for one that only ever
+  equals or differs (an ETag, an object hash). The two are compared
+  differently on purpose: `supersedes` orders a `Counter` and can only say
+  *changed* about an `Opaque`, because an ETag has no order and a type that
+  pretended otherwise would be a lie.
+
+  This is what makes the install fence real. It proved only that the source
+  had not been *replaced*, so two concurrent fetches both passed it and the
+  later writer won — which could be the older document. A `Counter` that is
+  not greater than the installed one is now refused, and an identical
+  `Opaque` installs nothing.
+
+- **Leases**, for stores that mint a credential rather than hold one.
+  `Lease { id, ttl, renewable }` rides on `Fetched`, and `RenewableSource`
+  is the trait a store implements to `renew` and `revoke` one. Blocking
+  rather than async, because the stores that have leases are blocking
+  clients and their callers already run them off the reactor. `Lease` has a
+  redacting `Debug`: a lease id is capability-shaped and sits beside
+  generated credentials.
+
+- **`fingerprint()`** on `Dynamic` and `Snapshot`: a `sha256:…` digest of the
+  resolved tree, for answering "are these two processes running the same
+  configuration?" without diffing two documents. **Safe to log** — every
+  declared secret is masked *by position* before hashing, so the digest moves
+  when a secret appears or disappears and stays put when one merely rotates.
+  A digest that moved on rotation would be an oracle for the value that
+  moved it.
+
+  The encoding is written out here rather than borrowed from a serializer,
+  with a tag byte and a length per node, so the same configuration
+  fingerprints the same whether it arrived as TOML on one host and YAML on
+  another, and whichever order its keys were written in. A cross-language
+  conformance case pins one value for Rust, Python and Node.
+
+- **`WatchOptions`** names the two numbers that already governed a watch and
+  could not be reached: `ceiling`, how long a quiet period may keep
+  restarting before the reload happens regardless, and `atomic_save_grace`,
+  which until now was a process-wide setter. `watch(Duration)` still works —
+  a `Duration` converts — so the one-argument door is unchanged.
+
+- **`run_until(shutdown)`** on `WatchHandle` and `RemoteWatch`. A watch is
+  not something to remember to stop; it is something that ends when the
+  process is winding down. No runtime is imposed and no second cancellation
+  mechanism is introduced: it ends the watch exactly as dropping the handle
+  does.
+
+- **A document size ceiling.** `MAX_DOCUMENT_BYTES` (8 MiB) applies to every
+  fetched document, enforced where the bytes are read so the allocation never
+  happens, and raised or lowered per slot with `set_max_document_bytes`. The
+  refusal names the limit and the store and never the content. Nothing
+  bounded a document anywhere before, against roughly four simultaneous
+  in-memory copies.
+
+- **`ErrorKind::Absent`.** "The document is not there" was `Remote` — the
+  category a watch loop waits out — which made a deleted secret
+  indistinguishable from an unreachable store. They deserve different
+  answers: waiting cures an outage and does not bring back a key.
+
+- **An `otel` feature**, off by default. The twelve metric names that are
+  already API map onto OpenTelemetry instruments and the two spans become
+  real spans, with `dynamic_config.config`, `.reason`, `.error_kind` and
+  `.fingerprint` as attributes — **no key paths and no values**, which is the
+  existing rule for labels and does not bend for OTel. Off by default because
+  a library must not conscript its users into four dependency trees;
+  applications that already bridge through `tracing-opentelemetry` are
+  unaffected.
+
+### Changed
+
+- **Full jitter belongs to the backoff, not to the healthy interval.** A wait
+  after a failure is now drawn from the whole range up to the doubled
+  backoff, because a thousand agents that failed together have been counting
+  the same doubling ever since and a narrow band lands them back on the store
+  in a clump. A *healthy* wait keeps its ±25% band: drawing it from the whole
+  range would halve its mean, which is not a jitter policy but a different
+  interval, and would double every store's read rate.
+
+- **`refresh()` is single-flight.** The state guard was dropped before the
+  round trip, so N callers made N calls and the resync raced the store's own
+  watch. A second caller now waits, then finds the newer revision already
+  installed and returns without a second round trip.
+
+- **The cache fingerprint is SHA-256.** It hashed `Debug` output through
+  `DefaultHasher`, which is `SipHash` with an implementation that carries no
+  guarantee across Rust releases: a toolchain upgrade could silently
+  invalidate every cache on disk. `CacheMode::Fingerprint` and the new public
+  `fingerprint()` are now one function. Caches written by an older version
+  miss, which is a case that was already handled.
+
+- **`Fetched` is `#[non_exhaustive]`** and gains `with_revision` and
+  `with_lease`; `Fetched::new` still means "no revision, no lease". This is
+  the last release that could add those fields, and the attribute is what
+  makes the next addition free.
+
 ## [0.9.0] — 2026-08-20
 
 ### Added

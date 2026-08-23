@@ -1,0 +1,14 @@
+{
+  "db": {
+    "host": "db.internal",
+    "password": "not-a-real-credential"
+  },
+  "enabled": true,
+  "hosts": [
+    "eu-west",
+    "eu-central"
+  ],
+  "name": "checkout",
+  "port": 9090,
+  "ratio": 0.5
+}

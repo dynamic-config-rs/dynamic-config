@@ -277,10 +277,14 @@ pub mod engine;
 mod env_layer;
 mod error;
 mod explain;
+mod fingerprint;
 mod group;
 mod layer;
 mod loader;
 mod log;
+#[cfg(feature = "otel")]
+#[cfg_attr(docsrs, doc(cfg(feature = "otel")))]
+pub mod otel;
 pub mod reader;
 mod redirects;
 mod registry;
@@ -316,6 +320,9 @@ mod write;
 #[cfg(feature = "watch")]
 #[cfg_attr(docsrs, doc(cfg(feature = "watch")))]
 pub mod watch;
+#[cfg(feature = "watch")]
+#[cfg_attr(docsrs, doc(cfg(feature = "watch")))]
+pub use watch::WatchOptions;
 
 /// Not public API: the loom suite drives the wake protocol directly.
 #[cfg(all(feature = "async", loom))]
@@ -357,8 +364,8 @@ pub use reload::{ConfigStatus, FailureStatus, ReloadEvent, ReloadReason};
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use remote::AsyncRemoteSource;
 pub use remote::{
-    Fetched, Pace, Remote, RemoteSink, RemoteSource, RemoteStatus, RemoteWatch, WatchCapability,
-    Watching,
+    Fetched, Lease, Pace, Remote, RemoteSink, RemoteSource, RemoteStatus, RemoteWatch,
+    RenewableSource, Revision, WatchCapability, Watching, MAX_DOCUMENT_BYTES,
 };
 pub use snapshot::{changed_paths, Change, ChangeKind, Snapshot};
 pub use source::{Format, LoadSpec, Source, DEFAULT_NEST};

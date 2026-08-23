@@ -126,6 +126,27 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
         self.cell.load()
     }
 
+    /// A stable digest of the configuration this instance is serving.
+    ///
+    /// `sha256:…`, or `None` before the first install. **Safe to log**:
+    /// every field marked `#[config(secret)]` is masked by position before
+    /// hashing, so the digest moves when a secret appears or disappears and
+    /// stays put when one merely rotates.
+    ///
+    /// What it is for is comparing two processes without comparing two
+    /// documents. Pod A prints a string, pod B prints a string, and either
+    /// they match or one of them is running a configuration nobody meant to
+    /// ship. [`generation`](Self::generation) counts *this* process's
+    /// installs and cannot answer that — two pods on generation 4 have
+    /// nothing in particular in common.
+    ///
+    /// Computed over the resolved tree rather than any rendering of it, so
+    /// the same configuration fingerprints the same however it was written.
+    #[must_use]
+    pub fn fingerprint(&self) -> Option<Arc<String>> {
+        self.cell.fingerprint()
+    }
+
     /// Installs since this instance was created; zero before the first.
     ///
     /// Monotonic, and the number a reload hook should read when it needs a
@@ -289,9 +310,9 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     /// cannot start, or this instance already being watched.
     pub fn watch(
         &self,
-        debounce: core::time::Duration,
+        options: impl Into<crate::watch::WatchOptions>,
     ) -> std::io::Result<crate::watch::WatchHandle> {
-        self.watch_with(debounce, crate::watch::WatchMode::Native)
+        self.watch_with(options, crate::watch::WatchMode::Native)
     }
 
     /// [`watch`](Self::watch) with the detection strategy chosen
@@ -302,7 +323,7 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
     /// As [`watch`](Self::watch).
     pub fn watch_with(
         &self,
-        debounce: core::time::Duration,
+        options: impl Into<crate::watch::WatchOptions>,
         mode: crate::watch::WatchMode,
     ) -> std::io::Result<crate::watch::WatchHandle> {
         let name = self.watch_name.get_or_init(|| {
@@ -312,7 +333,7 @@ impl<T: DeserializeOwned + Send + Sync + 'static> Dynamic<T> {
         self.builder.watch_as(
             crate::watch::WatchKey::Instance(self.id),
             name,
-            debounce,
+            options.into(),
             mode,
         )
     }

@@ -613,3 +613,281 @@ fn a_malformed_remote_document_names_the_store() {
 
     Malformed::clear_remote();
 }
+
+/// The other half of the fence, and the half that was missing: a document
+/// is refused for being **old**, not only for belonging to a replaced
+/// store.
+///
+/// Two fetches of one source can be in flight at once — a resync beside the
+/// store's own watch — and the one that finishes last is not necessarily
+/// the one that started last. Before this, whichever grabbed the lock last
+/// won, so a slow read of an old version quietly overwrote a fast read of a
+/// new one and the configuration moved backwards.
+#[test]
+fn an_older_revision_cannot_overwrite_a_newer_one() {
+    use dynamic_config::{Fetched, Format, Revision};
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Ordered {
+        greeting: String,
+    }
+
+    struct Silent;
+    impl dynamic_config::RemoteSource for Silent {
+        fn describe(&self) -> String {
+            "a store that only ever pushes".to_owned()
+        }
+
+        fn fetch(&self) -> Result<Fetched, dynamic_config::Error> {
+            Ok(
+                Fetched::new(r#"{"svc": {"greeting": "at four"}}"#, Format::Json)
+                    .with_revision(Revision::Counter(4)),
+            )
+        }
+    }
+
+    Ordered::set_remote(Silent);
+    Ordered::refresh_remote().expect("the store answers");
+    Ordered::builder("svc")
+        .init()
+        .expect("the document is complete");
+
+    let sink = Ordered::remote_sink();
+
+    sink.apply(
+        Fetched::new(r#"{"svc": {"greeting": "at seven"}}"#, Format::Json)
+            .with_revision(Revision::Counter(7)),
+    )
+    .expect("a newer revision installs");
+
+    assert_eq!(Ordered::current().greeting, "at seven");
+
+    // The late arrival. It is not from a replaced source and nothing was
+    // cleared, so every fence that existed before this one passes it.
+    sink.apply(
+        Fetched::new(r#"{"svc": {"greeting": "at five"}}"#, Format::Json)
+            .with_revision(Revision::Counter(5)),
+    )
+    .expect("a superseded document is not an error — it is simply not news");
+
+    assert_eq!(
+        Ordered::current().greeting,
+        "at seven",
+        "an older revision must not move the configuration backwards"
+    );
+
+    // And the same number twice is not news either.
+    sink.apply(
+        Fetched::new(r#"{"svc": {"greeting": "at seven again"}}"#, Format::Json)
+            .with_revision(Revision::Counter(7)),
+    )
+    .expect("a repeat delivers without error");
+
+    assert_eq!(Ordered::current().greeting, "at seven");
+}
+
+/// An ETag is not a clock. `Opaque` compares for equality and nothing else,
+/// so *different* always installs — which is the only honest reading of a
+/// token whose store never claimed an order for it.
+#[test]
+fn an_opaque_revision_installs_whenever_it_differs() {
+    use dynamic_config::Revision;
+
+    let etag = Revision::Opaque("W/\"abc\"".to_owned());
+
+    assert!(etag.supersedes(None), "the first document always installs");
+    assert!(
+        etag.supersedes(Some(&Revision::Opaque("W/\"zzz\"".to_owned()))),
+        "a different token is a different document, whichever way it sorts"
+    );
+    assert!(
+        !etag.supersedes(Some(&Revision::Opaque("W/\"abc\"".to_owned()))),
+        "the same token is the same document"
+    );
+
+    // A store that changed how it answers is telling us its new answer.
+    assert!(etag.supersedes(Some(&Revision::Counter(9))));
+}
+
+/// A store that names no version keeps working exactly as it did. Ordering
+/// is opt-in, and a store with nothing to order by must not have its
+/// updates dropped on a guess.
+#[test]
+fn a_store_without_revisions_is_unaffected() {
+    use dynamic_config::{Fetched, Format};
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Unversioned {
+        greeting: String,
+    }
+
+    struct Plain;
+    impl dynamic_config::RemoteSource for Plain {
+        fn describe(&self) -> String {
+            "a store with no version to give".to_owned()
+        }
+
+        fn fetch(&self) -> Result<Fetched, dynamic_config::Error> {
+            Ok(Fetched::new(
+                r#"{"svc": {"greeting": "first"}}"#,
+                Format::Json,
+            ))
+        }
+    }
+
+    Unversioned::set_remote(Plain);
+    Unversioned::refresh_remote().expect("the store answers");
+    Unversioned::builder("svc")
+        .init()
+        .expect("the document is complete");
+
+    let sink = Unversioned::remote_sink();
+
+    for greeting in ["second", "third", "fourth"] {
+        sink.apply(Fetched::new(
+            format!(r#"{{"svc": {{"greeting": "{greeting}"}}}}"#),
+            Format::Json,
+        ))
+        .expect("every push installs");
+
+        assert_eq!(Unversioned::current().greeting, greeting);
+    }
+}
+
+/// One round trip for callers who all want the same thing.
+///
+/// A resync timer and a store's own watch loop ask at the same moment as a
+/// matter of routine — `Remote::watch` runs both against one source — and
+/// before this each of them paid for an answer the other was already
+/// fetching. Whoever arrives second now waits and finds the first one's
+/// result installed, so `refresh` still returns having genuinely refreshed.
+#[test]
+fn concurrent_refreshes_make_one_round_trip() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    use dynamic_config::{Fetched, Format};
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Coalesced {
+        greeting: String,
+    }
+
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Slow enough that every other thread is certainly waiting on the
+    /// single-flight lock before this one commits.
+    struct Slow;
+    impl dynamic_config::RemoteSource for Slow {
+        fn describe(&self) -> String {
+            "a store that takes its time".to_owned()
+        }
+
+        fn fetch(&self) -> Result<Fetched, dynamic_config::Error> {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(200));
+
+            Ok(Fetched::new(
+                r#"{"svc": {"greeting": "once"}}"#,
+                Format::Json,
+            ))
+        }
+    }
+
+    Coalesced::set_remote(Slow);
+
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            scope.spawn(|| Coalesced::refresh_remote().expect("the store answers"));
+        }
+    });
+
+    assert_eq!(
+        CALLS.load(Ordering::SeqCst),
+        1,
+        "four callers wanting the same document must not spend four round trips"
+    );
+
+    Coalesced::builder("svc")
+        .init()
+        .expect("the document is complete");
+
+    assert_eq!(
+        Coalesced::current().greeting,
+        "once",
+        "every caller must still get a refreshed document, not just the first"
+    );
+
+    // Asking again *after* that answer landed is a different question, and
+    // it does cost a round trip — coalescing is not caching.
+    Coalesced::refresh_remote().expect("the store answers");
+
+    assert_eq!(CALLS.load(Ordering::SeqCst), 2);
+}
+
+/// A ceiling on what a store may hand over.
+///
+/// The accident this guards against is not a large configuration — it is a
+/// key pointed at the wrong object. An agent with a 64 MiB container limit
+/// holds a document roughly four times over between fetching, parsing and
+/// rendering it, so the first symptom of a mistyped bucket key used to be
+/// an OOM kill with nothing to read afterwards.
+#[test]
+fn a_document_past_the_ceiling_is_refused_rather_than_held() {
+    use dynamic_config::{Fetched, Format};
+    use serde::Deserialize;
+
+    #[dynamic_config::dynamic_config]
+    #[derive(Debug, Deserialize)]
+    struct Bounded {
+        greeting: String,
+    }
+
+    struct Enormous;
+    impl dynamic_config::RemoteSource for Enormous {
+        fn describe(&self) -> String {
+            "a store pointed at the wrong object".to_owned()
+        }
+
+        fn fetch(&self) -> Result<Fetched, dynamic_config::Error> {
+            let padding = " ".repeat(4096);
+
+            Ok(Fetched::new(
+                format!(r#"{{"svc": {{"greeting": "hello{padding}"}}}}"#),
+                Format::Json,
+            ))
+        }
+    }
+
+    Bounded::set_remote(Enormous);
+    Bounded::set_remote_max_document_bytes(1024);
+
+    let error = Bounded::refresh_remote().expect_err("a document past the ceiling is refused");
+
+    assert!(error.to_string().contains("ceiling"), "{error}");
+    assert!(
+        !error.to_string().contains("hello"),
+        "the document that tripped the limit is the one least worth quoting: {error}"
+    );
+
+    // And the store is not blamed for being unreachable: it answered.
+    assert!(
+        Bounded::remote_sink().status().fetches == 0,
+        "a document that did not install is not a fetch that delivered one"
+    );
+
+    // Raised, the same document is ordinary.
+    Bounded::set_remote_max_document_bytes(dynamic_config::MAX_DOCUMENT_BYTES);
+    Bounded::refresh_remote().expect("the ceiling was the only objection");
+    Bounded::builder("svc")
+        .init()
+        .expect("the document is complete");
+
+    assert!(Bounded::current().greeting.starts_with("hello"));
+}

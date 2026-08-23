@@ -32,6 +32,26 @@ impl<T: DeserializeOwned> Builder<T> {
         Ok(value)
     }
 
+    /// [`load`](Self::load), keeping the fingerprint of the tree it came
+    /// from.
+    ///
+    /// Used by every path that *installs*, because the resolved tree exists
+    /// only during a load: asking for the fingerprint afterwards would mean
+    /// reading every source again to describe a snapshot already in hand.
+    fn load_and_fingerprint(&self) -> Result<(T, String), Error> {
+        let secrets = self.secrets.clone().unwrap_or_default();
+
+        let (value, snapshot) = self.with_spec(crate::loader::load_with_snapshot)?;
+
+        if let Some(check) = &self.validate {
+            check(&value)?;
+        }
+
+        let refs: Vec<&str> = secrets.iter().map(String::as_str).collect();
+
+        Ok((value, snapshot.fingerprint(&refs)))
+    }
+
     /// Loads and installs as the type's snapshot.
     ///
     /// # Errors
@@ -91,9 +111,10 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        let outcome = match self.load() {
-            Ok(value) => {
+        let outcome = match self.load_and_fingerprint() {
+            Ok((value, fingerprint)) => {
                 let installed = install.install(value, ReloadReason::Initial);
+                install.record_fingerprint(fingerprint);
                 self.write_cache();
 
                 Ok(installed)
@@ -333,11 +354,12 @@ impl<T: DeserializeOwned> Builder<T> {
             ));
         };
 
-        let value = self.load().inspect_err(|error| {
+        let (value, fingerprint) = self.load_and_fingerprint().inspect_err(|error| {
             install.record_failure(error);
         })?;
 
         install.install(value, reason);
+        install.record_fingerprint(fingerprint);
         self.write_cache();
 
         Ok(())
