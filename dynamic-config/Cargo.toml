@@ -238,7 +238,7 @@ trybuild = "1.0"
 # not the newest: 0.6+ requires `clap ^4.5`, and this crate declares `^4.4`
 # so a user on clap 4.4 can still enable the `clap` feature — one workspace
 # lockfile cannot hold both.
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 # `benches/instructions.rs`. The library half only; the `iai-callgrind-runner`
 # binary it shells out to is installed separately and must match this version
 # exactly — the runner refuses a mismatch rather than producing wrong numbers,
