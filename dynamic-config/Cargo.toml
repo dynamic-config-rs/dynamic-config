@@ -110,7 +110,7 @@ full = [
 # The fingerprint's hash. A digest that appears in a metric label and a
 # `kubectl describe` is an API, and `DefaultHasher` — which this replaced —
 # carries no guarantee of staying the same across a Rust release.
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 # The OpenTelemetry *API*, behind the `otel` feature. Not the SDK, not an
 # exporter: see the feature's own comment.
 opentelemetry = { version = "0.32", optional = true, default-features = false, features = [
