@@ -69,10 +69,10 @@ jobs:
       # cargo-fuzz needs nightly: libFuzzer arrives through `-Z sanitizer`.
       # Dev-only tooling, so it is nowhere near the 1.71 floor the crates
       # themselves hold.
-      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: nightly
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: fuzz
       # From source, and it has to be: `taiki-e/install-action` carries no
@@ -111,7 +111,7 @@ jobs:
           cargo fuzz run "$TARGET" -- -max_total_time="$seconds" -print_final_stats=1
       # Only on a crash: `artifacts/` is where cargo-fuzz writes the input
       # that reproduced it, and an unreproducible fuzz failure is noise.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: crash-${{ matrix.target }}
